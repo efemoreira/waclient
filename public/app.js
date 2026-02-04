@@ -144,5 +144,39 @@ newChatBtn.addEventListener('click', async () => {
   await fetchConversations();
 });
 
+// Botão de teste para adicionar mensagem simulada
+const testBtn = document.getElementById('testBtn');
+testBtn.addEventListener('click', async () => {
+  const phone = prompt('Número para teste (ex: 5511999999999):', '5511987654321');
+  if (!phone) return;
+
+  const message = prompt('Mensagem de teste:', 'Olá! Essa é uma mensagem de teste.');
+  if (!message) return;
+
+  const name = prompt('Nome (opcional):', 'Contato Teste');
+
+  try {
+    const res = await fetch('/api/test/webhook', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone,
+        message,
+        name: name || undefined,
+      }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      alert(`✅ ${data.message}`);
+      await fetchConversations();
+    } else {
+      alert(`❌ Erro: ${data.erro}`);
+    }
+  } catch (error) {
+    alert(`❌ Erro: ${error.message}`);
+  }
+});
+
 setInterval(fetchConversations, 3000);
 fetchConversations();
