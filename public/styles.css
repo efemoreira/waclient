@@ -49,51 +49,6 @@ body {
   gap: 12px;
 }
 
-.api-version {
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: var(--panel-2);
-  color: var(--muted);
-  font-family: 'Courier New', monospace;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
-.status-badge {
-  font-size: 12px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  color: var(--muted);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.status-badge:hover {
-  border-color: var(--muted);
-}
-
-.status-badge.status-ok {
-  border-color: #16a34a;
-  color: #16a34a;
-}
-
-.status-badge.status-warn {
-  border-color: #f59e0b;
-  color: #f59e0b;
-}
-
-.status-badge.status-error {
-  border-color: #ef4444;
-  color: #ef4444;
-}
-
-.status-badge.status-loading {
-  color: var(--muted);
-}
-
 .nav-config {
   display: flex;
   align-items: center;
@@ -682,5 +637,3 @@ body {
   border-bottom: none;
 }
 
-  }
-}
