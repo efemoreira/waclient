@@ -258,7 +258,14 @@ messageForm.addEventListener('submit', async (e) => {
 
     if (!res.ok) {
       const error = await res.json();
-      alert('Erro ao enviar: ' + (error.erro || 'Desconhecido'));
+      let mensagem = error.erro || 'Desconhecido';
+      
+      // Erro específico #133010
+      if (error.codigoErro === 133010) {
+        mensagem = `${mensagem}\n\n⚠️ Sua Business Account não está registrada para enviar mensagens.\n\nVeja ERROR_133010.md ou acesse /api/debug para mais informações.`;
+      }
+      
+      alert('Erro ao enviar:\n\n' + mensagem);
     } else {
       messageInput.value = '';
       await fetchConversation(state.selectedId);
