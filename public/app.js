@@ -157,10 +157,17 @@ const directResultText = document.getElementById('directResultText');
 
 // Mostrar/ocultar campo de template customizado
 directTemplateSelect.addEventListener('change', () => {
+  const messageOptional = document.getElementById('directMessageOptional');
+  
   if (directTemplateSelect.value === 'custom') {
     directCustomTemplateGroup.style.display = 'block';
+    messageOptional.style.display = 'inline';
+  } else if (directTemplateSelect.value === 'text') {
+    directCustomTemplateGroup.style.display = 'none';
+    messageOptional.style.display = 'none';
   } else {
     directCustomTemplateGroup.style.display = 'none';
+    messageOptional.style.display = 'inline';
   }
 });
 
@@ -175,8 +182,15 @@ sendDirectBtn.addEventListener('click', async () => {
   const message = directMessageInput.value.trim();
   let template = directTemplateSelect.value;
 
-  if (!phone || !message) {
-    directResultText.textContent = '⚠️ Preencha número e mensagem';
+  if (!phone) {
+    directResultText.textContent = '⚠️ Preencha o número';
+    directResult.classList.remove('hidden');
+    return;
+  }
+
+  // Se for texto livre, mensagem é obrigatória
+  if (template === 'text' && !message) {
+    directResultText.textContent = '⚠️ Preencha a mensagem';
     directResult.classList.remove('hidden');
     return;
   }
@@ -204,13 +218,21 @@ sendDirectBtn.addEventListener('click', async () => {
   try {
     const payload = {
       to: formattedPhone,
-      text: message,
     };
+
+    // Adicionar mensagem se for texto livre
+    if (template === 'text') {
+      payload.text = message;
+    }
 
     // Adicionar template e language se não for texto livre
     if (template !== 'text') {
       payload.template = template;
       payload.language = directLanguageSelect.value;
+      // Se houver mensagem, adiciona também
+      if (message) {
+        payload.text = message;
+      }
     }
 
     const res = await fetch('/api/messages', {
