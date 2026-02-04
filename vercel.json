@@ -23,10 +23,6 @@
     "api/config.ts": {
       "memory": 256,
       "maxDuration": 10
-    },
-    "api/index.ts": {
-      "memory": 256,
-      "maxDuration": 10
     }
   },
   "rewrites": [
@@ -35,27 +31,7 @@
       "destination": "/api/:path*"
     },
     {
-      "source": "/styles.css",
-      "destination": "/public/styles.css"
-    },
-    {
-      "source": "/app.js",
-      "destination": "/public/app.js"
-    },
-    {
-      "source": "/bulk-messaging.js",
-      "destination": "/public/bulk-messaging.js"
-    },
-    {
-      "source": "/bulk-messaging.html",
-      "destination": "/public/bulk-messaging.html"
-    },
-    {
-      "source": "/config.html",
-      "destination": "/public/config.html"
-    },
-    {
-      "source": "/:path*",
+      "source": "/((?!api).)*",
       "destination": "/api/index.ts"
     }
   ],
@@ -74,7 +50,7 @@
       ]
     },
     {
-      "source": "/public/:path*",
+      "source": "/:path*",
       "headers": [
         {
           "key": "Cache-Control",

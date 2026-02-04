@@ -14,22 +14,24 @@ const mimeTypes: { [key: string]: string } = {
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const url = req.url || '/';
+    let pathname = new URL(req.url || '/', 'http://localhost').pathname;
+    
+    // Remover query string
+    pathname = pathname.split('?')[0];
+
     let filePath: string;
 
-    // Mapear URLs para arquivos
-    if (url === '/' || url === '') {
-      filePath = 'public/index.html';
-    } else if (url === '/styles.css') {
-      filePath = 'public/styles.css';
-    } else if (url === '/app.js') {
-      filePath = 'public/app.js';
-    } else if (url === '/bulk-messaging.js') {
-      filePath = 'public/bulk-messaging.js';
-    } else if (url === '/bulk-messaging.html') {
-      filePath = 'public/bulk-messaging.html';
-    } else if (url === '/config.html') {
-      filePath = 'public/config.html';
+    // Se for requisição para arquivo estático ou pasta pública
+    if (pathname.startsWith('/public/')) {
+      filePath = pathname.substring(1); // Remove a barra inicial
+    } else if (
+      pathname.includes('.css') ||
+      pathname.includes('.js') ||
+      pathname.includes('.html') ||
+      pathname.includes('.json')
+    ) {
+      // Procurar na pasta public
+      filePath = path.join('public', pathname);
     } else {
       // Fallback para index.html
       filePath = 'public/index.html';
@@ -37,6 +39,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Ler arquivo
     const fullPath = path.join(process.cwd(), filePath);
+    
+    // Validar que não está tentando acessar fora do diretório
+    if (!fullPath.includes('public')) {
+      filePath = 'public/index.html';
+    }
+
     const content = await fs.readFile(fullPath, 'utf-8');
 
     // Determinar MIME type
@@ -47,7 +55,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Cache-Control', 'public, max-age=3600');
     res.status(200).send(content);
   } catch (e) {
-    res.status(404).json({ erro: 'Arquivo não encontrado' });
+    // Se arquivo não encontrado, servir index.html (SPA fallback)
+    try {
+      const indexPath = path.join(process.cwd(), 'public/index.html');
+      const content = await fs.readFile(indexPath, 'utf-8');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(content);
+    } catch {
+      res.status(404).json({ erro: 'Arquivo não encontrado' });
+    }
   }
 }
+
 
