@@ -5,11 +5,15 @@ import { config, validateConfig } from '../src/config';
 function mapGraphError(err: any, idType: 'phoneNumber' | 'businessAccount') {
   const raw = err?.response?.data?.error?.message || err?.message || 'Erro desconhecido';
   const lower = String(raw).toLowerCase();
+  
+  // Extrair o ID da mensagem e remover a barra
+  const idMatch = raw.match(/\/(\d+)/);
+  const extractedId = idMatch ? idMatch[1] : '';
 
   if (lower.includes('unknown path components')) {
     return {
-      message: `ID inválido para ${idType === 'phoneNumber' ? 'Phone Number ID' : 'WhatsApp Business Account ID'}.`,
-      hint: 'Verifique se você copiou o ID correto no Business Manager (WABA/Phone Number ID).',
+      message: `ID inválido para ${idType === 'phoneNumber' ? 'Phone Number ID' : 'WhatsApp Business Account ID'}: ${extractedId}`,
+      hint: 'Verifique se você copiou o ID correto no Business Manager (WABA/Phone Number ID). Não copie da URL, copie direto do Business Manager.',
       raw,
     };
   }
