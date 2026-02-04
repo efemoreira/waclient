@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const payload = req.body as WebhookPayload;
-      conversationManager.processarWebhook(payload);
+      await conversationManager.processarWebhook(payload);
       res.status(200).json({ ok: true });
     } catch (error: any) {
       console.error('❌ Erro ao processar webhook:', error?.message);

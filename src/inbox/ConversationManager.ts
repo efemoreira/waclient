@@ -1,6 +1,9 @@
 import { WhatsApp } from '../wabapi';
 import type { WebhookPayload, WhatsAppMessage } from '../wabapi/types';
 import { config } from '../config';
+import { promises as fs } from 'fs';
+
+const CONVERSATIONS_FILE = '/tmp/conversations.json';
 
 /**
  * Representa uma mensagem individual
@@ -40,6 +43,41 @@ export class ConversationManager {
       token: config.whatsapp.token,
       numberId: config.whatsapp.numberId,
     });
+    
+    // Carregar conversas do arquivo
+    this.carregarConversas().catch(console.error);
+  }
+
+  /**
+   * Carregar conversas do arquivo
+   */
+  private async carregarConversas(): Promise<void> {
+    try {
+      const data = await fs.readFile(CONVERSATIONS_FILE, 'utf-8');
+      const conversas = JSON.parse(data);
+      Object.entries(conversas).forEach(([id, conv]: [string, any]) => {
+        this.conversations.set(id, conv);
+      });
+      console.log(`✅ Carregadas ${this.conversations.size} conversas`);
+    } catch (e) {
+      // Arquivo não existe ainda, será criado na primeira conversa
+      console.log('📝 Nenhuma conversa anterior encontrada');
+    }
+  }
+
+  /**
+   * Salvar conversas no arquivo
+   */
+  private async salvarConversas(): Promise<void> {
+    try {
+      const data: Record<string, Conversation> = {};
+      this.conversations.forEach((conv, id) => {
+        data[id] = conv;
+      });
+      await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (e) {
+      console.error('❌ Erro ao salvar conversas:', e);
+    }
   }
 
   /**
@@ -90,13 +128,13 @@ export class ConversationManager {
   /**
    * Adicionar mensagem a uma conversa
    */
-  private adicionarMensagem(
+  private async adicionarMensagem(
     waId: string,
     direcao: 'in' | 'out',
     texto: string,
     mensagemId?: string,
     timestamp?: number
-  ): void {
+  ): Promise<void> {
     const conversa = this.obterOuCriarConversa(waId);
     const ts = timestamp || Date.now();
     const registro: MessageRecord = {
@@ -112,12 +150,15 @@ export class ConversationManager {
     if (direcao === 'in') {
       conversa.unreadCount += 1;
     }
+    
+    // Salvar após cada mensagem
+    await this.salvarConversas();
   }
 
   /**
    * Processar webhook do WhatsApp
    */
-  processarWebhook(payload: WebhookPayload): void {
+  async processarWebhook(payload: WebhookPayload): Promise<void> {
     console.log('\n🔍 Processando webhook...');
 
     const entrada = payload.entry?.[0];
@@ -146,7 +187,7 @@ export class ConversationManager {
         const timestamp = msg.timestamp
           ? Number(msg.timestamp) * 1000
           : Date.now();
-        this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
+        await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
         console.log(`    ✅ "${texto}"`);
       }
     }
@@ -196,7 +237,7 @@ export class ConversationManager {
   async enviarMensagem(para: string, texto: string): Promise<string> {
     const resposta = await this.client.sendMessage(para, texto);
     const mensagemId = resposta.data?.messages?.[0]?.id;
-    this.adicionarMensagem(para, 'out', texto, mensagemId, Date.now());
+    await this.adicionarMensagem(para, 'out', texto, mensagemId, Date.now());
     return mensagemId || '';
   }
 }
