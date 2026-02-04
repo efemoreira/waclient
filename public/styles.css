@@ -43,6 +43,23 @@ body {
   gap: 10px;
 }
 
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.api-version {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
 .status-badge {
   font-size: 12px;
   padding: 6px 10px;

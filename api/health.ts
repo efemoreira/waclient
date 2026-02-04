@@ -89,8 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     requests.push(
       axios
         .get(`https://graph.facebook.com/v${apiVersion}/${numberId}`, {
-          headers,
-          params: { fields: 'display_phone_number,verified_name' },
+          headers
         })
         .then((resp) => {
           checks.phoneNumber = {
@@ -98,6 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             displayPhoneNumber: resp.data?.display_phone_number,
             verifiedName: resp.data?.verified_name,
           };
+          console.log(`https://graph.facebook.com/v${apiVersion}/${numberId} response:`, resp.data);
         })
         .catch((err) => {
           const mapped = mapGraphError(err, 'phoneNumber');
@@ -121,6 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           params: { fields: 'name' },
         })
         .then((resp) => {
+          console.log(`https://graph.facebook.com/v${apiVersion}/${accountId} response:`, resp.data);
           checks.businessAccount = {
             ok: true,
             name: resp.data?.name,

@@ -13,6 +13,7 @@ const messageInput = document.getElementById('messageInput');
 const searchInput = document.getElementById('searchInput');
 const newChatBtn = document.getElementById('newChatBtn');
 const statusBadge = document.getElementById('statusBadge');
+const apiVersion = document.getElementById('apiVersion');
 const newChatModal = document.getElementById('newChatModal');
 const newChatForm = document.getElementById('newChatForm');
 const closeModalBtn = document.getElementById('closeModalBtn');
@@ -52,6 +53,11 @@ async function checkHealth() {
       statusBadge.textContent = 'Configuração com erro';
       statusBadge.className = 'status-badge status-error';
       console.warn('Detalhes da configuração:', data?.checks);
+    }
+    
+    // Atualizar versão da API
+    if (data?.checks?.config?.apiVersion && apiVersion) {
+      apiVersion.textContent = data.checks.config.apiVersion;
     }
   } catch (err) {
     statusBadge.textContent = 'Erro ao validar configuração';
