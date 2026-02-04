@@ -58,10 +58,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       erro?.response?.data?.error?.message ||
       erro?.message ||
       'Erro ao enviar mensagem';
+    
     console.log(`  ❌ ERRO: ${mensagem}`);
+    console.log('  Status HTTP:', erro?.response?.status);
+    console.log('  Dados completos:', JSON.stringify(erro?.response?.data, null, 2));
+    console.log('  Erro raw:', erro);
     console.log('='.repeat(50) + '\n');
+    
     res.status(500).json({
       erro: mensagem,
+      detalhes: erro?.response?.data?.error,
+      codigoErro: erro?.response?.data?.error?.code,
     });
   }
 }

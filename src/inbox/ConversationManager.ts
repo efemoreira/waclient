@@ -296,7 +296,10 @@ export class ConversationManager {
       // Garantir que conversa existe (será criada se não existir)
       this.obterOuCriarConversa(para);
       
+      console.log(`    🔄 Chamando client.sendMessage(${para}, texto)`);
       const resposta = await this.client.sendMessage(para, texto);
+      
+      console.log(`    📨 Resposta recebida:`, JSON.stringify(resposta, null, 2));
       const mensagemId = resposta.data?.messages?.[0]?.id;
       
       await this.adicionarMensagem(para, 'out', texto, mensagemId, Date.now());
@@ -304,7 +307,10 @@ export class ConversationManager {
       
       return mensagemId || '';
     } catch (erro: any) {
-      console.log(`    ❌ Erro: ${erro?.message || 'Desconhecido'}`);
+      console.log(`    ❌ Erro capturado`);
+      console.log(`    Mensagem: ${erro?.message || 'Desconhecido'}`);
+      console.log(`    Status HTTP: ${erro?.response?.status}`);
+      console.log(`    Dados resposta:`, JSON.stringify(erro?.response?.data, null, 2));
       throw erro;
     }
   }
