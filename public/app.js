@@ -398,6 +398,18 @@ function displayHealthDetails(health) {
     `;
   }
 
+  // Display logs if available
+  if (health.logs && Array.isArray(health.logs) && health.logs.length > 0) {
+    html += `
+      <div class="health-section">
+        <h3>🔍 Logs do Servidor</h3>
+        <div class="logs-container">
+          ${health.logs.map(log => `<div class="log-entry">${log}</div>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   html += '</div>';
   healthDetails.innerHTML = html;
 }

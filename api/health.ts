@@ -41,6 +41,27 @@ function mapGraphError(err: any, idType: 'phoneNumber' | 'businessAccount') {
   };
 }
 
+// Capture logs globally
+const logs: string[] = [];
+const originalLog = console.log;
+const originalError = console.error;
+
+function addLog(level: string, ...args: any[]) {
+  const message = args.map(arg => 
+    typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+  ).join(' ');
+  logs.push(`[${new Date().toISOString()}] ${level}: ${message}`);
+  // Also output to actual console
+  if (level === 'ERROR') {
+    originalError(...args);
+  } else {
+    originalLog(...args);
+  }
+}
+
+console.log = (...args: any[]) => addLog('LOG', ...args);
+console.error = (...args: any[]) => addLog('ERROR', ...args);
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -220,5 +241,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('Full response:', JSON.stringify({ ok, checks }, null, 2));
   console.log('========== HEALTH CHECK END ==========\n');
 
-  res.json({ ok, checks });
+  res.json({ ok, checks, logs });
 }

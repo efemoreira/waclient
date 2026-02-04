@@ -658,5 +658,29 @@ body {
   color: #fca5a5;
 }
 
+/* Logs Container */
+.logs-container {
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.log-entry {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+}
+
   }
 }
