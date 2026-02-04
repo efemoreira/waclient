@@ -147,9 +147,22 @@ newChatBtn.addEventListener('click', async () => {
 // Envio Direto
 const directNumberInput = document.getElementById('directNumber');
 const directMessageInput = document.getElementById('directMessage');
+const directTemplateSelect = document.getElementById('directTemplate');
+const directLanguageSelect = document.getElementById('directLanguage');
+const directCustomTemplateInput = document.getElementById('directCustomTemplate');
+const directCustomTemplateGroup = document.getElementById('directCustomTemplateGroup');
 const sendDirectBtn = document.getElementById('sendDirectBtn');
 const directResult = document.getElementById('directResult');
 const directResultText = document.getElementById('directResultText');
+
+// Mostrar/ocultar campo de template customizado
+directTemplateSelect.addEventListener('change', () => {
+  if (directTemplateSelect.value === 'custom') {
+    directCustomTemplateGroup.style.display = 'block';
+  } else {
+    directCustomTemplateGroup.style.display = 'none';
+  }
+});
 
 function formatPhoneNumber(phone) {
   // Remove tudo que não é número
@@ -160,11 +173,21 @@ function formatPhoneNumber(phone) {
 sendDirectBtn.addEventListener('click', async () => {
   const phone = directNumberInput.value.trim();
   const message = directMessageInput.value.trim();
+  let template = directTemplateSelect.value;
 
   if (!phone || !message) {
     directResultText.textContent = '⚠️ Preencha número e mensagem';
     directResult.classList.remove('hidden');
     return;
+  }
+
+  if (template === 'custom') {
+    template = directCustomTemplateInput.value.trim();
+    if (!template) {
+      directResultText.textContent = '⚠️ Especifique o nome do template';
+      directResult.classList.remove('hidden');
+      return;
+    }
   }
 
   const formattedPhone = formatPhoneNumber(phone);
@@ -179,10 +202,21 @@ sendDirectBtn.addEventListener('click', async () => {
   directResult.classList.remove('hidden');
 
   try {
+    const payload = {
+      to: formattedPhone,
+      text: message,
+    };
+
+    // Adicionar template e language se não for texto livre
+    if (template !== 'text') {
+      payload.template = template;
+      payload.language = directLanguageSelect.value;
+    }
+
     const res = await fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: formattedPhone, text: message }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
@@ -191,6 +225,9 @@ sendDirectBtn.addEventListener('click', async () => {
       directResultText.textContent = `✅ Mensagem enviada com sucesso! ID: ${data.mensagemId}`;
       directNumberInput.value = '';
       directMessageInput.value = '';
+      directCustomTemplateInput.value = '';
+      directTemplateSelect.value = 'text';
+      directCustomTemplateGroup.style.display = 'none';
     } else {
       directResultText.textContent = `❌ Erro: ${data.erro}`;
     }

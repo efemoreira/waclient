@@ -60,6 +60,31 @@
               <small>Formato: código país + DD + número (ex: 5511999999999)</small>
             </div>
 
+            <div class="form-row">
+              <div class="form-group">
+                <label for="directTemplate">📋 Template</label>
+                <select id="directTemplate">
+                  <option value="text">Mensagem Livre</option>
+                  <option value="hello_world">hello_world</option>
+                  <option value="custom">Outro (especifique)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="directLanguage">🌐 Idioma</label>
+                <select id="directLanguage">
+                  <option value="pt_BR">Português (Brasil)</option>
+                  <option value="en_US">English (USA)</option>
+                  <option value="es_ES">Español</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group" id="directCustomTemplateGroup" style="display: none;">
+              <label for="directCustomTemplate">Outro Template</label>
+              <input type="text" id="directCustomTemplate" placeholder="nome_do_template" />
+            </div>
+
             <div class="form-group">
               <label for="directMessage">💬 Mensagem</label>
               <textarea id="directMessage" placeholder="Digite a mensagem..." rows="4"></textarea>
