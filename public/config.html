@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuração WhatsApp</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    h1 {
+      font-size: 28px;
+      color: #333;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #666;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+      font-family: monospace;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .help-text {
+      font-size: 12px;
+      color: #999;
+      margin-top: 5px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      margin-top: 10px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .status {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      text-align: center;
+      display: none;
+    }
+
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+      display: block;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+      display: block;
+    }
+
+    .status.loading {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+      display: block;
+    }
+
+    .info-box {
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+      padding: 12px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    .current-config {
+      background: #f0f4f8;
+      padding: 12px;
+      border-radius: 6px;
+      margin-top: 20px;
+      font-size: 13px;
+      display: none;
+    }
+
+    .current-config.show {
+      display: block;
+    }
+
+    .config-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #ddd;
+    }
+
+    .config-item:last-child {
+      border-bottom: none;
+    }
+
+    .config-label {
+      font-weight: 600;
+      color: #333;
+    }
+
+    .config-value {
+      color: #666;
+      font-family: monospace;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚙️ Configuração WhatsApp</h1>
+    <p class="subtitle">Configurar credenciais da API WhatsApp Business</p>
+
+    <div class="info-box">
+      📌 As credenciais são salvas localmente e usadas para conectar à API do WhatsApp Business.
+    </div>
+
+    <form id="configForm">
+      <div class="form-group">
+        <label for="phoneNumberId">ID do Número Telefônico *</label>
+        <input 
+          type="text" 
+          id="phoneNumberId" 
+          placeholder="Ex: 1234567890123" 
+          required
+        >
+        <div class="help-text">Encontre em Meta for Developers → WhatsApp Business</div>
+      </div>
+
+      <div class="form-group">
+        <label for="businessAccountId">ID da Conta Business *</label>
+        <input 
+          type="text" 
+          id="businessAccountId" 
+          placeholder="Ex: 123456789" 
+          required
+        >
+        <div class="help-text">Encontre em Meta for Developers → Settings</div>
+      </div>
+
+      <div class="form-group">
+        <label for="accessToken">Token de Acesso *</label>
+        <input 
+          type="password" 
+          id="accessToken" 
+          placeholder="Ex: EAAIxxx..." 
+          required
+        >
+        <div class="help-text">Token gerado em Meta for Developers → App Roles</div>
+      </div>
+
+      <div class="form-group">
+        <label for="webhookToken">Token do Webhook *</label>
+        <input 
+          type="text" 
+          id="webhookToken" 
+          placeholder="Ex: seu-token-secreto" 
+          required
+        >
+        <div class="help-text">Usado para validar webhooks (escolha um valor aleatório)</div>
+      </div>
+
+      <button type="submit">💾 Salvar Configuração</button>
+    </form>
+
+    <div id="status" class="status"></div>
+
+    <div id="currentConfig" class="current-config">
+      <strong>Configuração Atual:</strong>
+      <div class="config-item">
+        <span class="config-label">Número:</span>
+        <span class="config-value" id="currentNumber">-</span>
+      </div>
+      <div class="config-item">
+        <span class="config-label">Conta:</span>
+        <span class="config-value" id="currentAccount">-</span>
+      </div>
+      <div class="config-item">
+        <span class="config-label">Webhook:</span>
+        <span class="config-value" id="currentWebhook">-</span>
+      </div>
+      <div class="config-item">
+        <span class="config-label">Token:</span>
+        <span class="config-value" id="currentToken">✓ Configurado</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('configForm');
+    const statusDiv = document.getElementById('status');
+    const currentConfigDiv = document.getElementById('currentConfig');
+
+    // Carregar configuração atual ao abrir
+    async function carregarConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        
+        if (data.phoneNumberId) {
+          document.getElementById('phoneNumberId').value = data.phoneNumberId;
+          document.getElementById('currentNumber').textContent = data.phoneNumberId;
+          document.getElementById('currentAccount').textContent = data.businessAccountId;
+          document.getElementById('currentWebhook').textContent = data.webhookToken;
+          currentConfigDiv.classList.add('show');
+        }
+      } catch (error) {
+        console.log('Nenhuma configuração anterior encontrada');
+      }
+    }
+
+    // Carregar ao abrir página
+    carregarConfig();
+
+    // Salvar configuração
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const phoneNumberId = document.getElementById('phoneNumberId').value;
+      const businessAccountId = document.getElementById('businessAccountId').value;
+      const accessToken = document.getElementById('accessToken').value;
+      const webhookToken = document.getElementById('webhookToken').value;
+
+      statusDiv.className = 'status loading';
+      statusDiv.textContent = '⏳ Salvando configuração...';
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phoneNumberId,
+            businessAccountId,
+            accessToken,
+            webhookToken,
+          }),
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          statusDiv.className = 'status success';
+          statusDiv.textContent = '✅ Configuração salva com sucesso!';
+          
+          // Atualizar config atual
+          document.getElementById('currentNumber').textContent = phoneNumberId;
+          document.getElementById('currentAccount').textContent = businessAccountId;
+          document.getElementById('currentWebhook').textContent = webhookToken;
+          currentConfigDiv.classList.add('show');
+          
+          // Limpar campo de senha
+          document.getElementById('accessToken').value = '';
+          
+          setTimeout(() => {
+            statusDiv.className = 'status';
+          }, 3000);
+        } else {
+          statusDiv.className = 'status error';
+          statusDiv.textContent = '❌ Erro: ' + (data.erro || 'Falha ao salvar');
+        }
+      } catch (error: any) {
+        statusDiv.className = 'status error';
+        statusDiv.textContent = '❌ Erro: ' + error.message;
+      }
+    });
+  </script>
+</body>
+</html>

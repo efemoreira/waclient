@@ -1,0 +1,44 @@
+{
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "outputDirectory": "dist",
+  "regions": ["sfo1"],
+  "functions": {
+    "api/webhook.ts": {
+      "memory": 512,
+      "maxDuration": 30
+    },
+    "api/conversations.ts": {
+      "memory": 256,
+      "maxDuration": 10
+    },
+    "api/messages.ts": {
+      "memory": 256,
+      "maxDuration": 30
+    },
+    "api/bulk.ts": {
+      "memory": 1024,
+      "maxDuration": 300
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/public/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600"
+        }
+      ]
+    }
+  ]
+}

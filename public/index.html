@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Caixa de Atendimento - WhatsApp</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- Navegação -->
+      <nav class="navbar">
+        <div class="nav-buttons">
+          <button class="nav-btn active" data-section="chat">💬 Conversas</button>
+          <button class="nav-btn" data-section="bulk">📨 Envio em Massa</button>
+        </div>
+        <a href="/config.html" class="nav-config" title="Configurar WhatsApp">⚙️</a>
+      </nav>
+
+      <!-- Seção: Chat/Conversas -->
+      <section id="chat-section" class="section active">
+        <aside class="sidebar">
+          <div class="sidebar-header">
+            <h1>Atendimento</h1>
+            <button id="newChatBtn" class="primary">Nova conversa</button>
+          </div>
+          <div class="search">
+            <input type="text" id="searchInput" placeholder="Buscar contato..." />
+          </div>
+          <div id="conversationList" class="conversation-list"></div>
+        </aside>
+
+        <main class="chat">
+          <div id="chatHeader" class="chat-header">
+            <div class="chat-title">
+              <h2>Selecione uma conversa</h2>
+              <span class="subtitle">Acompanhe e responda mensagens</span>
+            </div>
+            <button id="assumeBtn" class="secondary" disabled>Assumir controle</button>
+          </div>
+
+          <div id="messages" class="messages"></div>
+
+          <form id="messageForm" class="composer">
+            <input id="messageInput" type="text" placeholder="Digite sua mensagem..." disabled />
+            <button type="submit" class="primary" disabled>Enviar</button>
+          </form>
+        </main>
+      </section>
+
+      <!-- Seção: Envio em Massa -->
+      <section id="bulk-section" class="section">
+        <div class="bulk-container">
+          <h2>📨 Envio em Massa</h2>
+
+          <!-- Formulário -->
+          <div class="bulk-form">
+            <div class="form-group">
+              <label for="csvFile">📄 Arquivo CSV</label>
+              <input type="file" id="csvFile" accept=".csv" />
+              <small>Colunas: nome, telefone, data_optin, metodo_optin</small>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="templateSelect">📋 Template</label>
+                <select id="templateSelect">
+                  <option value="">-- Selecione --</option>
+                  <option value="hello_world">hello_world</option>
+                  <option value="custom">Outro (especifique)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="customTemplate">Outro Template</label>
+                <input type="text" id="customTemplate" placeholder="nome_do_template" style="display:none;" />
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="languageSelect">🌐 Idioma</label>
+                <select id="languageSelect">
+                  <option value="pt_BR">Português (Brasil)</option>
+                  <option value="en_US">English (USA)</option>
+                  <option value="es_ES">Español</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="missionName">🎯 Contexto/Missão</label>
+                <input type="text" id="missionName" placeholder="ex: Missão XYZ" value="Missão" />
+              </div>
+            </div>
+
+            <button id="startBulkBtn" class="btn btn-primary">🚀 Iniciar Envio</button>
+          </div>
+
+          <!-- Status -->
+          <div id="bulkStatus" class="bulk-status hidden">
+            <h3>📊 Status do Envio</h3>
+            <div class="status-grid">
+              <div class="status-item">
+                <span class="label">Total</span>
+                <span id="statusTotal" class="value">0</span>
+              </div>
+              <div class="status-item">
+                <span class="label">✅ Enviados</span>
+                <span id="statusSucesso" class="value">0</span>
+              </div>
+              <div class="status-item">
+                <span class="label">❌ Erros</span>
+                <span id="statusErros" class="value">0</span>
+              </div>
+              <div class="status-item">
+                <span class="label">📈 Taxa</span>
+                <span id="statusTaxa" class="value">0%</span>
+              </div>
+            </div>
+
+            <div class="progress-bar">
+              <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <p id="statusText" class="status-text">Iniciando...</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+    <script src="/bulk-messaging.js"></script>
+  </body>
+</html>
