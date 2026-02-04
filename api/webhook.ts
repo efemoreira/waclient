@@ -15,42 +15,52 @@ const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || '';
  * POST: Receber mensagens
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('\n' + '='.repeat(60));
+  console.log('📨 WEBHOOK REQUEST - ' + req.method);
+  console.log('='.repeat(60));
+  
   // GET - Verificação de webhook
   if (req.method === 'GET') {
     const modo = req.query['hub.mode'] as string;
     const token = req.query['hub.verify_token'] as string;
     const desafio = req.query['hub.challenge'] as string;
 
-    console.log('🔍 Webhook validation:');
-    console.log('  Token recebido:', token);
-    console.log('  Token esperado:', WEBHOOK_TOKEN);
-    console.log('  Match:', token === WEBHOOK_TOKEN);
+    console.log('🔍 WEBHOOK VERIFICATION');
+    console.log('  Mode:', modo);
+    console.log('  Token match:', token === WEBHOOK_TOKEN ? '✅ YES' : '❌ NO');
+    console.log('  Challenge present:', desafio ? '✅ YES' : '❌ NO');
 
     if (modo === 'subscribe' && token === WEBHOOK_TOKEN && desafio) {
-      console.log('✅ Webhook verificado com sucesso');
+      console.log('✅ WEBHOOK VERIFIED SUCCESSFULLY\n');
       res.status(200).send(desafio);
       return;
     }
 
-    console.log('❌ Webhook validation failed');
+    console.log('❌ WEBHOOK VERIFICATION FAILED\n');
     res.status(403).json({ erro: 'Token inválido ou parâmetros faltando' });
     return;
   }
 
   // POST - Receber webhook
   if (req.method === 'POST') {
-    console.log('\n=== WEBHOOK POST ===');
+    console.log('📥 WEBHOOK POST - Processando...');
 
     try {
       const payload = req.body as WebhookPayload;
+      console.log('📦 Payload entrada:', JSON.stringify(payload).substring(0, 200) + '...');
+      
       await conversationManager.processarWebhook(payload);
+      console.log('✅ WEBHOOK PROCESSADO COM SUCESSO\n');
       res.status(200).json({ ok: true });
     } catch (error: any) {
-      console.error('❌ Erro ao processar webhook:', error?.message);
+      console.error('❌ ERRO ao processar webhook:');
+      console.error('   Message:', error?.message);
+      console.error('   Stack:', error?.stack);
       res.status(200).json({ ok: true }); // Sempre retornar 200
     }
     return;
   }
 
+  console.log('❌ MÉTODO NÃO PERMITIDO:', req.method);
   res.status(405).json({ erro: 'Método não permitido' });
 }

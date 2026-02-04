@@ -75,6 +75,7 @@ export class ConversationManager {
         data[id] = conv;
       });
       await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+      console.log(`💾 Salvas ${this.conversations.size} conversas em ${CONVERSATIONS_FILE}`);
     } catch (e) {
       console.error('❌ Erro ao salvar conversas:', e);
     }
@@ -159,7 +160,9 @@ export class ConversationManager {
    * Processar webhook do WhatsApp
    */
   async processarWebhook(payload: WebhookPayload): Promise<void> {
-    console.log('\n🔍 Processando webhook...');
+    console.log('\n' + '='.repeat(50));
+    console.log('🔍 PROCESSANDO WEBHOOK');
+    console.log('='.repeat(50));
 
     const entrada = payload.entry?.[0];
     const mudanca = entrada?.changes?.[0];
@@ -172,10 +175,11 @@ export class ConversationManager {
 
     const contato = valor.contacts?.[0];
     const nome = contato?.profile?.name;
+    console.log(`👤 Contato: ${nome || 'Desconhecido'}`);
 
     // Processar mensagens
     if (valor.messages && valor.messages.length > 0) {
-      console.log(`✅ Processando ${valor.messages.length} mensagem(ns)...`);
+      console.log(`📨 Processando ${valor.messages.length} mensagem(ns)...`);
       for (const msg of valor.messages) {
         const de = msg.from;
         if (!de) {
@@ -188,14 +192,16 @@ export class ConversationManager {
           ? Number(msg.timestamp) * 1000
           : Date.now();
         await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
-        console.log(`    ✅ "${texto}"`);
+        console.log(`    ✅ De ${de}: "${texto.substring(0, 50)}..."`);
       }
     }
 
     // Processar status
     if (valor.statuses && valor.statuses.length > 0) {
-      console.log(`ℹ️  Processando ${valor.statuses.length} status(es)`);
+      console.log(`📊 Processando ${valor.statuses.length} status(es)`);
     }
+
+    console.log('✅ WEBHOOK PROCESSADO\n');
   }
 
   /**
@@ -214,9 +220,13 @@ export class ConversationManager {
    * Obter conversa específica e marcar como lida
    */
   obterConversa(id: string): Conversation | null {
+    console.log(`  🔍 Buscando conversa: ${id}`);
     const conversa = this.conversations.get(id);
     if (conversa) {
       conversa.unreadCount = 0;
+      console.log(`    ✅ Encontrada com ${conversa.messages.length} mensagens`);
+    } else {
+      console.log(`    ❌ Não encontrada`);
     }
     return conversa || null;
   }
@@ -225,9 +235,14 @@ export class ConversationManager {
    * Alternar controle manual da conversa
    */
   alternarControleManual(id: string, ativo: boolean): boolean {
+    console.log(`  🔄 Alternando controle manual: ${id} -> ${ativo ? '👤 Humano' : '🤖 Bot'}`);
     const conversa = this.conversations.get(id);
-    if (!conversa) return false;
+    if (!conversa) {
+      console.log(`    ❌ Conversa não encontrada`);
+      return false;
+    }
     conversa.isHuman = ativo;
+    console.log(`    ✅ Controle alterado`);
     return true;
   }
 
@@ -235,9 +250,21 @@ export class ConversationManager {
    * Enviar mensagem e armazenar registro
    */
   async enviarMensagem(para: string, texto: string): Promise<string> {
-    const resposta = await this.client.sendMessage(para, texto);
-    const mensagemId = resposta.data?.messages?.[0]?.id;
-    await this.adicionarMensagem(para, 'out', texto, mensagemId, Date.now());
-    return mensagemId || '';
+    console.log(`  📤 Enviando mensagem`);
+    console.log(`    Para: ${para}`);
+    console.log(`    Texto: "${texto.substring(0, 60)}${texto.length > 60 ? '...' : ''}"`);
+    
+    try {
+      const resposta = await this.client.sendMessage(para, texto);
+      const mensagemId = resposta.data?.messages?.[0]?.id;
+      
+      await this.adicionarMensagem(para, 'out', texto, mensagemId, Date.now());
+      console.log(`    ✅ Enviada com ID: ${mensagemId}`);
+      
+      return mensagemId || '';
+    } catch (erro: any) {
+      console.log(`    ❌ Erro: ${erro?.message || 'Desconhecido'}`);
+      throw erro;
+    }
   }
 }

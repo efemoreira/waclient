@@ -33,19 +33,29 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
 
   // GET - Listar conversas ou obter específica
   if (req.method === 'GET') {
+    console.log('\n' + '='.repeat(50));
+    console.log('📞 GET /api/conversations');
+    
     if (id) {
       // Obter conversa específica
+      console.log(`  ID solicitado: ${id}`);
       const conversa = conversationManager.obterConversa(id);
       if (!conversa) {
+        console.log(`  ❌ Conversa não encontrada`);
         res.status(404).json({ erro: 'Conversa não encontrada' });
         return;
       }
+      console.log(`  ✅ Conversa encontrada: ${conversa.name}`);
+      console.log(`  📊 Mensagens: ${conversa.messages.length}, Não lidas: ${conversa.unreadCount}`);
+      console.log('='.repeat(50) + '\n');
       res.json(conversa);
       return;
     }
 
     // Listar todas as conversas
     const conversas = conversationManager.obterConversas();
+    console.log(`  📊 Total: ${conversas.length} conversa(s)`);
+    
     const lista = conversas.map((c) => ({
       id: c.id,
       name: c.name,
@@ -56,18 +66,27 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       isHuman: c.isHuman,
     }));
 
+    console.log(`  ✅ Retornando lista`);
+    console.log('='.repeat(50) + '\n');
     res.json(lista);
     return;
   }
 
   // POST - Assumir controle da conversa
   if (req.method === 'POST') {
+    console.log('\n' + '='.repeat(50));
+    console.log('📞 POST /api/conversations');
     const { isHuman } = req.body as { isHuman?: boolean };
 
     if (!id) {
+      console.log(`  ❌ ID da conversa não especificado`);
+      console.log('='.repeat(50) + '\n');
       res.status(400).json({ erro: 'ID da conversa não especificado' });
       return;
     }
+
+    console.log(`  ID: ${id}`);
+    console.log(`  Assumir como humano: ${isHuman}`);
 
     const sucesso = conversationManager.alternarControleManual(
       id,
@@ -75,9 +94,14 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     if (!sucesso) {
+      console.log(`  ❌ Conversa não encontrada`);
+      console.log('='.repeat(50) + '\n');
       res.status(404).json({ erro: 'Conversa não encontrada' });
       return;
     }
+
+    console.log(`  ✅ Controle alterado com sucesso`);
+    console.log('='.repeat(50) + '\n');
 
     res.json({ ok: true, isHuman });
     return;
