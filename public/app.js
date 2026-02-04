@@ -42,7 +42,7 @@ async function fetchConversations() {
 }
 
 async function fetchConversation(id) {
-  const res = await fetch(`/api/conversations/${id}`);
+  const res = await fetch(`/api/conversations?id=${id}`);
   if (!res.ok) return;
   const conv = await res.json();
   renderConversation(conv);
@@ -107,7 +107,7 @@ assumeBtn.addEventListener('click', async () => {
   const current = state.conversations.find((c) => c.id === state.selectedId);
   const next = !current?.isHuman;
 
-  await fetch(`/api/conversations/${state.selectedId}/assume`, {
+  await fetch(`/api/conversations?id=${state.selectedId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ isHuman: next }),
