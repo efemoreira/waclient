@@ -12,6 +12,7 @@
       <nav class="navbar">
         <div class="nav-buttons">
           <button class="nav-btn active" data-section="chat">💬 Conversas</button>
+          <button class="nav-btn" data-section="direct">📱 Envio Rápido</button>
           <button class="nav-btn" data-section="bulk">📨 Envio em Massa</button>
         </div>
       </nav>
@@ -45,6 +46,32 @@
             <button type="submit" class="primary" disabled>Enviar</button>
           </form>
         </main>
+      </section>
+
+      <!-- Seção: Envio Rápido -->
+      <section id="direct-section" class="section">
+        <div class="bulk-container">
+          <h2>📱 Envio Rápido para Número</h2>
+
+          <div class="bulk-form">
+            <div class="form-group">
+              <label for="directNumber">📞 Número do WhatsApp</label>
+              <input type="text" id="directNumber" placeholder="55 11 99999-9999 (com DD e país)" />
+              <small>Formato: código país + DD + número (ex: 5511999999999)</small>
+            </div>
+
+            <div class="form-group">
+              <label for="directMessage">💬 Mensagem</label>
+              <textarea id="directMessage" placeholder="Digite a mensagem..." rows="4"></textarea>
+            </div>
+
+            <button id="sendDirectBtn" class="btn btn-primary">📤 Enviar</button>
+          </div>
+
+          <div id="directResult" class="bulk-status hidden">
+            <p id="directResultText"></p>
+          </div>
+        </div>
       </section>
 
       <!-- Seção: Envio em Massa -->

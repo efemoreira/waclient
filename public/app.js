@@ -144,5 +144,62 @@ newChatBtn.addEventListener('click', async () => {
   await fetchConversations();
 });
 
+// Envio Direto
+const directNumberInput = document.getElementById('directNumber');
+const directMessageInput = document.getElementById('directMessage');
+const sendDirectBtn = document.getElementById('sendDirectBtn');
+const directResult = document.getElementById('directResult');
+const directResultText = document.getElementById('directResultText');
+
+function formatPhoneNumber(phone) {
+  // Remove tudo que não é número
+  const cleaned = phone.replace(/\D/g, '');
+  return cleaned;
+}
+
+sendDirectBtn.addEventListener('click', async () => {
+  const phone = directNumberInput.value.trim();
+  const message = directMessageInput.value.trim();
+
+  if (!phone || !message) {
+    directResultText.textContent = '⚠️ Preencha número e mensagem';
+    directResult.classList.remove('hidden');
+    return;
+  }
+
+  const formattedPhone = formatPhoneNumber(phone);
+  if (formattedPhone.length < 10) {
+    directResultText.textContent = '❌ Número inválido (mínimo 10 dígitos)';
+    directResult.classList.remove('hidden');
+    return;
+  }
+
+  sendDirectBtn.disabled = true;
+  directResultText.textContent = '⏳ Enviando...';
+  directResult.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: formattedPhone, text: message }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      directResultText.textContent = `✅ Mensagem enviada com sucesso! ID: ${data.mensagemId}`;
+      directNumberInput.value = '';
+      directMessageInput.value = '';
+    } else {
+      directResultText.textContent = `❌ Erro: ${data.erro}`;
+    }
+  } catch (erro) {
+    directResultText.textContent = `❌ Erro ao enviar: ${erro.message}`;
+  } finally {
+    sendDirectBtn.disabled = false;
+  }
+});
+
 setInterval(fetchConversations, 3000);
 fetchConversations();
