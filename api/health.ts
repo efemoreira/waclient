@@ -2,6 +2,41 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import axios from 'axios';
 import { config, validateConfig } from '../src/config';
 
+function mapGraphError(err: any, idType: 'phoneNumber' | 'businessAccount') {
+  const raw = err?.response?.data?.error?.message || err?.message || 'Erro desconhecido';
+  const lower = String(raw).toLowerCase();
+
+  if (lower.includes('unknown path components')) {
+    return {
+      message: `ID inválido para ${idType === 'phoneNumber' ? 'Phone Number ID' : 'WhatsApp Business Account ID'}.`,
+      hint: 'Verifique se você copiou o ID correto no Business Manager (WABA/Phone Number ID).',
+      raw,
+    };
+  }
+
+  if (lower.includes('unsupported get request')) {
+    return {
+      message: `ID inválido ou sem permissão para ${idType === 'phoneNumber' ? 'Phone Number ID' : 'Business Account ID'}.`,
+      hint: 'Confirme se o token pertence ao mesmo Business e tem as permissões corretas.',
+      raw,
+    };
+  }
+
+  if (lower.includes('invalid oauth access token') || lower.includes('oauth')) {
+    return {
+      message: 'Token inválido ou expirado.',
+      hint: 'Gere um novo token com as permissões whatsapp_business_management e whatsapp_business_messaging.',
+      raw,
+    };
+  }
+
+  return {
+    message: 'Erro ao validar na Graph API.',
+    hint: 'Verifique token, permissões e IDs informados.',
+    raw,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -61,9 +96,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           };
         })
         .catch((err) => {
+          const mapped = mapGraphError(err, 'phoneNumber');
           checks.phoneNumber = {
             ok: false,
-            erro: err?.response?.data?.error?.message || err?.message || 'Erro ao validar número',
+            erro: mapped.message,
+            dica: mapped.hint,
+            detalhe: mapped.raw,
           };
         })
     );
@@ -85,9 +123,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           };
         })
         .catch((err) => {
+          const mapped = mapGraphError(err, 'businessAccount');
           checks.businessAccount = {
             ok: false,
-            erro: err?.response?.data?.error?.message || err?.message || 'Erro ao validar conta',
+            erro: mapped.message,
+            dica: mapped.hint,
+            detalhe: mapped.raw,
           };
         })
     );
