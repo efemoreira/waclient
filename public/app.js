@@ -58,30 +58,29 @@ newChatForm.addEventListener('submit', async (e) => {
     return;
   }
   
-  // Selecionar a conversa (será criada quando enviar mensagem)
-  state.selectedId = phone;
-  
-  // Se houver nome, armazenar para usar depois
-  if (name) {
-    const existingConv = state.conversations.find(c => c.id === phone);
-    if (!existingConv) {
-      // Criar conversa vazia com o nome
-      state.conversations.unshift({
-        id: phone,
-        name: name,
-        phoneNumber: phone,
-        lastMessage: undefined,
-        lastTimestamp: undefined,
-        unreadCount: 0,
-        isHuman: false,
-        messages: [],
-      });
+  // Criar conversa no servidor
+  try {
+    const res = await fetch('/api/conversations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, name: name || undefined }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      alert('Erro ao criar conversa: ' + (error.erro || 'Desconhecido'));
+      return;
     }
+
+    const { conversa } = await res.json();
+    state.selectedId = conversa.id;
+    
+    newChatModal.close();
+    await fetchConversations();
+    renderChatUI();
+  } catch (err) {
+    alert('Erro de conexão: ' + err.message);
   }
-  
-  newChatModal.close();
-  await fetchConversations();
-  renderChatUI();
 });
 
 function renderChatUI() {

@@ -274,7 +274,7 @@ export class ConversationManager {
   /**
    * Criar conversa com nome (para novas conversas)
    */
-  criarConversa(telefone: string, nome?: string): Conversation {
+  async criarConversa(telefone: string, nome?: string): Promise<Conversation> {
     console.log(`  ✨ Criando nova conversa: ${telefone}`);
     if (nome) console.log(`    Nome: ${nome}`);
     
@@ -283,6 +283,7 @@ export class ConversationManager {
       console.log(`    ℹ️  Conversa já existe, atualizando nome se fornecido`);
       if (nome && !existente.name) {
         existente.name = nome;
+        await this.salvarConversas();
       }
       return existente;
     }
@@ -297,7 +298,8 @@ export class ConversationManager {
     };
     
     this.conversations.set(telefone, conversa);
-    console.log(`    ✅ Conversa criada`);
+    await this.salvarConversas();
+    console.log(`    ✅ Conversa criada e salva`);
     return conversa;
   }
 }

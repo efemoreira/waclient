@@ -89,11 +89,18 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`    Telefone: ${phone}`);
       if (name) console.log(`    Nome: ${name}`);
       
-      const conversa = conversationManager.criarConversa(phone, name);
-      console.log(`  ✅ Conversa criada/atualizada`);
-      console.log('='.repeat(50) + '\n');
-      res.json({ ok: true, conversa });
-      return;
+      try {
+        const conversa = await conversationManager.criarConversa(phone, name);
+        console.log(`  ✅ Conversa criada/atualizada`);
+        console.log('='.repeat(50) + '\n');
+        res.json({ ok: true, conversa });
+        return;
+      } catch (erro: any) {
+        console.log(`  ❌ Erro ao criar conversa: ${erro?.message || 'Desconhecido'}`);
+        console.log('='.repeat(50) + '\n');
+        res.status(500).json({ erro: erro?.message || 'Erro ao criar conversa' });
+        return;
+      }
     }
 
     // Modo 2: Assumir controle (id em query, isHuman no body)
