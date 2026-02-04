@@ -1,22 +1,38 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { ConversationManager } from '../src/inbox/ConversationManager';
 import type { WebhookPayload } from '../src/wabapi/types';
-import { config, validateConfig } from '../src/config';
+import { config, validateConfig, lerConfigSalva } from '../src/config';
+import { promises as fs } from 'fs';
 
 // Validar config
 if (!validateConfig()) {
-  console.error('❌ Configuração inválida');
+  console.error('⚠️ Configuração pode estar incompleta');
 }
 
 const conversationManager = new ConversationManager();
+
+/**
+ * Ler token do webhook (com fallback)
+ */
+async function obterVerifyToken(): Promise<string> {
+  try {
+    const configSalva = await lerConfigSalva();
+    if (configSalva?.webhookToken) {
+      return configSalva.webhookToken;
+    }
+  } catch (e) {
+    // ignorar
+  }
+  return process.env.WHATSAPP_WEBHOOK_TOKEN || '';
+}
 
 /**
  * Webhook do WhatsApp
  * GET: Verificação do webhook (desafio)
  * POST: Receber mensagens
  */
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  const verifyToken = config.server.verifyToken;
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const verifyToken = await obterVerifyToken();
 
   // GET - Verificação de webhook
   if (req.method === 'GET') {
@@ -24,10 +40,21 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     const token = req.query['hub.verify_token'] as string;
     const desafio = req.query['hub.challenge'] as string;
 
+    console.log('🔍 Webhook validation attempt:');
+    console.log('  modo:', modo);
+    console.log('  token recebido:', token);
+    console.log('  token esperado:', verifyToken);
+    console.log('  desafio:', desafio ? 'presente' : 'ausente');
+
     if (modo === 'subscribe' && token === verifyToken && desafio) {
-      console.log('✅ Webhook verificado');
+      console.log('✅ Webhook verificado com sucesso');
       res.status(200).send(desafio);
       return;
+    }
+
+    console.log('❌ Webhook validation failed');
+    res.status(403).json({ erro: 'Token inválido' });
+    return;
     }
 
     console.log('❌ Falha na verificação do webhook');
