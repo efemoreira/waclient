@@ -1,40 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run build && cp -r public dist/",
   "installCommand": "npm install",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/webhook.ts": {
-      "maxDuration": 30
-    },
-    "api/conversations.ts": {
-      "maxDuration": 10
-    },
-    "api/messages.ts": {
-      "maxDuration": 30
-    },
-    "api/bulk.ts": {
-      "maxDuration": 300
-    },
-    "api/config.ts": {
-      "maxDuration": 10
-    },
-    "api/[...path].ts": {
-      "maxDuration": 10
-    }
-  },
-  "headers": [
-    {
-      "source": "/api/:path*",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        },
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        }
-      ]
-    }
-  ]
+  "outputDirectory": "dist"
 }
