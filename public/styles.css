@@ -43,6 +43,34 @@ body {
   gap: 10px;
 }
 
+.status-badge {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.status-badge.status-ok {
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.status-badge.status-warn {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.status-badge.status-error {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.status-badge.status-loading {
+  color: var(--muted);
+}
+
 .nav-config {
   display: flex;
   align-items: center;

@@ -54,23 +54,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Listar todas as conversas
-    const conversas = await conversationManager.obterConversas();
-    console.log(`  📊 Total: ${conversas.length} conversa(s)`);
-    
-    const lista = conversas.map((c) => ({
-      id: c.id,
-      name: c.name,
-      phoneNumber: c.phoneNumber,
-      lastMessage: c.lastMessage,
-      lastTimestamp: c.lastTimestamp,
-      unreadCount: c.unreadCount,
-      isHuman: c.isHuman,
-    }));
+    try {
+      const conversas = await conversationManager.obterConversas();
+      console.log(`  📊 Total: ${conversas.length} conversa(s)`);
+      
+      const lista = conversas.map((c) => ({
+        id: c.id,
+        name: c.name,
+        phoneNumber: c.phoneNumber,
+        lastMessage: c.lastMessage,
+        lastTimestamp: c.lastTimestamp,
+        unreadCount: c.unreadCount,
+        isHuman: c.isHuman,
+      }));
 
-    console.log(`  ✅ Retornando lista`);
-    console.log('='.repeat(50) + '\n');
-    res.json(lista);
-    return;
+      console.log(`  ✅ Retornando lista`);
+      console.log('='.repeat(50) + '\n');
+      res.json(lista);
+      return;
+    } catch (erro: any) {
+      console.log(`  ❌ Erro ao listar conversas: ${erro?.message || 'Desconhecido'}`);
+      console.log('='.repeat(50) + '\n');
+      res.json([]);
+      return;
+    }
   }
 
   // POST - Criar nova conversa ou assumir controle

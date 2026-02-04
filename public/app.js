@@ -12,6 +12,7 @@ const messageForm = document.getElementById('messageForm');
 const messageInput = document.getElementById('messageInput');
 const searchInput = document.getElementById('searchInput');
 const newChatBtn = document.getElementById('newChatBtn');
+const statusBadge = document.getElementById('statusBadge');
 const newChatModal = document.getElementById('newChatModal');
 const newChatForm = document.getElementById('newChatForm');
 const closeModalBtn = document.getElementById('closeModalBtn');
@@ -29,6 +30,35 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     document.getElementById(sectionId).classList.add('active');
   });
 });
+
+async function checkHealth() {
+  if (!statusBadge) return;
+  statusBadge.textContent = 'Verificando configuração...';
+  statusBadge.className = 'status-badge status-loading';
+
+  try {
+    const res = await fetch('/api/health');
+    if (!res.ok) {
+      statusBadge.textContent = 'Configuração indisponível';
+      statusBadge.className = 'status-badge status-error';
+      return;
+    }
+
+    const data = await res.json();
+    if (data?.ok) {
+      statusBadge.textContent = 'Configuração OK';
+      statusBadge.className = 'status-badge status-ok';
+    } else {
+      statusBadge.textContent = 'Configuração com erro';
+      statusBadge.className = 'status-badge status-error';
+      console.warn('Detalhes da configuração:', data?.checks);
+    }
+  } catch (err) {
+    statusBadge.textContent = 'Erro ao validar configuração';
+    statusBadge.className = 'status-badge status-error';
+    console.error('Erro ao validar configuração:', err);
+  }
+}
 
 // Modal de nova conversa
 newChatBtn.addEventListener('click', () => {
@@ -179,7 +209,8 @@ function renderConversation(conv) {
   messageForm.querySelector('button').disabled = false;
 
   messagesEl.innerHTML = '';
-  conv.messages.forEach((m) => {
+  const msgs = Array.isArray(conv.messages) ? conv.messages : [];
+  msgs.forEach((m) => {
     const el = document.createElement('div');
     el.className = `message ${m.direction}`;
     el.innerHTML = `
@@ -244,3 +275,4 @@ searchInput.addEventListener('input', (e) => {
 
 setInterval(fetchConversations, 3000);
 fetchConversations();
+checkHealth();
