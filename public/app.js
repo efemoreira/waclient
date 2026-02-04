@@ -19,6 +19,9 @@ const newChatForm = document.getElementById('newChatForm');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const newPhoneInput = document.getElementById('newPhoneInput');
 const newNameInput = document.getElementById('newNameInput');
+const healthModal = document.getElementById('healthModal');
+const closeHealthModalBtn = document.getElementById('closeHealthModalBtn');
+const healthDetails = document.getElementById('healthDetails');
 
 // Navegação entre seções
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -278,6 +281,131 @@ searchInput.addEventListener('input', (e) => {
   state.filter = e.target.value;
   renderConversationList();
 });
+
+// Health Modal handlers
+statusBadge?.addEventListener('click', () => {
+  if (healthModal) {
+    healthModal.showModal();
+  }
+});
+
+closeHealthModalBtn?.addEventListener('click', () => {
+  if (healthModal) {
+    healthModal.close();
+  }
+});
+
+// Close modal when clicking outside the content
+healthModal?.addEventListener('click', (e) => {
+  if (e.target === healthModal) {
+    healthModal.close();
+  }
+});
+
+// Function to format and display health details
+function displayHealthDetails(health) {
+  if (!healthDetails) return;
+
+  let html = '<div class="health-details-container">';
+  
+  // Status geral
+  const statusClass = health.status === 'ok' ? 'status-ok' : health.status === 'warning' ? 'status-warn' : 'status-error';
+  const statusText = {
+    ok: '✅ Configuração OK',
+    warning: '⚠️ Avisos',
+    error: '❌ Erros'
+  }[health.status] || health.status;
+
+  html += `
+    <div class="health-status ${statusClass}">
+      <h2>${statusText}</h2>
+    </div>
+    
+    <div class="health-section">
+      <h3>Telefone WhatsApp</h3>
+      <div class="health-field">
+        <span class="label">Número:</span>
+        <span class="value">${health.phoneNumber?.display_phone_number || 'N/A'}</span>
+      </div>
+      <div class="health-field">
+        <span class="label">Nome Verificado:</span>
+        <span class="value">${health.phoneNumber?.verified_name || 'Não verificado'}</span>
+      </div>
+      <div class="health-field">
+        <span class="label">Status de Verificação:</span>
+        <span class="value ${health.phoneNumber?.code_verification_status === 'VERIFIED' ? 'verified' : ''}">${health.phoneNumber?.code_verification_status || 'N/A'}</span>
+      </div>
+    </div>
+  `;
+
+  // Webhook configuration
+  if (health.phoneNumber?.webhook_configuration) {
+    const webhookUrl = health.phoneNumber.webhook_configuration.application;
+    const webhookOk = health.webhookOk;
+    const webhookClass = webhookOk ? 'webhook-ok' : 'webhook-error';
+    
+    html += `
+      <div class="health-section">
+        <h3>Webhook</h3>
+        <div class="health-field">
+          <span class="label">URL:</span>
+          <span class="value">${webhookUrl}</span>
+        </div>
+        <div class="health-field">
+          <span class="label">Status:</span>
+          <span class="value ${webhookClass}">${webhookOk ? '✅ Configurado' : '❌ ' + (health.webhookMessage || 'Erro')}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  if (health.error) {
+    html += `
+      <div class="health-error">
+        <strong>Erro:</strong> ${health.error}
+        ${health.errorHint ? `<div class="error-hint">💡 ${health.errorHint}</div>` : ''}
+      </div>
+    `;
+  }
+
+  html += '</div>';
+  healthDetails.innerHTML = html;
+}
+
+// Fetch health on load
+async function checkHealth() {
+  try {
+    const res = await fetch('/api/health');
+    const health = await res.json();
+    
+    // Update badge
+    const statusClass = health.status === 'ok' ? 'status-ok' : health.status === 'warning' ? 'status-warn' : 'status-error';
+    const statusText = {
+      ok: '✅ Configuração OK',
+      warning: '⚠️ Avisos',
+      error: '❌ Erros'
+    }[health.status] || health.status;
+    
+    statusBadge?.classList.remove('status-ok', 'status-warn', 'status-error');
+    statusBadge?.classList.add(statusClass);
+    statusBadge.textContent = statusText;
+    
+    // Display version
+    if (health.version && apiVersion) {
+      apiVersion.textContent = `API v${health.version}`;
+    }
+    
+    // Store health data for modal display
+    displayHealthDetails(health);
+    
+    console.log('Health check:', health);
+  } catch (err) {
+    console.error('Health check error:', err);
+    statusBadge?.classList.remove('status-ok', 'status-warn', 'status-error');
+    statusBadge?.classList.add('status-error');
+    statusBadge.textContent = '❌ Erro na Config';
+  }
+}
 
 setInterval(fetchConversations, 3000);
 fetchConversations();

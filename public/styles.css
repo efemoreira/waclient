@@ -67,6 +67,12 @@ body {
   border: 1px solid var(--border);
   background: var(--panel-2);
   color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.status-badge:hover {
+  border-color: var(--muted);
 }
 
 .status-badge.status-ok {
@@ -538,12 +544,119 @@ body {
   margin-top: 4px;
 }
 
-@media (max-width: 960px) {
-  .app {
-    grid-template-columns: 1fr;
-  }
+/* Health Check Modal Styles */
+.health-details-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
-  .sidebar {
-    height: 40vh;
+.health-status {
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.health-status h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.health-status.status-ok {
+  background: rgba(22, 163, 74, 0.15);
+  border: 1px solid #16a34a;
+  color: #16a34a;
+}
+
+.health-status.status-warn {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid #f59e0b;
+  color: #f59e0b;
+}
+
+.health-status.status-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #ef4444;
+  color: #ef4444;
+}
+
+.health-section {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--panel-2);
+}
+
+.health-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.health-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.health-field:last-child {
+  border-bottom: none;
+}
+
+.health-field .label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.health-field .value {
+  color: var(--text);
+  word-break: break-word;
+  text-align: right;
+  max-width: 60%;
+}
+
+.health-field .value.verified {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.health-field .value.webhook-ok {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.health-field .value.webhook-error {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.health-error {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #ef4444;
+  border-radius: 6px;
+  padding: 12px;
+  color: #ef4444;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.health-error strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.error-hint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #ef4444;
+  color: #fca5a5;
+}
+
   }
 }

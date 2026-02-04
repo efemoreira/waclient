@@ -89,15 +89,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     requests.push(
       axios
         .get(`https://graph.facebook.com/v${apiVersion}/${numberId}`, {
-          headers
+          headers,
+          params: {
+            fields: 'display_phone_number,verified_name,code_verification_status,quality_rating,platform_type,throughput,webhook_configuration',
+          },
         })
         .then((resp) => {
+          const webhookUrl = resp.data?.webhook_configuration?.application;
+          const webhookMatch = webhookUrl === 'https://waclient-puce.vercel.app/api/webhook';
+
           checks.phoneNumber = {
             ok: true,
+            id: resp.data?.id,
             displayPhoneNumber: resp.data?.display_phone_number,
             verifiedName: resp.data?.verified_name,
+            codeVerificationStatus: resp.data?.code_verification_status,
+            qualityRating: resp.data?.quality_rating,
+            platformType: resp.data?.platform_type,
+            throughput: resp.data?.throughput,
+            webhookUrl: webhookUrl,
+            webhookOk: webhookMatch,
+            webhookMessage: webhookMatch
+              ? '✅ Webhook configurado corretamente'
+              : webhookUrl
+              ? '⚠️ Webhook configurado em URL diferente'
+              : '❌ Webhook não configurado',
           };
-          console.log(`https://graph.facebook.com/v${apiVersion}/${numberId} response:`, resp.data);
         })
         .catch((err) => {
           const mapped = mapGraphError(err, 'phoneNumber');
