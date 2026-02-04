@@ -147,16 +147,16 @@ newChatBtn.addEventListener('click', async () => {
 // Botão de teste para adicionar mensagem simulada
 const testBtn = document.getElementById('testBtn');
 testBtn.addEventListener('click', async () => {
-  const phone = prompt('Número para teste (ex: 5511999999999):', '5511987654321');
+  const phone = prompt('Número para teste (ex: 5511999999999):');
   if (!phone) return;
 
-  const message = prompt('Mensagem de teste:', 'Olá! Essa é uma mensagem de teste.');
+  const message = prompt('Mensagem de teste:');
   if (!message) return;
 
-  const name = prompt('Nome (opcional):', 'Contato Teste');
+  const name = prompt('Nome (opcional):');
 
   try {
-    const res = await fetch('/api/test/webhook', {
+    const res = await fetch('/api/test-webhook', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
