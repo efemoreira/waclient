@@ -66,6 +66,15 @@ export class ConversationManager {
   }
 
   /**
+   * Recarregar conversas do arquivo (útil após mudanças)
+   */
+  async recarregarConversas(): Promise<void> {
+    console.log('🔄 Recarregando conversas do arquivo...');
+    this.conversations.clear();
+    await this.carregarConversas();
+  }
+
+  /**
    * Salvar conversas no arquivo
    */
   private async salvarConversas(): Promise<void> {
@@ -205,9 +214,12 @@ export class ConversationManager {
   }
 
   /**
-   * Obter todas as conversas ordenadas por recency
+   * Obter todas as conversas ordenadas por recency (recarrega do arquivo)
    */
-  obterConversas(): Conversation[] {
+  async obterConversas(): Promise<Conversation[]> {
+    // Recarregar do arquivo para pegar mudanças de outras requisições
+    await this.recarregarConversas();
+    
     return Array.from(this.conversations.values())
       .sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0))
       .map((c) => ({
@@ -217,9 +229,12 @@ export class ConversationManager {
   }
 
   /**
-   * Obter conversa específica e marcar como lida
+   * Obter conversa específica e marcar como lida (recarrega do arquivo)
    */
-  obterConversa(id: string): Conversation | null {
+  async obterConversa(id: string): Promise<Conversation | null> {
+    // Recarregar do arquivo para pegar mudanças de outras requisições
+    await this.recarregarConversas();
+    
     console.log(`  🔍 Buscando conversa: ${id}`);
     const conversa = this.conversations.get(id);
     if (conversa) {
@@ -299,7 +314,12 @@ export class ConversationManager {
     
     this.conversations.set(telefone, conversa);
     await this.salvarConversas();
+    
+    // Recarregar do arquivo para garantir que está salvo
+    await this.recarregarConversas();
     console.log(`    ✅ Conversa criada e salva`);
-    return conversa;
+    
+    // Retornar a conversa recarregada
+    return this.conversations.get(telefone)!;
   }
 }

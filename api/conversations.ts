@@ -15,7 +15,7 @@ const conversationManager = new ConversationManager();
  * POST /api/conversations - Criar nova conversa (body: { phone, name? })
  * POST /api/conversations?id=xxx&action=assume - Assumir controle
  */
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Permitir CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -40,7 +40,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     if (id) {
       // Obter conversa específica
       console.log(`  ID solicitado: ${id}`);
-      const conversa = conversationManager.obterConversa(id);
+      const conversa = await conversationManager.obterConversa(id);
       if (!conversa) {
         console.log(`  ❌ Conversa não encontrada`);
         res.status(404).json({ erro: 'Conversa não encontrada' });
@@ -54,7 +54,7 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Listar todas as conversas
-    const conversas = conversationManager.obterConversas();
+    const conversas = await conversationManager.obterConversas();
     console.log(`  📊 Total: ${conversas.length} conversa(s)`);
     
     const lista = conversas.map((c) => ({
