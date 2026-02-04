@@ -135,13 +135,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       axios
         .get(`https://graph.facebook.com/v${apiVersion}/${accountId}`, {
           headers,
-          params: { fields: 'name' },
+          params: { fields: 'id,name,timezone_id,message_template_namespace' },
         })
         .then((resp) => {
           console.log(`https://graph.facebook.com/v${apiVersion}/${accountId} response:`, resp.data);
           checks.businessAccount = {
             ok: true,
+            id: resp.data?.id,
             name: resp.data?.name,
+            timezoneId: resp.data?.timezone_id,
+            messageTemplateNamespace: resp.data?.message_template_namespace,
           };
         })
         .catch((err) => {

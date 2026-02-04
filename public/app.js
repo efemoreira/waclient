@@ -359,6 +359,36 @@ function displayHealthDetails(health) {
     `;
   }
 
+  // Business Account
+  if (health.checks?.businessAccount?.ok) {
+    const ba = health.checks.businessAccount;
+    html += `
+      <div class="health-section">
+        <h3>Business Account</h3>
+        <div class="health-field">
+          <span class="label">Nome:</span>
+          <span class="value">${ba.name || 'N/A'}</span>
+        </div>
+        <div class="health-field">
+          <span class="label">ID:</span>
+          <span class="value" style="font-family: monospace; font-size: 12px;">${ba.id || 'N/A'}</span>
+        </div>
+        ${ba.timezoneId ? `
+        <div class="health-field">
+          <span class="label">Timezone:</span>
+          <span class="value">${ba.timezoneId}</span>
+        </div>
+        ` : ''}
+        ${ba.messageTemplateNamespace ? `
+        <div class="health-field">
+          <span class="label">Template Namespace:</span>
+          <span class="value" style="font-family: monospace; font-size: 11px;">${ba.messageTemplateNamespace}</span>
+        </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
   if (health.error) {
     html += `
       <div class="health-error">
