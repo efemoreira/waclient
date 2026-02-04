@@ -37,6 +37,8 @@ export interface Conversation {
 export class ConversationManager {
   private client: WhatsApp;
   private conversations: Map<string, Conversation> = new Map();
+  private lastLoadTime: number = 0;
+  private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
 
   constructor() {
     this.client = new WhatsApp({
@@ -49,19 +51,40 @@ export class ConversationManager {
   }
 
   /**
+   * Recarregar conversas do arquivo apenas se passou tempo suficiente
+   */
+  private async recarregarSeNecessario(): Promise<void> {
+    const agora = Date.now();
+    if (agora - this.lastLoadTime < this.loadTimeout) {
+      // Já foi carregado recentemente, usar cache
+      return;
+    }
+    this.lastLoadTime = agora;
+    await this.recarregarConversas();
+  }  /**
    * Carregar conversas do arquivo
    */
   private async carregarConversas(): Promise<void> {
     try {
       const data = await fs.readFile(CONVERSATIONS_FILE, 'utf-8');
       const conversas = JSON.parse(data);
+      
+      if (!conversas || typeof conversas !== 'object') {
+        console.error('❌ Arquivo de conversas inválido:', typeof conversas);
+        return;
+      }
+      
       Object.entries(conversas).forEach(([id, conv]: [string, any]) => {
         this.conversations.set(id, conv);
       });
       console.log(`✅ Carregadas ${this.conversations.size} conversas`);
-    } catch (e) {
+    } catch (e: any) {
       // Arquivo não existe ainda, será criado na primeira conversa
-      console.log('📝 Nenhuma conversa anterior encontrada');
+      if (e.code === 'ENOENT') {
+        console.log('📝 Nenhuma conversa anterior encontrada');
+      } else {
+        console.error('❌ Erro ao carregar conversas:', e.message);
+      }
     }
   }
 
@@ -214,11 +237,11 @@ export class ConversationManager {
   }
 
   /**
-   * Obter todas as conversas ordenadas por recency (recarrega do arquivo)
+   * Obter todas as conversas ordenadas por recency (recarrega do arquivo se necessário)
    */
   async obterConversas(): Promise<Conversation[]> {
-    // Recarregar do arquivo para pegar mudanças de outras requisições
-    await this.recarregarConversas();
+    // Recarregar do arquivo apenas se passou tempo suficiente
+    await this.recarregarSeNecessario();
     
     return Array.from(this.conversations.values())
       .sort((a, b) => (b.lastTimestamp || 0) - (a.lastTimestamp || 0))
@@ -229,11 +252,11 @@ export class ConversationManager {
   }
 
   /**
-   * Obter conversa específica e marcar como lida (recarrega do arquivo)
+   * Obter conversa específica e marcar como lida (recarrega do arquivo se necessário)
    */
   async obterConversa(id: string): Promise<Conversation | null> {
-    // Recarregar do arquivo para pegar mudanças de outras requisições
-    await this.recarregarConversas();
+    // Recarregar do arquivo apenas se passou tempo suficiente
+    await this.recarregarSeNecessario();
     
     console.log(`  🔍 Buscando conversa: ${id}`);
     const conversa = this.conversations.get(id);

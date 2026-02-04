@@ -96,24 +96,49 @@ function formatTime(ts) {
 }
 
 async function fetchConversations() {
-  const res = await fetch('/api/conversations');
-  const data = await res.json();
-  state.conversations = data;
-  renderConversationList();
+  try {
+    const res = await fetch('/api/conversations');
+    if (!res.ok) {
+      console.error('Erro ao buscar conversas:', res.status, res.statusText);
+      return;
+    }
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.error('Resposta inválida: esperado array, recebido:', typeof data, data);
+      return;
+    }
+    state.conversations = data;
+    renderConversationList();
 
-  if (state.selectedId) {
-    await fetchConversation(state.selectedId);
+    if (state.selectedId) {
+      await fetchConversation(state.selectedId);
+    }
+  } catch (err) {
+    console.error('Erro ao buscar conversas:', err);
   }
 }
 
 async function fetchConversation(id) {
-  const res = await fetch(`/api/conversations?id=${id}`);
-  if (!res.ok) return;
-  const conv = await res.json();
-  renderConversation(conv);
+  try {
+    const res = await fetch(`/api/conversations?id=${id}`);
+    if (!res.ok) {
+      console.error('Conversa não encontrada:', res.status);
+      return;
+    }
+    const conv = await res.json();
+    renderConversation(conv);
+  } catch (err) {
+    console.error('Erro ao buscar conversa:', err);
+  }
 }
 
 function renderConversationList() {
+  if (!Array.isArray(state.conversations)) {
+    console.warn('state.conversations não é um array:', state.conversations);
+    conversationList.innerHTML = '<div style="padding: 16px; color: var(--muted);">Erro ao carregar conversas</div>';
+    return;
+  }
+  
   const filtered = state.conversations.filter((c) => {
     if (!state.filter) return true;
     const text = `${c.name || ''} ${c.phoneNumber || ''}`.toLowerCase();
