@@ -57,7 +57,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  console.log('\n========== HEALTH CHECK START ==========');
+  console.log('Timestamp:', new Date().toISOString());
+
   const basicConfigOk = validateConfig();
+  console.log('Basic config valid:', basicConfigOk);
 
   const checks: any = {
     config: {
@@ -81,22 +85,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const accountId = config.whatsapp.accountId;
   const apiVersion = config.whatsapp.apiVersion;
 
+  console.log('\n--- CONFIG VALUES ---');
+  console.log('Token present:', !!token);
+  if (token) {
+    console.log('Token length:', token.length);
+    console.log('Token preview:', token.substring(0, 20) + '...');
+  }
+  console.log('Number ID:', numberId);
+  console.log('Account ID:', accountId);
+  console.log('API Version:', apiVersion);
+
   const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
   const requests: Promise<any>[] = [];
 
   if (token && numberId) {
+    console.log('\n--- PHONE NUMBER REQUEST ---');
+    const phoneUrl = `https://graph.facebook.com/v${apiVersion}/${numberId}`;
+    console.log('URL:', phoneUrl);
+    console.log('Fields: display_phone_number,verified_name,code_verification_status,quality_rating,platform_type,throughput,webhook_configuration');
+
     requests.push(
       axios
-        .get(`https://graph.facebook.com/v${apiVersion}/${numberId}`, {
+        .get(phoneUrl, {
           headers,
           params: {
             fields: 'display_phone_number,verified_name,code_verification_status,quality_rating,platform_type,throughput,webhook_configuration',
           },
         })
         .then((resp) => {
+          console.log('✅ Phone Number request successful');
+          console.log('Response data:', JSON.stringify(resp.data, null, 2));
+
           const webhookUrl = resp.data?.webhook_configuration?.application;
           const webhookMatch = webhookUrl === 'https://waclient-puce.vercel.app/api/webhook';
+
+          console.log('Webhook URL:', webhookUrl);
+          console.log('Webhook match (expected URL):', webhookMatch);
 
           checks.phoneNumber = {
             ok: true,
@@ -117,6 +142,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           };
         })
         .catch((err) => {
+          console.log('❌ Phone Number request failed');
+          console.log('Error status:', err?.response?.status);
+          console.log('Error data:', JSON.stringify(err?.response?.data, null, 2));
+          console.log('Error message:', err?.message);
+
           const mapped = mapGraphError(err, 'phoneNumber');
           checks.phoneNumber = {
             ok: false,
@@ -127,18 +157,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
     );
   } else {
+    console.log('❌ Skipping Phone Number request: token=' + !!token + ', numberId=' + !!numberId);
     checks.phoneNumber = { ok: false, erro: 'Token ou Number ID ausente' };
   }
 
   if (token && accountId) {
+    console.log('\n--- BUSINESS ACCOUNT REQUEST ---');
+    const accountUrl = `https://graph.facebook.com/v${apiVersion}/${accountId}`;
+    console.log('URL:', accountUrl);
+    console.log('Fields: id,name,timezone_id,message_template_namespace');
+
     requests.push(
       axios
-        .get(`https://graph.facebook.com/v${apiVersion}/${accountId}`, {
+        .get(accountUrl, {
           headers,
           params: { fields: 'id,name,timezone_id,message_template_namespace' },
         })
         .then((resp) => {
-          console.log(`https://graph.facebook.com/v${apiVersion}/${accountId} response:`, resp.data);
+          console.log('✅ Business Account request successful');
+          console.log('Response data:', JSON.stringify(resp.data, null, 2));
+
           checks.businessAccount = {
             ok: true,
             id: resp.data?.id,
@@ -148,6 +186,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           };
         })
         .catch((err) => {
+          console.log('❌ Business Account request failed');
+          console.log('Error status:', err?.response?.status);
+          console.log('Error data:', JSON.stringify(err?.response?.data, null, 2));
+          console.log('Error message:', err?.message);
+
           const mapped = mapGraphError(err, 'businessAccount');
           checks.businessAccount = {
             ok: false,
@@ -158,16 +201,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
     );
   } else {
+    console.log('❌ Skipping Business Account request: token=' + !!token + ', accountId=' + !!accountId);
     checks.businessAccount = { ok: false, erro: 'Token ou Business Account ID ausente' };
   }
 
+  console.log('\n--- AWAITING REQUESTS ---');
   await Promise.allSettled(requests);
+  console.log('✅ All requests completed');
 
   const ok =
     checks.config.ok &&
     checks.phoneNumber?.ok === true &&
     checks.businessAccount?.ok === true &&
     checks.webhook.ok === true;
+
+  console.log('\n--- FINAL RESULT ---');
+  console.log('Overall status (ok):', ok);
+  console.log('Full response:', JSON.stringify({ ok, checks }, null, 2));
+  console.log('========== HEALTH CHECK END ==========\n');
 
   res.json({ ok, checks });
 }
