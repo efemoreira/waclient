@@ -373,16 +373,16 @@ function displayHealthDetails(health) {
           <span class="label">ID:</span>
           <span class="value" style="font-family: monospace; font-size: 12px;">${ba.id || 'N/A'}</span>
         </div>
-        ${ba.timezoneId ? `
+        ${ba.timezone_id ? `
         <div class="health-field">
           <span class="label">Timezone:</span>
-          <span class="value">${ba.timezoneId}</span>
+          <span class="value">${ba.timezone_id}</span>
         </div>
         ` : ''}
-        ${ba.messageTemplateNamespace ? `
+        ${ba.message_template_namespace ? `
         <div class="health-field">
           <span class="label">Template Namespace:</span>
-          <span class="value" style="font-family: monospace; font-size: 11px;">${ba.messageTemplateNamespace}</span>
+          <span class="value" style="font-family: monospace; font-size: 11px;">${ba.message_template_namespace}</span>
         </div>
         ` : ''}
       </div>

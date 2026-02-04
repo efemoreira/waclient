@@ -147,12 +147,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           checks.phoneNumber = {
             ok: true,
             id: resp.data?.id,
-            displayPhoneNumber: resp.data?.display_phone_number,
-            verifiedName: resp.data?.verified_name,
-            codeVerificationStatus: resp.data?.code_verification_status,
-            qualityRating: resp.data?.quality_rating,
-            platformType: resp.data?.platform_type,
+            display_phone_number: resp.data?.display_phone_number,
+            verified_name: resp.data?.verified_name,
+            code_verification_status: resp.data?.code_verification_status,
+            quality_rating: resp.data?.quality_rating,
+            platform_type: resp.data?.platform_type,
             throughput: resp.data?.throughput,
+            webhook_configuration: resp.data?.webhook_configuration,
             webhookUrl: webhookUrl,
             webhookOk: webhookMatch,
             webhookMessage: webhookMatch
@@ -202,8 +203,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ok: true,
             id: resp.data?.id,
             name: resp.data?.name,
-            timezoneId: resp.data?.timezone_id,
-            messageTemplateNamespace: resp.data?.message_template_namespace,
+            timezone_id: resp.data?.timezone_id,
+            message_template_namespace: resp.data?.message_template_namespace,
           };
         })
         .catch((err) => {
