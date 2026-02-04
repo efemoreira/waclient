@@ -9,32 +9,33 @@ Sistema minimalista para envio em massa e gestão de conversas via WhatsApp Clou
 - 💬 **Conversas** - visualizar histórico de mensagens
 - 🚀 **Serverless** - executa completamente na Vercel (sem servidor dedicado)
 
-## Setup
+## ⚡ Quick Start
 
-### 1. Variáveis de ambiente
+> **Veja [SETUP_ENV.md](SETUP_ENV.md) para guia passo-a-passo completo**
 
-Copiar `.env.example` para `.env.local`:
-
-```bash
-cp .env.example .env.local
-```
-
-Editar `.env.local` com suas credenciais do WhatsApp Business:
-
-```
-WHATSAPP_PHONE_NUMBER_ID=seu_numero_id
-WHATSAPP_BUSINESS_ACCOUNT_ID=seu_account_id
-WHATSAPP_ACCESS_TOKEN=seu_token_acesso
-WHATSAPP_WEBHOOK_TOKEN=seu_token_webhook
-```
-
-### 2. Instalar dependências
-
+### 1. Clonar e instalar
 ```bash
 npm install
+npm run build
 ```
 
-### 3. Desenvolvimento local
+### 2. Configurar variáveis no Vercel
+Dashboard Vercel → Settings → Environment Variables
+
+Adicione:
+- `WHATSAPP_PHONE_NUMBER_ID`
+- `WHATSAPP_BUSINESS_ACCOUNT_ID` 
+- `WHATSAPP_ACCESS_TOKEN`
+- `WHATSAPP_WEBHOOK_TOKEN`
+
+### 3. Validar webhook
+Meta for Developers → Settings → Configuration → Webhook:
+- **Callback URL**: `https://seu-projeto.vercel.app/api/webhook`
+- **Verify Token**: (mesmo valor de `WHATSAPP_WEBHOOK_TOKEN`)
+
+✅ Pronto! Acesse a interface web em `https://seu-projeto.vercel.app/`
+
+## Desenvolvimento local
 
 ```bash
 npm run dev
@@ -42,11 +43,7 @@ npm run dev
 
 Acesso: http://localhost:3000
 
-### 4. Deploy na Vercel
-
-```bash
-npm run deploy
-```
+Copie `.env.example` para `.env.local` com seus valores.
 
 ## Endpoints da API
 
