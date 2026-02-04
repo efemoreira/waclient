@@ -21,13 +21,35 @@
         <aside class="sidebar">
           <div class="sidebar-header">
             <h1>Atendimento</h1>
-            <button id="newChatBtn" class="primary">Nova conversa</button>
+            <button id="newChatBtn" class="primary">+ Nova conversa</button>
           </div>
           <div class="search">
             <input type="text" id="searchInput" placeholder="Buscar contato..." />
           </div>
           <div id="conversationList" class="conversation-list"></div>
         </aside>
+
+        <!-- Modal Nova Conversa -->
+        <dialog id="newChatModal" class="modal">
+          <div class="modal-content">
+            <h3>📱 Iniciar Nova Conversa</h3>
+            <form id="newChatForm">
+              <div class="form-group">
+                <label for="newPhoneInput">Número WhatsApp *</label>
+                <input type="text" id="newPhoneInput" placeholder="55 11 99999-9999" required />
+                <small>Formato: DDI + DDD + Número (ex: 5511987654321)</small>
+              </div>
+              <div class="form-group">
+                <label for="newNameInput">Nome do Contato</label>
+                <input type="text" id="newNameInput" placeholder="Opcional" />
+              </div>
+              <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <button type="submit" class="primary">Iniciar Conversa</button>
+                <button type="button" class="secondary" id="closeModalBtn">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </dialog>
 
         <main class="chat">
           <div id="chatHeader" class="chat-header">

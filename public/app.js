@@ -12,6 +12,11 @@ const messageForm = document.getElementById('messageForm');
 const messageInput = document.getElementById('messageInput');
 const searchInput = document.getElementById('searchInput');
 const newChatBtn = document.getElementById('newChatBtn');
+const newChatModal = document.getElementById('newChatModal');
+const newChatForm = document.getElementById('newChatForm');
+const closeModalBtn = document.getElementById('closeModalBtn');
+const newPhoneInput = document.getElementById('newPhoneInput');
+const newNameInput = document.getElementById('newNameInput');
 
 // Navegação entre seções
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -24,6 +29,67 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     document.getElementById(sectionId).classList.add('active');
   });
 });
+
+// Modal de nova conversa
+newChatBtn.addEventListener('click', () => {
+  newPhoneInput.value = '';
+  newNameInput.value = '';
+  newChatModal.showModal();
+});
+
+closeModalBtn.addEventListener('click', () => {
+  newChatModal.close();
+});
+
+newChatModal.addEventListener('click', (e) => {
+  if (e.target === newChatModal) {
+    newChatModal.close();
+  }
+});
+
+newChatForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const phone = newPhoneInput.value.trim();
+  const name = newNameInput.value.trim();
+  
+  if (!phone) {
+    alert('Digite um número WhatsApp válido');
+    return;
+  }
+  
+  // Selecionar a conversa (será criada quando enviar mensagem)
+  state.selectedId = phone;
+  
+  // Se houver nome, armazenar para usar depois
+  if (name) {
+    const existingConv = state.conversations.find(c => c.id === phone);
+    if (!existingConv) {
+      // Criar conversa vazia com o nome
+      state.conversations.unshift({
+        id: phone,
+        name: name,
+        phoneNumber: phone,
+        lastMessage: undefined,
+        lastTimestamp: undefined,
+        unreadCount: 0,
+        isHuman: false,
+        messages: [],
+      });
+    }
+  }
+  
+  newChatModal.close();
+  await fetchConversations();
+  renderChatUI();
+});
+
+function renderChatUI() {
+  const conv = state.conversations.find(c => c.id === state.selectedId);
+  if (conv) {
+    renderConversation(conv);
+  }
+}
 
 function formatTime(ts) {
   const d = new Date(ts);
@@ -121,27 +187,35 @@ messageForm.addEventListener('submit', async (e) => {
   const text = messageInput.value.trim();
   if (!text || !state.selectedId) return;
 
-  await fetch('/api/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ to: state.selectedId, text }),
-  });
+  messageInput.disabled = true;
+  messageForm.querySelector('button').disabled = true;
 
-  messageInput.value = '';
-  await fetchConversation(state.selectedId);
-  await fetchConversations();
+  try {
+    const res = await fetch('/api/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: state.selectedId, text }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      alert('Erro ao enviar: ' + (error.erro || 'Desconhecido'));
+    } else {
+      messageInput.value = '';
+      await fetchConversation(state.selectedId);
+      await fetchConversations();
+    }
+  } catch (err) {
+    alert('Erro de conexão: ' + err.message);
+  } finally {
+    messageInput.disabled = false;
+    messageForm.querySelector('button').disabled = false;
+  }
 });
 
 searchInput.addEventListener('input', (e) => {
   state.filter = e.target.value;
   renderConversationList();
-});
-
-newChatBtn.addEventListener('click', async () => {
-  const phone = prompt('Digite o número com DDI + DDD (ex: 5511999999999)');
-  if (!phone) return;
-  state.selectedId = phone;
-  await fetchConversations();
 });
 
 setInterval(fetchConversations, 3000);

@@ -12,6 +12,7 @@ const conversationManager = new ConversationManager();
  * API de Conversas
  * GET /api/conversations - Listar todas
  * GET /api/conversations?id=xxx - Obter específica
+ * POST /api/conversations - Criar nova conversa (body: { phone, name? })
  * POST /api/conversations?id=xxx&action=assume - Assumir controle
  */
 export default function handler(req: VercelRequest, res: VercelResponse) {
@@ -72,12 +73,30 @@ export default function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  // POST - Assumir controle da conversa
+  // POST - Criar nova conversa ou assumir controle
   if (req.method === 'POST') {
     console.log('\n' + '='.repeat(50));
     console.log('📞 POST /api/conversations');
-    const { isHuman } = req.body as { isHuman?: boolean };
+    const { phone, name, isHuman } = req.body as { 
+      phone?: string; 
+      name?: string; 
+      isHuman?: boolean;
+    };
 
+    // Modo 1: Criar nova conversa (phone no body)
+    if (phone && !id) {
+      console.log(`  ✨ Criando nova conversa`);
+      console.log(`    Telefone: ${phone}`);
+      if (name) console.log(`    Nome: ${name}`);
+      
+      const conversa = conversationManager.criarConversa(phone, name);
+      console.log(`  ✅ Conversa criada/atualizada`);
+      console.log('='.repeat(50) + '\n');
+      res.json({ ok: true, conversa });
+      return;
+    }
+
+    // Modo 2: Assumir controle (id em query, isHuman no body)
     if (!id) {
       console.log(`  ❌ ID da conversa não especificado`);
       console.log('='.repeat(50) + '\n');

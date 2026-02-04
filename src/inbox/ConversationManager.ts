@@ -255,6 +255,9 @@ export class ConversationManager {
     console.log(`    Texto: "${texto.substring(0, 60)}${texto.length > 60 ? '...' : ''}"`);
     
     try {
+      // Garantir que conversa existe (será criada se não existir)
+      this.obterOuCriarConversa(para);
+      
       const resposta = await this.client.sendMessage(para, texto);
       const mensagemId = resposta.data?.messages?.[0]?.id;
       
@@ -266,5 +269,35 @@ export class ConversationManager {
       console.log(`    ❌ Erro: ${erro?.message || 'Desconhecido'}`);
       throw erro;
     }
+  }
+
+  /**
+   * Criar conversa com nome (para novas conversas)
+   */
+  criarConversa(telefone: string, nome?: string): Conversation {
+    console.log(`  ✨ Criando nova conversa: ${telefone}`);
+    if (nome) console.log(`    Nome: ${nome}`);
+    
+    const existente = this.conversations.get(telefone);
+    if (existente) {
+      console.log(`    ℹ️  Conversa já existe, atualizando nome se fornecido`);
+      if (nome && !existente.name) {
+        existente.name = nome;
+      }
+      return existente;
+    }
+
+    const conversa: Conversation = {
+      id: telefone,
+      name: nome,
+      phoneNumber: telefone,
+      unreadCount: 0,
+      isHuman: false,
+      messages: [],
+    };
+    
+    this.conversations.set(telefone, conversa);
+    console.log(`    ✅ Conversa criada`);
+    return conversa;
   }
 }
