@@ -80,7 +80,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     res.status(500).json({
       erro: mensagem,
-      detalhes: erro?.response?.data?.error,
+      detalhes: {
+        message: erro?.response?.data?.error?.message,
+        type: erro?.response?.data?.error?.type,
+        code: erro?.response?.data?.error?.code,
+        fbtrace_id: erro?.response?.data?.error?.fbtrace_id,
+      },
       codigoErro: erro?.response?.data?.error?.code,
     });
   }
