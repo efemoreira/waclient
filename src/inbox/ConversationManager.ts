@@ -299,10 +299,11 @@ export class ConversationManager {
       console.log(`    🔄 Chamando client.sendMessage(${para}, texto)`);
       const resposta = await this.client.sendMessage(para, texto);
       
+      // Log apenas dados seguros (sem referências circulares)
       try {
-        console.log(`    📨 Resposta recebida:`, JSON.stringify(resposta, null, 2));
+        console.log(`    📨 Resposta recebida:`, JSON.stringify(resposta.data, null, 2));
       } catch (e) {
-        console.log(`    📨 Resposta: [não pode serializar]`);
+        console.log(`    📨 Resposta: [status ${resposta.status || 'unknown'}]`);
       }
       
       const mensagemId = resposta.data?.messages?.[0]?.id;
@@ -318,7 +319,12 @@ export class ConversationManager {
       
       if (erro?.response?.data) {
         try {
-          console.log(`    Dados resposta:`, JSON.stringify(erro.response.data, null, 2));
+          const safeReplacer = (key: string, value: any) => {
+            if (typeof value === 'function') return '[Function]';
+            if (value instanceof Error) return value.message;
+            return value;
+          };
+          console.log(`    Dados resposta:`, JSON.stringify(erro.response.data, safeReplacer, 2));
         } catch (e) {
           console.log(`    Dados: [não pode serializar]`);
         }

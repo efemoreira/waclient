@@ -65,7 +65,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Log dados sem referências circulares
     if (erro?.response?.data) {
       try {
-        console.log('  Dados completos:', JSON.stringify(erro.response.data, null, 2));
+        const safeReplacer = (key: string, value: any) => {
+          if (typeof value === 'function') return '[Function]';
+          if (value instanceof Error) return value.message;
+          return value;
+        };
+        console.log('  Dados completos:', JSON.stringify(erro.response.data, safeReplacer, 2));
       } catch (e) {
         console.log('  Dados: [não pode serializar]');
       }
