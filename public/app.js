@@ -1,3 +1,60 @@
+// Sistema de Logging
+class LogManager {
+  constructor() {
+    this.logs = [];
+    this.logsList = document.getElementById('logsList');
+    this.clearLogsBtn = document.getElementById('clearLogsBtn');
+    this.clearLogsBtn?.addEventListener('click', () => this.clear());
+  }
+
+  add(message, type = 'info') {
+    const time = new Date().toLocaleTimeString('pt-BR');
+    const log = { message, type, time };
+    this.logs.push(log);
+    
+    // Manter apenas os últimos 100 logs
+    if (this.logs.length > 100) {
+      this.logs.shift();
+    }
+    
+    this.render();
+  }
+
+  render() {
+    if (!this.logsList) return;
+    
+    this.logsList.innerHTML = this.logs
+      .map((log) => {
+        const truncated = log.message.length > 500 ? log.message.substring(0, 500) + '...' : log.message;
+        return `<div class="log-item ${log.type}"><span class="log-time">${log.time}</span>${escapeHtml(truncated)}</div>`;
+      })
+      .join('');
+    
+    // Scroll para o último log
+    setTimeout(() => {
+      this.logsList.scrollTop = this.logsList.scrollHeight;
+    }, 0);
+  }
+
+  clear() {
+    this.logs = [];
+    this.render();
+  }
+}
+
+function escapeHtml(text) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  };
+  return text.replace(/[&<>"']/g, (m) => map[m]);
+}
+
+const logger = new LogManager();
+
 const state = {
   conversations: [],
   selectedId: null,
@@ -249,16 +306,22 @@ messageForm.addEventListener('submit', async (e) => {
   messageInput.disabled = true;
   messageForm.querySelector('button').disabled = true;
 
+  logger.add(`📤 Enviando para ${state.selectedId}: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+
   try {
+    const startTime = Date.now();
     const res = await fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: state.selectedId, text }),
     });
+    const duration = Date.now() - startTime;
 
     if (!res.ok) {
       const error = await res.json();
       let mensagem = error.erro || 'Desconhecido';
+      
+      logger.add(`❌ Erro (${res.status}) após ${duration}ms: ${mensagem}`, 'error');
       
       // Erro específico #133010
       if (error.codigoErro === 133010) {
@@ -267,6 +330,8 @@ messageForm.addEventListener('submit', async (e) => {
       
       alert('Erro ao enviar:\n\n' + mensagem);
     } else {
+      const data = await res.json();
+      logger.add(`✅ Mensagem enviada com sucesso em ${duration}ms\nID: ${data.mensagemId}`);
       messageInput.value = '';
       await fetchConversation(state.selectedId);
       await fetchConversations();
