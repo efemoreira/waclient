@@ -52,36 +52,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     console.log(`  ✅ Mensagem enviada com ID: ${mensagemId}`);
     console.log('='.repeat(50) + '\n');
-    res.json({ ok: true, mensagemId });
-  } catch (erro: any) {
-    const mensagem =
-      (typeof erro?.response?.data?.error?.message === 'string' ? erro.response.data.error.message : '') ||
-      (typeof erro?.message === 'string' ? erro.message : '') ||
-      'Erro ao enviar mensagem';
     
-    const status = typeof erro?.response?.status === 'number' ? erro.response.status : 500;
-    const errorCode = typeof erro?.response?.data?.error?.code === 'number' ? erro.response.data.error.code : null;
-    const errorType = typeof erro?.response?.data?.error?.type === 'string' ? erro.response.data.error.type : null;
-    const fbtrace = typeof erro?.response?.data?.error?.fbtrace_id === 'string' ? erro.response.data.error.fbtrace_id : null;
-    
-    console.log(`  ❌ ERRO: ${mensagem}`);
-    console.log(`  Status HTTP: ${status}`);
-    if (errorCode) console.log(`  Código do erro: ${errorCode}`);
-    if (errorType) console.log(`  Tipo: ${errorType}`);
-    if (fbtrace) console.log(`  Trace ID: ${fbtrace}`);
-    console.log('='.repeat(50) + '\n');
-    
-    const responseBody: any = { erro: String(mensagem) };
-    
-    if (errorCode || errorType || fbtrace) {
-      responseBody.detalhes = {};
-      if (errorCode) responseBody.detalhes.code = Number(errorCode);
-      if (errorType) responseBody.detalhes.type = String(errorType);
-      if (fbtrace) responseBody.detalhes.fbtrace_id = String(fbtrace);
+    try {
+      res.json({ ok: true, mensagemId });
+    } catch (jsonErr) {
+      console.error('ERRO ao serializar resposta de sucesso:', jsonErr);
+      res.status(500).json({ erro: 'Erro ao serializar resposta' });
     }
-    
-    if (errorCode) responseBody.codigoErro = Number(errorCode);
-    
-    res.status(status).json(responseBody);
+  } catch (erro: any) {
+    try {
+      const mensagem = (erro?.message ? String(erro.message) : 'Erro ao enviar mensagem');
+      const status = (erro?.response?.status && typeof erro.response.status === 'number') ? erro.response.status : 500;
+      const errorCode = (erro?.response?.data?.error?.code && typeof erro.response.data.error.code === 'number') ? erro.response.data.error.code : null;
+      const errorType = (erro?.response?.data?.error?.type && typeof erro.response.data.error.type === 'string') ? String(erro.response.data.error.type) : null;
+      const fbtrace = (erro?.response?.data?.error?.fbtrace_id && typeof erro.response.data.error.fbtrace_id === 'string') ? String(erro.response.data.error.fbtrace_id) : null;
+      
+      console.log(`  ❌ ERRO: ${mensagem}`);
+      console.log(`  Status HTTP: ${status}`);
+      if (errorCode) console.log(`  Código do erro: ${errorCode}`);
+      if (errorType) console.log(`  Tipo: ${errorType}`);
+      if (fbtrace) console.log(`  Trace ID: ${fbtrace}`);
+      console.log('='.repeat(50) + '\n');
+      
+      const responseBody: Record<string, any> = { erro: mensagem };
+      
+      if (errorCode) responseBody.codigoErro = errorCode;
+      if (errorType) responseBody.type = errorType;
+      if (fbtrace) responseBody.fbtrace_id = fbtrace;
+      
+      res.status(status).json(responseBody);
+    } catch (handlerErr) {
+      console.error('ERRO CRÍTICO no tratamento de erro:', handlerErr);
+      res.status(500).json({ erro: 'Erro no servidor' });
+    }
   }
 }
+
