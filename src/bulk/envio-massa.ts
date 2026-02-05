@@ -21,9 +21,11 @@ export class EnvioMassa {
   private delayMensagens: number;
 
   constructor() {
+    const apiVersion = parseInt(config.whatsapp.apiVersion, 10);
     this.client = new WhatsApp({
       token: config.whatsapp.token,
       numberId: config.whatsapp.numberId,
+      version: apiVersion,
     });
     this.delayMensagens = config.bulk.delayBetweenMessages;
   }

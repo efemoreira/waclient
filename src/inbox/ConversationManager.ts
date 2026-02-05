@@ -41,9 +41,11 @@ export class ConversationManager {
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
 
   constructor() {
+    const apiVersion = parseInt(config.whatsapp.apiVersion, 10);
     this.client = new WhatsApp({
       token: config.whatsapp.token,
       numberId: config.whatsapp.numberId,
+      version: apiVersion,
     });
     
     // Carregar conversas do arquivo
