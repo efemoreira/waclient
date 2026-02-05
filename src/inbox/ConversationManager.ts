@@ -299,7 +299,12 @@ export class ConversationManager {
       console.log(`    🔄 Chamando client.sendMessage(${para}, texto)`);
       const resposta = await this.client.sendMessage(para, texto);
       
-      console.log(`    📨 Resposta recebida:`, JSON.stringify(resposta, null, 2));
+      try {
+        console.log(`    📨 Resposta recebida:`, JSON.stringify(resposta, null, 2));
+      } catch (e) {
+        console.log(`    📨 Resposta: [não pode serializar]`);
+      }
+      
       const mensagemId = resposta.data?.messages?.[0]?.id;
       
       await this.adicionarMensagem(para, 'out', texto, mensagemId, Date.now());
@@ -310,7 +315,15 @@ export class ConversationManager {
       console.log(`    ❌ Erro capturado`);
       console.log(`    Mensagem: ${erro?.message || 'Desconhecido'}`);
       console.log(`    Status HTTP: ${erro?.response?.status}`);
-      console.log(`    Dados resposta:`, JSON.stringify(erro?.response?.data, null, 2));
+      
+      if (erro?.response?.data) {
+        try {
+          console.log(`    Dados resposta:`, JSON.stringify(erro.response.data, null, 2));
+        } catch (e) {
+          console.log(`    Dados: [não pode serializar]`);
+        }
+      }
+      
       throw erro;
     }
   }

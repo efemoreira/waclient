@@ -61,8 +61,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     console.log(`  ❌ ERRO: ${mensagem}`);
     console.log('  Status HTTP:', erro?.response?.status);
-    console.log('  Dados completos:', JSON.stringify(erro?.response?.data, null, 2));
-    console.log('  Erro raw:', erro);
+    
+    // Log dados sem referências circulares
+    if (erro?.response?.data) {
+      try {
+        console.log('  Dados completos:', JSON.stringify(erro.response.data, null, 2));
+      } catch (e) {
+        console.log('  Dados: [não pode serializar]');
+      }
+    }
+    
     console.log('='.repeat(50) + '\n');
     
     res.status(500).json({
