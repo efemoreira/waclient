@@ -299,12 +299,8 @@ export class ConversationManager {
       console.log(`    🔄 Chamando client.sendMessage(${para}, texto)`);
       const resposta = await this.client.sendMessage(para, texto);
       
-      // Log apenas dados seguros (sem referências circulares)
-      try {
-        console.log(`    📨 Resposta recebida:`, JSON.stringify(resposta.data, null, 2));
-      } catch (e) {
-        console.log(`    📨 Resposta: [status ${resposta.status || 'unknown'}]`);
-      }
+      // Log status da resposta
+      console.log(`    📨 Resposta: status ${resposta.status}, mensagens: ${resposta.data?.messages?.length || 0}`);
       
       const mensagemId = resposta.data?.messages?.[0]?.id;
       
@@ -313,22 +309,16 @@ export class ConversationManager {
       
       return mensagemId || '';
     } catch (erro: any) {
-      console.log(`    ❌ Erro capturado`);
-      console.log(`    Mensagem: ${erro?.message || 'Desconhecido'}`);
-      console.log(`    Status HTTP: ${erro?.response?.status}`);
+      const errorMessage = erro?.message || 'Desconhecido';
+      const errorCode = erro?.response?.data?.error?.code || null;
+      const errorType = erro?.response?.data?.error?.type || null;
+      const status = erro?.response?.status || 'unknown';
       
-      if (erro?.response?.data) {
-        try {
-          const safeReplacer = (key: string, value: any) => {
-            if (typeof value === 'function') return '[Function]';
-            if (value instanceof Error) return value.message;
-            return value;
-          };
-          console.log(`    Dados resposta:`, JSON.stringify(erro.response.data, safeReplacer, 2));
-        } catch (e) {
-          console.log(`    Dados: [não pode serializar]`);
-        }
-      }
+      console.log(`    ❌ Erro capturado`);
+      console.log(`    Mensagem: ${errorMessage}`);
+      console.log(`    Status HTTP: ${status}`);
+      if (errorCode) console.log(`    Código: ${errorCode}`);
+      if (errorType) console.log(`    Tipo: ${errorType}`);
       
       throw erro;
     }

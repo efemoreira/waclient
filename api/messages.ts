@@ -55,38 +55,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.json({ ok: true, mensagemId });
   } catch (erro: any) {
     const mensagem =
-      erro?.response?.data?.error?.message ||
-      erro?.message ||
+      (typeof erro?.response?.data?.error?.message === 'string' ? erro.response.data.error.message : '') ||
+      (typeof erro?.message === 'string' ? erro.message : '') ||
       'Erro ao enviar mensagem';
     
+    const status = typeof erro?.response?.status === 'number' ? erro.response.status : 500;
+    const errorCode = typeof erro?.response?.data?.error?.code === 'number' ? erro.response.data.error.code : null;
+    const errorType = typeof erro?.response?.data?.error?.type === 'string' ? erro.response.data.error.type : null;
+    const fbtrace = typeof erro?.response?.data?.error?.fbtrace_id === 'string' ? erro.response.data.error.fbtrace_id : null;
+    
     console.log(`  ❌ ERRO: ${mensagem}`);
-    console.log('  Status HTTP:', erro?.response?.status);
-    
-    // Log dados sem referências circulares
-    if (erro?.response?.data) {
-      try {
-        const safeReplacer = (key: string, value: any) => {
-          if (typeof value === 'function') return '[Function]';
-          if (value instanceof Error) return value.message;
-          return value;
-        };
-        console.log('  Dados completos:', JSON.stringify(erro.response.data, safeReplacer, 2));
-      } catch (e) {
-        console.log('  Dados: [não pode serializar]');
-      }
-    }
-    
+    console.log(`  Status HTTP: ${status}`);
+    if (errorCode) console.log(`  Código do erro: ${errorCode}`);
+    if (errorType) console.log(`  Tipo: ${errorType}`);
+    if (fbtrace) console.log(`  Trace ID: ${fbtrace}`);
     console.log('='.repeat(50) + '\n');
     
-    res.status(500).json({
-      erro: mensagem,
-      detalhes: {
-        message: erro?.response?.data?.error?.message,
-        type: erro?.response?.data?.error?.type,
-        code: erro?.response?.data?.error?.code,
-        fbtrace_id: erro?.response?.data?.error?.fbtrace_id,
-      },
-      codigoErro: erro?.response?.data?.error?.code,
-    });
+    const responseBody: any = { erro: String(mensagem) };
+    
+    if (errorCode || errorType || fbtrace) {
+      responseBody.detalhes = {};
+      if (errorCode) responseBody.detalhes.code = Number(errorCode);
+      if (errorType) responseBody.detalhes.type = String(errorType);
+      if (fbtrace) responseBody.detalhes.fbtrace_id = String(fbtrace);
+    }
+    
+    if (errorCode) responseBody.codigoErro = Number(errorCode);
+    
+    res.status(status).json(responseBody);
   }
 }
