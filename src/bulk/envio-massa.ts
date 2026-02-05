@@ -21,7 +21,9 @@ export class EnvioMassa {
   private delayMensagens: number;
 
   constructor() {
-    const apiVersion = parseInt(config.whatsapp.apiVersion, 10);
+    const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
+    const apiVersion = parseInt(versionStr, 10);
+    console.log(`🔧 BulkMessaging: Usando API v${apiVersion}.0`);
     this.client = new WhatsApp({
       token: config.whatsapp.token,
       numberId: config.whatsapp.numberId,
