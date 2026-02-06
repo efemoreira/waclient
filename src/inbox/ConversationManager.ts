@@ -5,9 +5,11 @@ import { promises as fs } from 'fs';
 import { logger } from '../utils/logger';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
+const CONVERSATIONS_META_FILE = '/tmp/conversations.meta.json';
 const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL || '';
 const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
 const UPSTASH_KEY = 'waclient:conversations';
+const UPSTASH_META_KEY = 'waclient:meta';
 
 /**
  * Representa uma mensagem individual
@@ -44,6 +46,7 @@ export class ConversationManager {
   private lastLoadTime: number = 0;
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
   private storageMode: 'upstash' | 'local' = 'local';
+  private resetAt: number = 0;
 
   private log(msg: string): void {
     logger.info('Inbox', msg);
@@ -51,6 +54,15 @@ export class ConversationManager {
 
   private normalizarWaId(id: string): string {
     return String(id || '').replace(/\D/g, '');
+  }
+
+  private async garantirResetAtualizado(): Promise<void> {
+    const meta = await this.lerMeta();
+    if (meta?.resetAt && meta.resetAt > this.resetAt) {
+      this.resetAt = meta.resetAt;
+      this.conversations.clear();
+      this.log(`🧹 Reset detectado (${new Date(this.resetAt).toISOString()})`);
+    }
   }
 
   private mergeConversas(
@@ -128,6 +140,7 @@ export class ConversationManager {
    */
   private async carregarConversas(): Promise<void> {
     try {
+      await this.garantirResetAtualizado();
       const conversas = await this.lerDoArmazenamento();
       if (!conversas || typeof conversas !== 'object') {
         this.log(`❌ Armazenamento inválido (${typeof conversas})`);
@@ -156,6 +169,7 @@ export class ConversationManager {
    */
   private async salvarConversas(): Promise<void> {
     try {
+      await this.garantirResetAtualizado();
       const data: Record<string, Conversation> = {};
       this.conversations.forEach((conv, id) => {
         data[id] = conv;
@@ -232,6 +246,47 @@ export class ConversationManager {
     await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
   }
 
+  private async lerMeta(): Promise<{ resetAt?: number }> {
+    if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        const url = `${UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(UPSTASH_META_KEY)}`;
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+        });
+        if (!res.ok) return {};
+        const json: any = await res.json();
+        if (!json?.result) return {};
+        return JSON.parse(json.result);
+      } catch (_e) {
+        return {};
+      }
+    }
+
+    try {
+      const data = await fs.readFile(CONVERSATIONS_META_FILE, 'utf-8');
+      return JSON.parse(data);
+    } catch (_e) {
+      return {};
+    }
+  }
+
+  private async salvarMeta(meta: { resetAt: number }): Promise<void> {
+    if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
+      const url = `${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(UPSTASH_META_KEY)}`;
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(meta),
+      });
+      return;
+    }
+
+    await fs.writeFile(CONVERSATIONS_META_FILE, JSON.stringify(meta, null, 2), 'utf-8');
+  }
+
   /**
    * Extrair texto da mensagem (suporta vários tipos)
    */
@@ -260,6 +315,9 @@ export class ConversationManager {
     nome?: string
   ): Conversation {
     const idNormalizado = this.normalizarWaId(waId);
+    // Garantir reset atualizado antes de usar o cache
+    // (não aguarda: usar best-effort no fluxo síncrono)
+    this.garantirResetAtualizado().catch(() => undefined);
     const existente = this.conversations.get(idNormalizado);
     if (existente) {
       if (nome && !existente.name) existente.name = nome;
@@ -288,6 +346,7 @@ export class ConversationManager {
     mensagemId?: string,
     timestamp?: number
   ): Promise<void> {
+    await this.garantirResetAtualizado();
     const conversa = this.obterOuCriarConversa(waId);
     const ts = timestamp || Date.now();
     const registro: MessageRecord = {
@@ -317,6 +376,7 @@ export class ConversationManager {
     status: string,
     timestamp?: number
   ): Promise<void> {
+    await this.garantirResetAtualizado();
     const conversa = this.obterOuCriarConversa(waId);
     const msg = conversa.messages.find((m) => m.id === mensagemId);
     if (msg) {
@@ -540,6 +600,7 @@ export class ConversationManager {
     this.log(`Texto: "${texto.substring(0, 60)}${texto.length > 60 ? '...' : ''}"`);
     
     try {
+      await this.garantirResetAtualizado();
       // Garantir que conversa existe (será criada se não existir)
       this.obterOuCriarConversa(paraNormalizado);
       
@@ -579,6 +640,7 @@ export class ConversationManager {
     this.log(`✨ Criando nova conversa: ${telefoneNormalizado}`);
     if (nome) this.log(`Nome: ${nome}`);
     
+    await this.garantirResetAtualizado();
     const existente = this.conversations.get(telefoneNormalizado);
     if (existente) {
       this.log('ℹ️  Conversa já existe, atualizando nome se fornecido');
@@ -614,6 +676,9 @@ export class ConversationManager {
    */
   async limparConversas(): Promise<void> {
     this.conversations.clear();
+    const resetAt = Date.now();
+    this.resetAt = resetAt;
+    await this.salvarMeta({ resetAt });
     await this.salvarNoArmazenamento({});
     this.log('🧹 Todas as conversas foram apagadas');
   }
