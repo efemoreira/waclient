@@ -341,6 +341,9 @@ export class ConversationManager {
         // Erros no nível do value
         if (Array.isArray(valor.errors) && valor.errors.length > 0) {
           console.log(`❌ Erros no webhook (value.errors): ${valor.errors.length}`);
+          for (const err of valor.errors) {
+            console.log(`    • code=${err?.code} type=${err?.type} title=${err?.title || err?.message}`);
+          }
         }
 
         // Mapear contatos por wa_id
@@ -370,6 +373,9 @@ export class ConversationManager {
 
             if (Array.isArray(msg?.errors) && msg.errors.length > 0) {
               console.log(`    ❌ Mensagem com erro (type=${msg?.type || 'unknown'})`);
+              for (const err of msg.errors) {
+                console.log(`      • code=${err?.code} title=${err?.title || err?.message}`);
+              }
             }
 
             const texto = this.extrairTexto(msg);
@@ -392,6 +398,12 @@ export class ConversationManager {
             const msgId = st?.id;
             const status = st?.status;
             const ts = st?.timestamp ? Number(st.timestamp) * 1000 : undefined;
+            if (Array.isArray(st?.errors) && st.errors.length > 0) {
+              console.log(`    ❌ Status com erro (msg=${msgId})`);
+              for (const err of st.errors) {
+                console.log(`      • code=${err?.code} title=${err?.title || err?.message}`);
+              }
+            }
             if (recipientId && msgId && status) {
               await this.atualizarStatusMensagem(recipientId, msgId, status, ts);
             }
