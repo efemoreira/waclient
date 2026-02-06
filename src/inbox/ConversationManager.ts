@@ -249,6 +249,29 @@ export class ConversationManager {
   }
 
   /**
+   * Atualizar status de uma mensagem enviada
+   */
+  private async atualizarStatusMensagem(
+    waId: string,
+    mensagemId: string,
+    status: string,
+    timestamp?: number
+  ): Promise<void> {
+    const conversa = this.obterOuCriarConversa(waId);
+    const msg = conversa.messages.find((m) => m.id === mensagemId);
+    if (msg) {
+      msg.status = status;
+      if (timestamp) {
+        conversa.lastTimestamp = timestamp;
+      }
+      await this.salvarConversas();
+      console.log(`    ✅ Status atualizado: ${mensagemId} -> ${status}`);
+    } else {
+      console.log(`    ⚠️  Status recebido para mensagem desconhecida: ${mensagemId}`);
+    }
+  }
+
+  /**
    * Processar webhook do WhatsApp
    */
   async processarWebhook(payload: WebhookPayload): Promise<void> {
@@ -256,41 +279,80 @@ export class ConversationManager {
     console.log('🔍 PROCESSANDO WEBHOOK');
     console.log('='.repeat(50));
 
-    const entrada = payload.entry?.[0];
-    const mudanca = entrada?.changes?.[0];
-    const valor = mudanca?.value;
-
-    if (!valor) {
-      console.log('❌ Nenhum valor encontrado no webhook');
+    const entries = payload.entry || [];
+    if (entries.length === 0) {
+      console.log('❌ Webhook sem entry');
       return;
     }
 
-    const contato = valor.contacts?.[0];
-    const nome = contato?.profile?.name;
-    console.log(`👤 Contato: ${nome || 'Desconhecido'}`);
-
-    // Processar mensagens
-    if (valor.messages && valor.messages.length > 0) {
-      console.log(`📨 Processando ${valor.messages.length} mensagem(ns)...`);
-      for (const msg of valor.messages) {
-        const de = msg.from;
-        if (!de) {
-          console.log('    ⚠️  Mensagem sem origem');
+    for (const entrada of entries) {
+      const changes = entrada.changes || [];
+      for (const mudanca of changes) {
+        const valor: any = mudanca?.value;
+        if (!valor) {
+          console.log('❌ Nenhum value encontrado na change');
           continue;
         }
 
-        const texto = this.extrairTexto(msg);
-        const timestamp = msg.timestamp
-          ? Number(msg.timestamp) * 1000
-          : Date.now();
-        await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
-        console.log(`    ✅ De ${de}: "${texto.substring(0, 50)}..."`);
-      }
-    }
+        const metadata = valor.metadata;
+        if (metadata?.phone_number_id) {
+          console.log(`📱 Phone Number ID: ${metadata.phone_number_id}`);
+        }
 
-    // Processar status
-    if (valor.statuses && valor.statuses.length > 0) {
-      console.log(`📊 Processando ${valor.statuses.length} status(es)`);
+        // Erros no nível do value
+        if (Array.isArray(valor.errors) && valor.errors.length > 0) {
+          console.log(`❌ Erros no webhook (value.errors): ${valor.errors.length}`);
+        }
+
+        // Mapear contatos por wa_id
+        const contacts = Array.isArray(valor.contacts) ? valor.contacts : [];
+        const contatoPorId = new Map<string, string>();
+        for (const c of contacts) {
+          if (c?.wa_id) {
+            contatoPorId.set(c.wa_id, c?.profile?.name || 'Desconhecido');
+          }
+        }
+
+        // Mensagens recebidas
+        if (Array.isArray(valor.messages) && valor.messages.length > 0) {
+          console.log(`📨 Processando ${valor.messages.length} mensagem(ns)...`);
+          for (const msg of valor.messages) {
+            const de = msg?.from;
+            if (!de) {
+              console.log('    ⚠️  Mensagem sem origem');
+              continue;
+            }
+
+            if (Array.isArray(msg?.errors) && msg.errors.length > 0) {
+              console.log(`    ❌ Mensagem com erro (type=${msg?.type || 'unknown'})`);
+            }
+
+            const texto = this.extrairTexto(msg);
+            const timestamp = msg.timestamp ? Number(msg.timestamp) * 1000 : Date.now();
+            const nome = contatoPorId.get(de);
+            if (nome) {
+              this.obterOuCriarConversa(de, nome);
+            }
+
+            await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
+            console.log(`    ✅ De ${de}: "${texto.substring(0, 50)}..."`);
+          }
+        }
+
+        // Status de mensagens enviadas
+        if (Array.isArray(valor.statuses) && valor.statuses.length > 0) {
+          console.log(`📊 Processando ${valor.statuses.length} status(es)`);
+          for (const st of valor.statuses) {
+            const recipientId = st?.recipient_id;
+            const msgId = st?.id;
+            const status = st?.status;
+            const ts = st?.timestamp ? Number(st.timestamp) * 1000 : undefined;
+            if (recipientId && msgId && status) {
+              await this.atualizarStatusMensagem(recipientId, msgId, status, ts);
+            }
+          }
+        }
+      }
     }
 
     console.log('✅ WEBHOOK PROCESSADO\n');
