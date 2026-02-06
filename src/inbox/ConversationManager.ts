@@ -45,17 +45,18 @@ export class ConversationManager {
   private conversations: Map<string, Conversation> = new Map();
   private lastLoadTime: number = 0;
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
-  private storageMode: 'upstash' | 'local' = 'local';
   private resetAt: number = 0;
 
   private log(msg: string): void {
     logger.info('Inbox', msg);
   }
 
+  // Normaliza qualquer identificador para dígitos (evita conversas duplicadas)
   private normalizarWaId(id: string): string {
     return String(id || '').replace(/\D/g, '');
   }
 
+  // Garante que resets globais foram aplicados antes de operar
   private async garantirResetAtualizado(): Promise<void> {
     const meta = await this.lerMeta();
     if (meta?.resetAt && meta.resetAt > this.resetAt) {
@@ -65,6 +66,7 @@ export class ConversationManager {
     }
   }
 
+  // Mescla conversas (evita sobrescrever mensagens entre instâncias)
   private mergeConversas(
     base: Record<string, Conversation>,
     updates: Record<string, Conversation>
@@ -110,8 +112,8 @@ export class ConversationManager {
     const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
     const apiVersion = parseInt(versionStr, 10);
     this.log(`🔧 Usando API v${apiVersion}.0`);
-    this.storageMode = UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN ? 'upstash' : 'local';
-    this.log(`🗄️  Storage mode: ${this.storageMode === 'upstash' ? 'Upstash Redis' : '/tmp local'}`);
+    const storageMode = UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN ? 'Upstash Redis' : '/tmp local';
+    this.log(`🗄️  Storage mode: ${storageMode}`);
     this.client = new WhatsApp({
       token: config.whatsapp.token,
       numberId: config.whatsapp.numberId,
@@ -247,6 +249,7 @@ export class ConversationManager {
   }
 
   private async lerMeta(): Promise<{ resetAt?: number }> {
+    // Lê metadata de reset no storage compartilhado
     if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
       try {
         const url = `${UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(UPSTASH_META_KEY)}`;
@@ -271,6 +274,7 @@ export class ConversationManager {
   }
 
   private async salvarMeta(meta: { resetAt: number }): Promise<void> {
+    // Persiste metadata de reset
     if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
       const url = `${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(UPSTASH_META_KEY)}`;
       await fetch(url, {
