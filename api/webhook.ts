@@ -1,6 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { ConversationManager } from '../src/inbox/ConversationManager';
 import type { WebhookPayload } from '../src/wabapi/types';
+import { logger } from '../src/utils/logger';
 
 const conversationManager = new ConversationManager();
 
@@ -24,9 +25,7 @@ const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || '';
  * POST: Receber mensagens
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log('\n' + '='.repeat(60));
-  console.log('📨 WEBHOOK REQUEST - ' + req.method);
-  console.log('='.repeat(60));
+  logger.info('Webhook', `REQUEST ${req.method}`);
   
   // GET - Debug de webhook
   if (req.method === 'GET' && req.query?.debug === '1' && !req.query['hub.mode']) {
@@ -43,25 +42,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = req.query['hub.verify_token'] as string;
     const desafio = req.query['hub.challenge'] as string;
 
-    console.log('🔍 WEBHOOK VERIFICATION');
-    console.log('  Mode:', modo);
-    console.log('  Token match:', token === WEBHOOK_TOKEN ? '✅ YES' : '❌ NO');
-    console.log('  Challenge present:', desafio ? '✅ YES' : '❌ NO');
+    logger.info('Webhook', `VERIFICATION mode=${modo || 'missing'}`);
+    logger.info('Webhook', `Token match: ${token === WEBHOOK_TOKEN ? 'YES' : 'NO'}`);
+    logger.info('Webhook', `Challenge present: ${desafio ? 'YES' : 'NO'}`);
 
     if (modo === 'subscribe' && token === WEBHOOK_TOKEN && desafio) {
-      console.log('✅ WEBHOOK VERIFIED SUCCESSFULLY\n');
+      logger.info('Webhook', 'VERIFIED');
       res.status(200).send(desafio);
       return;
     }
 
-    console.log('❌ WEBHOOK VERIFICATION FAILED\n');
+    logger.warn('Webhook', 'VERIFICATION FAILED');
     res.status(403).json({ erro: 'Token inválido ou parâmetros faltando' });
     return;
   }
 
   // POST - Receber webhook
   if (req.method === 'POST') {
-    console.log('📥 WEBHOOK POST - Processando...');
+    logger.info('Webhook', 'POST - Processando');
 
     try {
       const payload = req.body as WebhookPayload;
@@ -78,21 +76,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         statusCount,
       };
 
-      console.log('📦 Payload entrada:', JSON.stringify(payload).substring(0, 200) + '...');
+      logger.debug('Webhook', 'Payload entrada (parcial)', JSON.stringify(payload).substring(0, 200) + '...');
       console.log(`📊 Resumo: entries=${entryCount}, messages=${messageCount}, statuses=${statusCount}`);
 
       await conversationManager.processarWebhook(payload);
-      console.log('✅ WEBHOOK PROCESSADO COM SUCESSO\n');
+      logger.info('Webhook', 'PROCESSADO COM SUCESSO');
       res.status(200).json({ ok: true });
     } catch (error: any) {
-      console.error('❌ ERRO ao processar webhook:');
-      console.error('   Message:', error?.message);
-      console.error('   Stack:', error?.stack);
+      logger.error('Webhook', 'ERRO ao processar webhook', {
+        message: error?.message,
+        stack: error?.stack,
+      });
       res.status(200).json({ ok: true }); // Sempre retornar 200
     }
     return;
   }
 
-  console.log('❌ MÉTODO NÃO PERMITIDO:', req.method);
+  logger.warn('Webhook', `MÉTODO NÃO PERMITIDO: ${req.method}`);
   res.status(405).json({ erro: 'Método não permitido' });
 }

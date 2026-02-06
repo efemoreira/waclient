@@ -1,9 +1,10 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { ConversationManager } from '../src/inbox/ConversationManager';
 import { config, validateConfig } from '../src/config';
+import { logger } from '../src/utils/logger';
 
 if (!validateConfig()) {
-  console.error('❌ Configuração inválida');
+  logger.error('Conversations', 'Configuração inválida');
 }
 
 const conversationManager = new ConversationManager();
@@ -34,21 +35,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // GET - Listar conversas ou obter específica
   if (req.method === 'GET') {
-    console.log('\n' + '='.repeat(50));
-    console.log('📞 GET /api/conversations');
+    logger.info('Conversations', 'GET /api/conversations');
     
     if (id) {
       // Obter conversa específica
-      console.log(`  ID solicitado: ${id}`);
+      logger.info('Conversations', `ID solicitado: ${id}`);
       const conversa = await conversationManager.obterConversa(id);
       if (!conversa) {
-        console.log(`  ❌ Conversa não encontrada`);
+        logger.warn('Conversations', 'Conversa não encontrada');
         res.status(404).json({ erro: 'Conversa não encontrada' });
         return;
       }
-      console.log(`  ✅ Conversa encontrada: ${conversa.name}`);
-      console.log(`  📊 Mensagens: ${conversa.messages.length}, Não lidas: ${conversa.unreadCount}`);
-      console.log('='.repeat(50) + '\n');
+      logger.info('Conversations', `Conversa encontrada: ${conversa.name || conversa.phoneNumber}`);
+      logger.info('Conversations', `Mensagens: ${conversa.messages.length}, Não lidas: ${conversa.unreadCount}`);
       res.json(conversa);
       return;
     }
@@ -56,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Listar todas as conversas
     try {
       const conversas = await conversationManager.obterConversas();
-      console.log(`  📊 Total: ${conversas.length} conversa(s)`);
+      logger.info('Conversations', `Total: ${conversas.length} conversa(s)`);
       
       const lista = conversas.map((c) => ({
         id: c.id,
@@ -68,13 +67,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         isHuman: c.isHuman,
       }));
 
-      console.log(`  ✅ Retornando lista`);
-      console.log('='.repeat(50) + '\n');
+      logger.info('Conversations', 'Retornando lista');
       res.json(lista);
       return;
     } catch (erro: any) {
-      console.log(`  ❌ Erro ao listar conversas: ${erro?.message || 'Desconhecido'}`);
-      console.log('='.repeat(50) + '\n');
+      logger.error('Conversations', `Erro ao listar conversas: ${erro?.message || 'Desconhecido'}`);
       res.json([]);
       return;
     }
@@ -82,8 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // POST - Criar nova conversa ou assumir controle
   if (req.method === 'POST') {
-    console.log('\n' + '='.repeat(50));
-    console.log('📞 POST /api/conversations');
+    logger.info('Conversations', 'POST /api/conversations');
     const { phone, name, isHuman } = req.body as { 
       phone?: string; 
       name?: string; 
@@ -92,19 +88,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Modo 1: Criar nova conversa (phone no body)
     if (phone && !id) {
-      console.log(`  ✨ Criando nova conversa`);
-      console.log(`    Telefone: ${phone}`);
-      if (name) console.log(`    Nome: ${name}`);
+      logger.info('Conversations', `Criando nova conversa: ${phone}`);
+      if (name) logger.info('Conversations', `Nome: ${name}`);
       
       try {
         const conversa = await conversationManager.criarConversa(phone, name);
-        console.log(`  ✅ Conversa criada/atualizada`);
-        console.log('='.repeat(50) + '\n');
+        logger.info('Conversations', 'Conversa criada/atualizada');
         res.json({ ok: true, conversa });
         return;
       } catch (erro: any) {
-        console.log(`  ❌ Erro ao criar conversa: ${erro?.message || 'Desconhecido'}`);
-        console.log('='.repeat(50) + '\n');
+        logger.error('Conversations', `Erro ao criar conversa: ${erro?.message || 'Desconhecido'}`);
         res.status(500).json({ erro: erro?.message || 'Erro ao criar conversa' });
         return;
       }
@@ -112,14 +105,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Modo 2: Assumir controle (id em query, isHuman no body)
     if (!id) {
-      console.log(`  ❌ ID da conversa não especificado`);
-      console.log('='.repeat(50) + '\n');
+      logger.warn('Conversations', 'ID da conversa não especificado');
       res.status(400).json({ erro: 'ID da conversa não especificado' });
       return;
     }
 
-    console.log(`  ID: ${id}`);
-    console.log(`  Assumir como humano: ${isHuman}`);
+    logger.info('Conversations', `ID: ${id}`);
+    logger.info('Conversations', `Assumir como humano: ${isHuman}`);
 
     const sucesso = conversationManager.alternarControleManual(
       id,
@@ -127,14 +119,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     if (!sucesso) {
-      console.log(`  ❌ Conversa não encontrada`);
-      console.log('='.repeat(50) + '\n');
+      logger.warn('Conversations', 'Conversa não encontrada');
       res.status(404).json({ erro: 'Conversa não encontrada' });
       return;
     }
 
-    console.log(`  ✅ Controle alterado com sucesso`);
-    console.log('='.repeat(50) + '\n');
+    logger.info('Conversations', 'Controle alterado com sucesso');
 
     res.json({ ok: true, isHuman });
     return;

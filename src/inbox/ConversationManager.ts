@@ -2,6 +2,7 @@ import { WhatsApp } from '../wabapi';
 import type { WebhookPayload, WhatsAppMessage } from '../wabapi/types';
 import { config } from '../config';
 import { promises as fs } from 'fs';
+import { logger } from '../utils/logger';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
 const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL || '';
@@ -45,7 +46,7 @@ export class ConversationManager {
   private storageMode: 'upstash' | 'local' = 'local';
 
   private log(msg: string): void {
-    console.log(`[Inbox] ${msg}`);
+    logger.info('Inbox', msg);
   }
 
   constructor() {
@@ -351,7 +352,8 @@ export class ConversationManager {
         if (Array.isArray(valor.errors) && valor.errors.length > 0) {
           this.log(`❌ Erros no webhook (value.errors): ${valor.errors.length}`);
           for (const err of valor.errors) {
-            this.log(`• code=${err?.code} type=${err?.type} title=${err?.title || err?.message}`);
+            const details = err?.error_data?.details ? ` details=${err.error_data.details}` : '';
+            this.log(`• code=${err?.code} type=${err?.type} title=${err?.title || err?.message}${details}`);
           }
         }
 
@@ -383,7 +385,8 @@ export class ConversationManager {
             if (Array.isArray(msg?.errors) && msg.errors.length > 0) {
               this.log(`❌ Mensagem com erro (type=${msg?.type || 'unknown'})`);
               for (const err of msg.errors) {
-                this.log(`• code=${err?.code} title=${err?.title || err?.message}`);
+                const details = err?.error_data?.details ? ` details=${err.error_data.details}` : '';
+                this.log(`• code=${err?.code} title=${err?.title || err?.message}${details}`);
               }
             }
 
@@ -410,7 +413,8 @@ export class ConversationManager {
             if (Array.isArray(st?.errors) && st.errors.length > 0) {
               this.log(`❌ Status com erro (msg=${msgId})`);
               for (const err of st.errors) {
-                this.log(`• code=${err?.code} title=${err?.title || err?.message}`);
+                const details = err?.error_data?.details ? ` details=${err.error_data.details}` : '';
+                this.log(`• code=${err?.code} title=${err?.title || err?.message}${details}`);
               }
             }
             if (recipientId && msgId && status) {

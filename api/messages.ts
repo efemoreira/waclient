@@ -1,11 +1,11 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { ConversationManager } from '../src/inbox/ConversationManager';
 import { config, validateConfig } from '../src/config';
+import { logger } from '../src/utils/logger';
 
 if (!validateConfig()) {
-  console.error('❌ Configuração inválida');
+  logger.error('Messages', 'Configuração inválida');
 }
-
 const conversationManager = new ConversationManager();
 
 /**
@@ -25,33 +25,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method !== 'POST') {
-    console.log('❌ POST /api/messages - Método não permitido: ' + req.method);
+    logger.warn('Messages', `Método não permitido: ${req.method}`);
     res.status(405).json({ erro: 'Método não permitido' });
     return;
   }
 
-  console.log('\n' + '='.repeat(50));
-  console.log('💬 POST /api/messages');
+  logger.info('Messages', 'POST /api/messages');
 
   const { to, text } = req.body as { to?: string; text?: string };
 
   if (!to || !text) {
-    console.log('  ❌ Parâmetros inválidos');
-    console.log('  Para: ' + (to || 'vazio'));
-    console.log('  Texto: ' + (text ? 'presente' : 'vazio'));
-    console.log('='.repeat(50) + '\n');
+    logger.warn('Messages', `Parâmetros inválidos: to=${to || 'vazio'} text=${text ? 'presente' : 'vazio'}`);
     res.status(400).json({ erro: 'Parâmetros inválidos (to, text)' });
     return;
   }
 
   try {
-    console.log(`  📱 Para: ${to}`);
-    console.log(`  ✏️  Texto: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+    logger.info('Messages', `Para: ${to}`);
+    logger.info('Messages', `Texto: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
     
     const mensagemId = await conversationManager.enviarMensagem(to, text);
     
-    console.log(`  ✅ Mensagem enviada com ID: ${mensagemId}`);
-    console.log('='.repeat(50) + '\n');
+    logger.info('Messages', `Mensagem enviada com ID: ${mensagemId}`);
     
     res.setHeader('Content-Type', 'application/json');
     res.status(200);
@@ -61,14 +56,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const status = (erro?.response?.status && typeof erro.response.status === 'number') ? erro.response.status : 500;
     const errorCode = (erro?.response?.data?.error?.code && typeof erro.response.data.error.code === 'number') ? erro.response.data.error.code : null;
     const errorType = (erro?.response?.data?.error?.type && typeof erro.response.data.error.type === 'string') ? String(erro.response.data.error.type) : null;
+    const errorDetails = (erro?.response?.data?.error?.error_data?.details && typeof erro.response.data.error.error_data.details === 'string')
+      ? String(erro.response.data.error.error_data.details)
+      : null;
     const fbtrace = (erro?.response?.data?.error?.fbtrace_id && typeof erro.response.data.error.fbtrace_id === 'string') ? String(erro.response.data.error.fbtrace_id) : null;
     
-    console.log(`  ❌ ERRO: ${mensagem}`);
-    console.log(`  Status HTTP: ${status}`);
-    if (errorCode) console.log(`  Código do erro: ${errorCode}`);
-    if (errorType) console.log(`  Tipo: ${errorType}`);
-    if (fbtrace) console.log(`  Trace ID: ${fbtrace}`);
-    console.log('='.repeat(50) + '\n');
+    logger.error('Messages', `ERRO: ${mensagem}`);
+    logger.error('Messages', `Status HTTP: ${status}`);
+    if (errorCode) logger.error('Messages', `Código do erro: ${errorCode}`);
+    if (errorType) logger.error('Messages', `Tipo: ${errorType}`);
+    if (errorDetails) logger.error('Messages', `Details: ${errorDetails}`);
+    if (fbtrace) logger.error('Messages', `Trace ID: ${fbtrace}`);
     
     const responseBody: Record<string, any> = { erro: mensagem };
     

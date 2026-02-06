@@ -7,9 +7,9 @@ class LogManager {
     this.clearLogsBtn?.addEventListener('click', () => this.clear());
   }
 
-  add(message, type = 'info') {
+  add(message, type = 'info', scope = 'UI') {
     const time = new Date().toLocaleTimeString('pt-BR');
-    const log = { message, type, time };
+    const log = { message, type, time, scope };
     this.logs.push(log);
     
     // Manter apenas os últimos 100 logs
@@ -26,7 +26,8 @@ class LogManager {
     this.logsList.innerHTML = this.logs
       .map((log) => {
         const truncated = log.message.length > 500 ? log.message.substring(0, 500) + '...' : log.message;
-        return `<div class="log-item ${log.type}"><span class="log-time">${log.time}</span>${escapeHtml(truncated)}</div>`;
+        const header = `[${log.scope}] ${log.type.toUpperCase()}`;
+        return `<div class="log-item ${log.type}"><span class="log-time">${log.time}</span>${escapeHtml(header)}: ${escapeHtml(truncated)}</div>`;
       })
       .join('');
     
@@ -54,7 +55,7 @@ function escapeHtml(text) {
 }
 
 const logger = new LogManager();
-logger.add('✅ Logs inicializados');
+logger.add('Logs inicializados', 'info', 'UI');
 
 const state = {
   conversations: [],
