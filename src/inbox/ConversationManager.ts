@@ -49,6 +49,10 @@ export class ConversationManager {
     logger.info('Inbox', msg);
   }
 
+  private normalizarWaId(id: string): string {
+    return String(id || '').replace(/\D/g, '');
+  }
+
   constructor() {
     const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
     const apiVersion = parseInt(versionStr, 10);
@@ -208,21 +212,22 @@ export class ConversationManager {
     waId: string,
     nome?: string
   ): Conversation {
-    const existente = this.conversations.get(waId);
+    const idNormalizado = this.normalizarWaId(waId);
+    const existente = this.conversations.get(idNormalizado);
     if (existente) {
       if (nome && !existente.name) existente.name = nome;
       return existente;
     }
 
     const conversa: Conversation = {
-      id: waId,
+      id: idNormalizado,
       name: nome,
-      phoneNumber: waId,
+      phoneNumber: idNormalizado,
       unreadCount: 0,
       isHuman: false,
       messages: [],
     };
-    this.conversations.set(waId, conversa);
+    this.conversations.set(idNormalizado, conversa);
     return conversa;
   }
 
@@ -449,14 +454,15 @@ export class ConversationManager {
   async obterConversa(id: string): Promise<Conversation | null> {
     // Recarregar do arquivo apenas se passou tempo suficiente
     await this.recarregarSeNecessario();
-    
-    console.log(`  🔍 Buscando conversa: ${id}`);
-    const conversa = this.conversations.get(id);
+
+    const idNormalizado = this.normalizarWaId(id);
+    this.log(`🔍 Buscando conversa: ${idNormalizado}`);
+    const conversa = this.conversations.get(idNormalizado);
     if (conversa) {
       conversa.unreadCount = 0;
-      console.log(`    ✅ Encontrada com ${conversa.messages.length} mensagens`);
+      this.log(`✅ Encontrada com ${conversa.messages.length} mensagens`);
     } else {
-      console.log(`    ❌ Não encontrada`);
+      this.log('❌ Não encontrada');
     }
     return conversa || null;
   }
@@ -465,14 +471,15 @@ export class ConversationManager {
    * Alternar controle manual da conversa
    */
   alternarControleManual(id: string, ativo: boolean): boolean {
-    console.log(`  🔄 Alternando controle manual: ${id} -> ${ativo ? '👤 Humano' : '🤖 Bot'}`);
-    const conversa = this.conversations.get(id);
+    const idNormalizado = this.normalizarWaId(id);
+    this.log(`🔄 Alternando controle manual: ${idNormalizado} -> ${ativo ? '👤 Humano' : '🤖 Bot'}`);
+    const conversa = this.conversations.get(idNormalizado);
     if (!conversa) {
-      console.log(`    ❌ Conversa não encontrada`);
+      this.log('❌ Conversa não encontrada');
       return false;
     }
     conversa.isHuman = ativo;
-    console.log(`    ✅ Controle alterado`);
+    this.log('✅ Controle alterado');
     return true;
   }
 
@@ -480,24 +487,25 @@ export class ConversationManager {
    * Enviar mensagem e armazenar registro
    */
   async enviarMensagem(para: string, texto: string): Promise<string> {
-    console.log(`  📤 Enviando mensagem`);
-    console.log(`    Para: ${para}`);
-    console.log(`    Texto: "${texto.substring(0, 60)}${texto.length > 60 ? '...' : ''}"`);
+    const paraNormalizado = this.normalizarWaId(para);
+    this.log('📤 Enviando mensagem');
+    this.log(`Para: ${paraNormalizado}`);
+    this.log(`Texto: "${texto.substring(0, 60)}${texto.length > 60 ? '...' : ''}"`);
     
     try {
       // Garantir que conversa existe (será criada se não existir)
-      this.obterOuCriarConversa(para);
+      this.obterOuCriarConversa(paraNormalizado);
       
-      console.log(`    🔄 Chamando client.sendMessage(${para}, texto)`);
+      this.log(`🔄 Chamando client.sendMessage(${paraNormalizado}, texto)`);
       const resposta = await this.client.sendMessage(para, texto);
       
       // Log status da resposta
-      console.log(`    📨 Resposta: status ${resposta.status}, mensagens: ${resposta.data?.messages?.length || 0}`);
+      this.log(`📨 Resposta: status ${resposta.status}, mensagens: ${resposta.data?.messages?.length || 0}`);
       
       const mensagemId = resposta.data?.messages?.[0]?.id;
       
-      await this.adicionarMensagem(para, 'out', texto, mensagemId, Date.now());
-      console.log(`    ✅ Enviada com ID: ${mensagemId}`);
+      await this.adicionarMensagem(paraNormalizado, 'out', texto, mensagemId, Date.now());
+      this.log(`✅ Enviada com ID: ${mensagemId}`);
       
       return mensagemId || '';
     } catch (erro: any) {
@@ -506,11 +514,11 @@ export class ConversationManager {
       const errorType = erro?.response?.data?.error?.type || null;
       const status = erro?.response?.status || 'unknown';
       
-      console.log(`    ❌ Erro capturado`);
-      console.log(`    Mensagem: ${errorMessage}`);
-      console.log(`    Status HTTP: ${status}`);
-      if (errorCode) console.log(`    Código: ${errorCode}`);
-      if (errorType) console.log(`    Tipo: ${errorType}`);
+      this.log('❌ Erro capturado');
+      this.log(`Mensagem: ${errorMessage}`);
+      this.log(`Status HTTP: ${status}`);
+      if (errorCode) this.log(`Código: ${errorCode}`);
+      if (errorType) this.log(`Tipo: ${errorType}`);
       
       throw erro;
     }
@@ -520,12 +528,13 @@ export class ConversationManager {
    * Criar conversa com nome (para novas conversas)
    */
   async criarConversa(telefone: string, nome?: string): Promise<Conversation> {
-    console.log(`  ✨ Criando nova conversa: ${telefone}`);
-    if (nome) console.log(`    Nome: ${nome}`);
+    const telefoneNormalizado = this.normalizarWaId(telefone);
+    this.log(`✨ Criando nova conversa: ${telefoneNormalizado}`);
+    if (nome) this.log(`Nome: ${nome}`);
     
-    const existente = this.conversations.get(telefone);
+    const existente = this.conversations.get(telefoneNormalizado);
     if (existente) {
-      console.log(`    ℹ️  Conversa já existe, atualizando nome se fornecido`);
+      this.log('ℹ️  Conversa já existe, atualizando nome se fornecido');
       if (nome && !existente.name) {
         existente.name = nome;
         await this.salvarConversas();
@@ -534,22 +543,22 @@ export class ConversationManager {
     }
 
     const conversa: Conversation = {
-      id: telefone,
+      id: telefoneNormalizado,
       name: nome,
-      phoneNumber: telefone,
+      phoneNumber: telefoneNormalizado,
       unreadCount: 0,
       isHuman: false,
       messages: [],
     };
     
-    this.conversations.set(telefone, conversa);
+    this.conversations.set(telefoneNormalizado, conversa);
     await this.salvarConversas();
     
     // Recarregar do arquivo para garantir que está salvo
     await this.recarregarConversas();
-    console.log(`    ✅ Conversa criada e salva`);
+    this.log('✅ Conversa criada e salva');
     
     // Retornar a conversa recarregada
-    return this.conversations.get(telefone)!;
+    return this.conversations.get(telefoneNormalizado)!;
   }
 }
