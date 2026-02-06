@@ -42,11 +42,14 @@ export class ConversationManager {
   private conversations: Map<string, Conversation> = new Map();
   private lastLoadTime: number = 0;
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
+  private storageMode: 'upstash' | 'local' = 'local';
 
   constructor() {
     const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
     const apiVersion = parseInt(versionStr, 10);
     console.log(`🔧 ConversationManager: Usando API v${apiVersion}.0`);
+    this.storageMode = UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN ? 'upstash' : 'local';
+    console.log(`🗄️  Storage mode: ${this.storageMode === 'upstash' ? 'Upstash Redis' : '/tmp local'}`);
     this.client = new WhatsApp({
       token: config.whatsapp.token,
       numberId: config.whatsapp.numberId,
