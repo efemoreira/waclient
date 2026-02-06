@@ -77,6 +77,42 @@ const closeModalBtn = document.getElementById('closeModalBtn');
 const newPhoneInput = document.getElementById('newPhoneInput');
 const newNameInput = document.getElementById('newNameInput');
 const clearConversationsBtn = document.getElementById('clearConversationsBtn');
+const authModal = document.getElementById('authModal');
+const authForm = document.getElementById('authForm');
+const authPassword = document.getElementById('authPassword');
+const authError = document.getElementById('authError');
+
+let appPassword = sessionStorage.getItem('appPassword') || '';
+
+async function authFetch(url, options = {}) {
+  const headers = {
+    ...(options.headers || {}),
+    'x-app-password': appPassword,
+  };
+  return fetch(url, { ...options, headers });
+}
+
+async function tryAuth() {
+  try {
+    const res = await authFetch('/api/conversations');
+    if (res.ok) {
+      authError.style.display = 'none';
+      authModal.close();
+      return true;
+    }
+  } catch (_err) {
+    // ignore
+  }
+  authError.style.display = 'block';
+  return false;
+}
+
+authForm?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  appPassword = authPassword.value.trim();
+  sessionStorage.setItem('appPassword', appPassword);
+  await tryAuth();
+});
 
 // Navegação entre seções
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -139,7 +175,7 @@ clearConversationsBtn?.addEventListener('click', async () => {
   if (!confirm('Apagar todas as conversas? Essa ação não pode ser desfeita.')) return;
   logger.add('🧹 Apagando todas as conversas...', 'warning', 'Inbox');
   try {
-    const res = await fetch('/api/conversations', { method: 'DELETE' });
+    const res = await authFetch('/api/conversations', { method: 'DELETE' });
     if (!res.ok) {
       logger.add(`❌ Falha ao apagar conversas (${res.status})`, 'error', 'Inbox');
       return;
@@ -177,7 +213,7 @@ newChatForm.addEventListener('submit', async (e) => {
   
   // Criar conversa no servidor
   try {
-    const res = await fetch('/api/conversations', {
+    const res = await authFetch('/api/conversations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone, name: name || undefined }),
@@ -215,7 +251,7 @@ function formatTime(ts) {
 async function fetchConversations() {
   try {
     logger.add('➡️ GET /api/conversations');
-    const res = await fetch('/api/conversations');
+    const res = await authFetch('/api/conversations');
     if (!res.ok) {
       logger.add(`❌ Erro ao buscar conversas (${res.status})`, 'error');
       console.error('Erro ao buscar conversas:', res.status, res.statusText);
@@ -245,7 +281,7 @@ async function fetchConversations() {
 async function fetchConversation(id) {
   try {
     logger.add(`➡️ GET /api/conversations?id=${id}`);
-    const res = await fetch(`/api/conversations?id=${id}`);
+    const res = await authFetch(`/api/conversations?id=${id}`);
     if (!res.ok) {
       logger.add(`❌ Conversa não encontrada (${res.status})`, 'error');
       console.error('Conversa não encontrada:', res.status);
@@ -328,7 +364,7 @@ assumeBtn.addEventListener('click', async () => {
   const current = state.conversations.find((c) => c.id === state.selectedId);
   const next = !current?.isHuman;
 
-  await fetch(`/api/conversations?id=${state.selectedId}`, {
+  await authFetch(`/api/conversations?id=${state.selectedId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ isHuman: next }),
@@ -351,7 +387,7 @@ messageForm.addEventListener('submit', async (e) => {
 
   try {
     const startTime = Date.now();
-    const res = await fetch('/api/messages', {
+    const res = await authFetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -391,7 +427,9 @@ searchInput.addEventListener('input', (e) => {
 });
 
 setInterval(fetchConversations, 3000);
-fetchConversations();
+tryAuth().then((ok) => {
+  if (ok) fetchConversations();
+});
 
 // Debug do webhook (exibe se chegar history/messages)
 let lastWebhookStamp = null;

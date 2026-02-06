@@ -17,6 +17,14 @@ const conversationManager = new ConversationManager();
  * POST /api/conversations?id=xxx&action=assume - Assumir controle
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const appPassword = process.env.APP_PASSWORD || '';
+  const requestPassword = req.headers['x-app-password'];
+  if (appPassword && requestPassword !== appPassword) {
+    logger.warn('Conversations', 'Acesso negado');
+    res.status(401).json({ erro: 'Não autorizado' });
+    return;
+  }
+
   // Permitir CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');

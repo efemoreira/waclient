@@ -14,6 +14,14 @@ const conversationManager = new ConversationManager();
  * Body: { to: string, text: string }
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const appPassword = process.env.APP_PASSWORD || '';
+  const requestPassword = req.headers['x-app-password'];
+  if (appPassword && requestPassword !== appPassword) {
+    logger.warn('Messages', 'Acesso negado');
+    res.status(401).json({ erro: 'Não autorizado' });
+    return;
+  }
+
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');

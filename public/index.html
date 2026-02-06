@@ -8,6 +8,22 @@
   </head>
   <body>
     <div class="app">
+      <!-- Login Modal -->
+      <dialog id="authModal" class="modal" open>
+        <div class="modal-content">
+          <h3>🔒 Acesso restrito</h3>
+          <form id="authForm">
+            <div class="form-group">
+              <label for="authPassword">Senha</label>
+              <input type="password" id="authPassword" placeholder="Digite a senha" required />
+            </div>
+            <div style="display:flex; gap:8px; margin-top: 16px;">
+              <button type="submit" class="primary">Entrar</button>
+            </div>
+          </form>
+          <p id="authError" class="error-text" style="display:none; margin-top: 12px;">Senha inválida</p>
+        </div>
+      </dialog>
       <!-- Navegação -->
       <nav class="navbar">
         <div class="nav-buttons">

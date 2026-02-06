@@ -486,6 +486,10 @@ body {
   color: var(--text);
   font-size: 14px;
 }
+.error-text {
+  color: #fca5a5;
+  font-size: 13px;
+}
 
 .modal-content input:focus {
   outline: none;
