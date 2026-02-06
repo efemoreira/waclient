@@ -4,6 +4,9 @@ import { config } from '../config';
 import { promises as fs } from 'fs';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
+const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL || '';
+const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
+const UPSTASH_KEY = 'waclient:conversations';
 
 /**
  * Representa uma mensagem individual
@@ -50,7 +53,7 @@ export class ConversationManager {
       version: apiVersion,
     });
     
-    // Carregar conversas do arquivo
+    // Carregar conversas do armazenamento
     this.carregarConversas().catch(console.error);
   }
 
@@ -65,30 +68,24 @@ export class ConversationManager {
     }
     this.lastLoadTime = agora;
     await this.recarregarConversas();
-  }  /**
-   * Carregar conversas do arquivo
+  }
+
+  /**
+   * Carregar conversas do armazenamento (Upstash ou /tmp)
    */
   private async carregarConversas(): Promise<void> {
     try {
-      const data = await fs.readFile(CONVERSATIONS_FILE, 'utf-8');
-      const conversas = JSON.parse(data);
-      
+      const conversas = await this.lerDoArmazenamento();
       if (!conversas || typeof conversas !== 'object') {
-        console.error('❌ Arquivo de conversas inválido:', typeof conversas);
+        console.error('❌ Armazenamento de conversas inválido:', typeof conversas);
         return;
       }
-      
       Object.entries(conversas).forEach(([id, conv]: [string, any]) => {
         this.conversations.set(id, conv);
       });
       console.log(`✅ Carregadas ${this.conversations.size} conversas`);
     } catch (e: any) {
-      // Arquivo não existe ainda, será criado na primeira conversa
-      if (e.code === 'ENOENT') {
-        console.log('📝 Nenhuma conversa anterior encontrada');
-      } else {
-        console.error('❌ Erro ao carregar conversas:', e.message);
-      }
+      console.error('❌ Erro ao carregar conversas:', e?.message || e);
     }
   }
 
@@ -102,7 +99,7 @@ export class ConversationManager {
   }
 
   /**
-   * Salvar conversas no arquivo
+   * Salvar conversas no armazenamento (Upstash ou /tmp)
    */
   private async salvarConversas(): Promise<void> {
     try {
@@ -110,11 +107,70 @@ export class ConversationManager {
       this.conversations.forEach((conv, id) => {
         data[id] = conv;
       });
-      await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-      console.log(`💾 Salvas ${this.conversations.size} conversas em ${CONVERSATIONS_FILE}`);
+      await this.salvarNoArmazenamento(data);
+      console.log(`💾 Salvas ${this.conversations.size} conversas`);
     } catch (e) {
       console.error('❌ Erro ao salvar conversas:', e);
     }
+  }
+
+  /**
+   * Ler do armazenamento compartilhado quando configurado (Upstash)
+   */
+  private async lerDoArmazenamento(): Promise<Record<string, Conversation> | null> {
+    if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        const url = `${UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(UPSTASH_KEY)}`;
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
+        });
+        if (!res.ok) {
+          console.error(`❌ Upstash GET falhou: ${res.status}`);
+          return {};
+        }
+        const json: any = await res.json();
+        if (!json?.result) return {};
+        return JSON.parse(json.result);
+      } catch (e: any) {
+        console.error('❌ Erro ao ler Upstash:', e?.message || e);
+        return {};
+      }
+    }
+
+    // Fallback local (/tmp) para desenvolvimento
+    try {
+      const data = await fs.readFile(CONVERSATIONS_FILE, 'utf-8');
+      return JSON.parse(data);
+    } catch (e: any) {
+      if (e.code === 'ENOENT') {
+        console.log('📝 Nenhuma conversa anterior encontrada');
+        return {};
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Salvar no armazenamento compartilhado quando configurado (Upstash)
+   */
+  private async salvarNoArmazenamento(data: Record<string, Conversation>): Promise<void> {
+    if (UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN) {
+      const url = `${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(UPSTASH_KEY)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        throw new Error(`Upstash SET falhou: ${res.status}`);
+      }
+      return;
+    }
+
+    await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(data, null, 2), 'utf-8');
   }
 
   /**
