@@ -4,6 +4,15 @@ import type { WebhookPayload } from '../src/wabapi/types';
 
 const conversationManager = new ConversationManager();
 
+// Último webhook recebido (para debug)
+let lastWebhookInfo: {
+  receivedAt: string;
+  hasEntry: boolean;
+  entryCount: number;
+  messageCount: number;
+  statusCount: number;
+} | null = null;
+
 // Tokens da variável de ambiente
 const WEBHOOK_TOKEN = process.env.WHATSAPP_WEBHOOK_TOKEN || 'seu-token-aqui';
 const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '';
@@ -19,6 +28,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('📨 WEBHOOK REQUEST - ' + req.method);
   console.log('='.repeat(60));
   
+  // GET - Debug de webhook
+  if (req.method === 'GET' && req.query?.debug === '1' && !req.query['hub.mode']) {
+    res.status(200).json({
+      ok: true,
+      lastWebhook: lastWebhookInfo,
+    });
+    return;
+  }
+
   // GET - Verificação de webhook
   if (req.method === 'GET') {
     const modo = req.query['hub.mode'] as string;
@@ -47,8 +65,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const payload = req.body as WebhookPayload;
+      const entryCount = payload?.entry?.length || 0;
+      const change = payload?.entry?.[0]?.changes?.[0]?.value;
+      const messageCount = change?.messages?.length || 0;
+      const statusCount = change?.statuses?.length || 0;
+
+      lastWebhookInfo = {
+        receivedAt: new Date().toISOString(),
+        hasEntry: entryCount > 0,
+        entryCount,
+        messageCount,
+        statusCount,
+      };
+
       console.log('📦 Payload entrada:', JSON.stringify(payload).substring(0, 200) + '...');
-      
+      console.log(`📊 Resumo: entries=${entryCount}, messages=${messageCount}, statuses=${statusCount}`);
+
       await conversationManager.processarWebhook(payload);
       console.log('✅ WEBHOOK PROCESSADO COM SUCESSO\n');
       res.status(200).json({ ok: true });
