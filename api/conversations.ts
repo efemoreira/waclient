@@ -19,7 +19,7 @@ const conversationManager = new ConversationManager();
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Permitir CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
@@ -127,6 +127,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     logger.info('Conversations', 'Controle alterado com sucesso');
 
     res.json({ ok: true, isHuman });
+    return;
+  }
+
+  // DELETE - Apagar todas as conversas
+  if (req.method === 'DELETE') {
+    logger.warn('Conversations', 'DELETE /api/conversations - apagando todas as conversas');
+    await conversationManager.limparConversas();
+    res.json({ ok: true });
     return;
   }
 

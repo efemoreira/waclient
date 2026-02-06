@@ -53,6 +53,47 @@ export class ConversationManager {
     return String(id || '').replace(/\D/g, '');
   }
 
+  private mergeConversas(
+    base: Record<string, Conversation>,
+    updates: Record<string, Conversation>
+  ): Record<string, Conversation> {
+    const merged: Record<string, Conversation> = { ...base };
+
+    Object.entries(updates).forEach(([id, conv]) => {
+      const existing = merged[id];
+      if (!existing) {
+        merged[id] = conv;
+        return;
+      }
+
+      const msgMap = new Map<string, MessageRecord>();
+      existing.messages.forEach((m) => msgMap.set(m.id, m));
+      conv.messages.forEach((m) => msgMap.set(m.id, m));
+      const messages = Array.from(msgMap.values()).sort(
+        (a, b) => a.timestamp - b.timestamp
+      );
+
+      const lastMessage = messages.length ? messages[messages.length - 1].text : existing.lastMessage;
+      const lastTimestamp = messages.length
+        ? messages[messages.length - 1].timestamp
+        : existing.lastTimestamp;
+
+      merged[id] = {
+        ...existing,
+        ...conv,
+        name: existing.name || conv.name,
+        phoneNumber: existing.phoneNumber || conv.phoneNumber,
+        isHuman: existing.isHuman || conv.isHuman,
+        unreadCount: Math.max(existing.unreadCount || 0, conv.unreadCount || 0),
+        messages,
+        lastMessage,
+        lastTimestamp,
+      };
+    });
+
+    return merged;
+  }
+
   constructor() {
     const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
     const apiVersion = parseInt(versionStr, 10);
@@ -119,8 +160,14 @@ export class ConversationManager {
       this.conversations.forEach((conv, id) => {
         data[id] = conv;
       });
-      await this.salvarNoArmazenamento(data);
-      this.log(`💾 Salvas ${this.conversations.size} conversas`);
+      const base = (await this.lerDoArmazenamento()) || {};
+      const merged = this.mergeConversas(base, data);
+      await this.salvarNoArmazenamento(merged);
+      this.conversations.clear();
+      Object.entries(merged).forEach(([id, conv]) => {
+        this.conversations.set(id, conv);
+      });
+      this.log(`💾 Salvas ${Object.keys(merged).length} conversas`);
     } catch (e: any) {
       this.log(`❌ Erro ao salvar conversas: ${e?.message || e}`);
     }
@@ -560,5 +607,14 @@ export class ConversationManager {
     
     // Retornar a conversa recarregada
     return this.conversations.get(telefoneNormalizado)!;
+  }
+
+  /**
+   * Apagar todas as conversas persistidas
+   */
+  async limparConversas(): Promise<void> {
+    this.conversations.clear();
+    await this.salvarNoArmazenamento({});
+    this.log('🧹 Todas as conversas foram apagadas');
   }
 }

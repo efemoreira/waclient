@@ -76,6 +76,7 @@ const newChatForm = document.getElementById('newChatForm');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const newPhoneInput = document.getElementById('newPhoneInput');
 const newNameInput = document.getElementById('newNameInput');
+const clearConversationsBtn = document.getElementById('clearConversationsBtn');
 
 // Navegação entre seções
 document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -132,6 +133,29 @@ newChatBtn.addEventListener('click', () => {
 
 closeModalBtn.addEventListener('click', () => {
   newChatModal.close();
+});
+
+clearConversationsBtn?.addEventListener('click', async () => {
+  if (!confirm('Apagar todas as conversas? Essa ação não pode ser desfeita.')) return;
+  logger.add('🧹 Apagando todas as conversas...', 'warning', 'Inbox');
+  try {
+    const res = await fetch('/api/conversations', { method: 'DELETE' });
+    if (!res.ok) {
+      logger.add(`❌ Falha ao apagar conversas (${res.status})`, 'error', 'Inbox');
+      return;
+    }
+    state.conversations = [];
+    state.selectedId = null;
+    renderConversationList();
+    messagesEl.innerHTML = '';
+    chatHeader.querySelector('h2').textContent = 'Selecione uma conversa';
+    chatHeader.querySelector('.subtitle').textContent = 'Acompanhe e responda mensagens';
+    messageInput.disabled = true;
+    messageForm.querySelector('button').disabled = true;
+    logger.add('✅ Conversas apagadas', 'info', 'Inbox');
+  } catch (err) {
+    logger.add(`❌ Erro ao apagar conversas: ${err?.message || err}`, 'error', 'Inbox');
+  }
 });
 
 newChatModal.addEventListener('click', (e) => {
