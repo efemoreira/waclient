@@ -357,7 +357,7 @@ export class ConversationManager {
 
         // History (backfill)
         if (Array.isArray(valor.history) && valor.history.length > 0) {
-          console.log(`🕘 Processando history (${valor.history.length})`);
+          console.log(`🕘 WEBHOOK HISTORY RECEBIDO (${valor.history.length})`);
           await this.processarHistory(valor.history);
         }
 

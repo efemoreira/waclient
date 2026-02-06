@@ -54,6 +54,7 @@ function escapeHtml(text) {
 }
 
 const logger = new LogManager();
+logger.add('✅ Logs inicializados');
 
 const state = {
   conversations: [],
@@ -207,6 +208,8 @@ async function fetchConversations() {
 
     if (state.selectedId) {
       await fetchConversation(state.selectedId);
+    } else {
+      logger.add('ℹ️ Nenhuma conversa selecionada');
     }
   } catch (err) {
     logger.add('❌ Erro ao buscar conversas (exceção)', 'error');
@@ -281,6 +284,7 @@ function renderConversation(conv) {
 
   messagesEl.innerHTML = '';
   const msgs = Array.isArray(conv.messages) ? conv.messages : [];
+  logger.add(`💬 Renderizando conversa (${msgs.length} mensagens)`);
   msgs.forEach((m) => {
     const el = document.createElement('div');
     el.className = `message ${m.direction}`;
@@ -363,3 +367,25 @@ searchInput.addEventListener('input', (e) => {
 
 setInterval(fetchConversations, 3000);
 fetchConversations();
+
+// Debug do webhook (exibe se chegar history/messages)
+let lastWebhookStamp = null;
+async function pollWebhookDebug() {
+  try {
+    const res = await fetch('/api/webhook?debug=1');
+    if (!res.ok) return;
+    const data = await res.json();
+    const stamp = data?.lastWebhook?.receivedAt || null;
+    if (stamp && stamp !== lastWebhookStamp) {
+      lastWebhookStamp = stamp;
+      logger.add(`📡 Webhook recebido: ${stamp}`);
+      if (data?.lastWebhook?.messageCount !== undefined) {
+        logger.add(`📨 Webhook messages=${data.lastWebhook.messageCount} statuses=${data.lastWebhook.statusCount}`);
+      }
+    }
+  } catch (_err) {
+    // silencioso
+  }
+}
+setInterval(pollWebhookDebug, 10000);
+pollWebhookDebug();
