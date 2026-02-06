@@ -86,7 +86,7 @@ export class WhatsApp {
   constructor(config: WhatsAppConfig) {
     this.id = config.numberId;
     this.token = config.token;
-    this.versionNumber = config.version || 21;
+    this.versionNumber = config.version || 24;
 
     this.baseUrl = `https://graph.facebook.com/v${this.versionNumber}.0`;
     this.msgUrl = `${this.baseUrl}/${this.id}/messages`;
@@ -165,7 +165,7 @@ export class WhatsApp {
     phoneNumber: string,
     templateName: string,
     components: TemplateComponent[] = [],
-    languageCode: string = 'en_US'
+    languageCode: string = 'pt_BR'
   ): Promise<AxiosResponse> {
     const formattedPhone = formatPhoneNumber(phoneNumber);
 

@@ -44,12 +44,16 @@ export class ConversationManager {
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
   private storageMode: 'upstash' | 'local' = 'local';
 
+  private log(msg: string): void {
+    console.log(`[Inbox] ${msg}`);
+  }
+
   constructor() {
     const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
     const apiVersion = parseInt(versionStr, 10);
-    console.log(`🔧 ConversationManager: Usando API v${apiVersion}.0`);
+    this.log(`🔧 Usando API v${apiVersion}.0`);
     this.storageMode = UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN ? 'upstash' : 'local';
-    console.log(`🗄️  Storage mode: ${this.storageMode === 'upstash' ? 'Upstash Redis' : '/tmp local'}`);
+    this.log(`🗄️  Storage mode: ${this.storageMode === 'upstash' ? 'Upstash Redis' : '/tmp local'}`);
     this.client = new WhatsApp({
       token: config.whatsapp.token,
       numberId: config.whatsapp.numberId,
@@ -80,15 +84,15 @@ export class ConversationManager {
     try {
       const conversas = await this.lerDoArmazenamento();
       if (!conversas || typeof conversas !== 'object') {
-        console.error('❌ Armazenamento de conversas inválido:', typeof conversas);
+        this.log(`❌ Armazenamento inválido (${typeof conversas})`);
         return;
       }
       Object.entries(conversas).forEach(([id, conv]: [string, any]) => {
         this.conversations.set(id, conv);
       });
-      console.log(`✅ Carregadas ${this.conversations.size} conversas`);
+      this.log(`✅ Carregadas ${this.conversations.size} conversas`);
     } catch (e: any) {
-      console.error('❌ Erro ao carregar conversas:', e?.message || e);
+      this.log(`❌ Erro ao carregar conversas: ${e?.message || e}`);
     }
   }
 
@@ -96,7 +100,7 @@ export class ConversationManager {
    * Recarregar conversas do arquivo (útil após mudanças)
    */
   async recarregarConversas(): Promise<void> {
-    console.log('🔄 Recarregando conversas do arquivo...');
+    this.log('🔄 Recarregando conversas do storage...');
     this.conversations.clear();
     await this.carregarConversas();
   }
@@ -111,9 +115,9 @@ export class ConversationManager {
         data[id] = conv;
       });
       await this.salvarNoArmazenamento(data);
-      console.log(`💾 Salvas ${this.conversations.size} conversas`);
-    } catch (e) {
-      console.error('❌ Erro ao salvar conversas:', e);
+      this.log(`💾 Salvas ${this.conversations.size} conversas`);
+    } catch (e: any) {
+      this.log(`❌ Erro ao salvar conversas: ${e?.message || e}`);
     }
   }
 
@@ -128,14 +132,14 @@ export class ConversationManager {
           headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
         });
         if (!res.ok) {
-          console.error(`❌ Upstash GET falhou: ${res.status}`);
+          this.log(`❌ Upstash GET falhou: ${res.status}`);
           return {};
         }
         const json: any = await res.json();
         if (!json?.result) return {};
         return JSON.parse(json.result);
       } catch (e: any) {
-        console.error('❌ Erro ao ler Upstash:', e?.message || e);
+        this.log(`❌ Erro ao ler Upstash: ${e?.message || e}`);
         return {};
       }
     }
@@ -246,7 +250,7 @@ export class ConversationManager {
     if (direcao === 'in') {
       conversa.unreadCount += 1;
     }
-    
+
     // Salvar após cada mensagem
     await this.salvarConversas();
   }
@@ -268,9 +272,9 @@ export class ConversationManager {
         conversa.lastTimestamp = timestamp;
       }
       await this.salvarConversas();
-      console.log(`    ✅ Status atualizado: ${mensagemId} -> ${status}`);
+      this.log(`✅ Status atualizado: ${mensagemId} -> ${status}`);
     } else {
-      console.log(`    ⚠️  Status recebido para mensagem desconhecida: ${mensagemId}`);
+      this.log(`⚠️  Status recebido para mensagem desconhecida: ${mensagemId}`);
     }
   }
 
@@ -281,7 +285,7 @@ export class ConversationManager {
     for (const item of history) {
       const meta = item?.metadata;
       if (meta?.phase !== undefined) {
-        console.log(`    🧭 History phase=${meta.phase} chunk=${meta.chunk_order} progress=${meta.progress}`);
+        this.log(`🧭 History phase=${meta.phase} chunk=${meta.chunk_order} progress=${meta.progress}`);
       }
 
       const threads = Array.isArray(item?.threads) ? item.threads : [];
@@ -317,35 +321,37 @@ export class ConversationManager {
    * Processar webhook do WhatsApp
    */
   async processarWebhook(payload: WebhookPayload): Promise<void> {
-    console.log('\n' + '='.repeat(50));
-    console.log('🔍 PROCESSANDO WEBHOOK');
-    console.log('='.repeat(50));
+    this.log('🔍 PROCESSANDO WEBHOOK');
 
     const entries = payload.entry || [];
     if (entries.length === 0) {
-      console.log('❌ Webhook sem entry');
+      this.log('❌ Webhook sem entry');
       return;
     }
 
     for (const entrada of entries) {
+      this.log(`📦 Entry: ${entrada?.id || 'sem id'}`);
       const changes = entrada.changes || [];
       for (const mudanca of changes) {
         const valor: any = mudanca?.value;
         if (!valor) {
-          console.log('❌ Nenhum value encontrado na change');
+          this.log('❌ Nenhum value encontrado na change');
           continue;
         }
 
+        if (mudanca?.field) {
+          this.log(`🧩 Field: ${mudanca.field}`);
+        }
         const metadata = valor.metadata;
         if (metadata?.phone_number_id) {
-          console.log(`📱 Phone Number ID: ${metadata.phone_number_id}`);
+          this.log(`📱 Phone Number ID: ${metadata.phone_number_id}`);
         }
 
         // Erros no nível do value
         if (Array.isArray(valor.errors) && valor.errors.length > 0) {
-          console.log(`❌ Erros no webhook (value.errors): ${valor.errors.length}`);
+          this.log(`❌ Erros no webhook (value.errors): ${valor.errors.length}`);
           for (const err of valor.errors) {
-            console.log(`    • code=${err?.code} type=${err?.type} title=${err?.title || err?.message}`);
+            this.log(`• code=${err?.code} type=${err?.type} title=${err?.title || err?.message}`);
           }
         }
 
@@ -360,24 +366,24 @@ export class ConversationManager {
 
         // History (backfill)
         if (Array.isArray(valor.history) && valor.history.length > 0) {
-          console.log(`🕘 WEBHOOK HISTORY RECEBIDO (${valor.history.length})`);
+          this.log(`🕘 WEBHOOK HISTORY RECEBIDO (${valor.history.length})`);
           await this.processarHistory(valor.history);
         }
 
         // Mensagens recebidas
         if (Array.isArray(valor.messages) && valor.messages.length > 0) {
-          console.log(`📨 Processando ${valor.messages.length} mensagem(ns)...`);
+          this.log(`📨 Processando ${valor.messages.length} mensagem(ns)...`);
           for (const msg of valor.messages) {
             const de = msg?.from;
             if (!de) {
-              console.log('    ⚠️  Mensagem sem origem');
+              this.log('⚠️  Mensagem sem origem');
               continue;
             }
 
             if (Array.isArray(msg?.errors) && msg.errors.length > 0) {
-              console.log(`    ❌ Mensagem com erro (type=${msg?.type || 'unknown'})`);
+              this.log(`❌ Mensagem com erro (type=${msg?.type || 'unknown'})`);
               for (const err of msg.errors) {
-                console.log(`      • code=${err?.code} title=${err?.title || err?.message}`);
+                this.log(`• code=${err?.code} title=${err?.title || err?.message}`);
               }
             }
 
@@ -389,22 +395,22 @@ export class ConversationManager {
             }
 
             await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
-            console.log(`    ✅ De ${de}: "${texto.substring(0, 50)}..."`);
+            this.log(`✅ De ${de}: "${texto.substring(0, 50)}..."`);
           }
         }
 
         // Status de mensagens enviadas
         if (Array.isArray(valor.statuses) && valor.statuses.length > 0) {
-          console.log(`📊 Processando ${valor.statuses.length} status(es)`);
+          this.log(`📊 Processando ${valor.statuses.length} status(es)`);
           for (const st of valor.statuses) {
             const recipientId = st?.recipient_id;
             const msgId = st?.id;
             const status = st?.status;
             const ts = st?.timestamp ? Number(st.timestamp) * 1000 : undefined;
             if (Array.isArray(st?.errors) && st.errors.length > 0) {
-              console.log(`    ❌ Status com erro (msg=${msgId})`);
+              this.log(`❌ Status com erro (msg=${msgId})`);
               for (const err of st.errors) {
-                console.log(`      • code=${err?.code} title=${err?.title || err?.message}`);
+                this.log(`• code=${err?.code} title=${err?.title || err?.message}`);
               }
             }
             if (recipientId && msgId && status) {
@@ -415,7 +421,7 @@ export class ConversationManager {
       }
     }
 
-    console.log('✅ WEBHOOK PROCESSADO\n');
+    this.log('✅ WEBHOOK PROCESSADO');
   }
 
   /**
