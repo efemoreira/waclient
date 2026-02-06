@@ -272,6 +272,33 @@ export class ConversationManager {
   }
 
   /**
+   * Processar histórico de mensagens (history webhook)
+   */
+  private async processarHistory(history: any[]): Promise<void> {
+    for (const item of history) {
+      const threads = Array.isArray(item?.threads) ? item.threads : [];
+      for (const thread of threads) {
+        const mensagens = Array.isArray(thread?.messages) ? thread.messages : [];
+        for (const msg of mensagens) {
+          const de = msg?.from;
+          if (!de) continue;
+
+          const texto = this.extrairTexto(msg);
+          const timestamp = msg.timestamp ? Number(msg.timestamp) * 1000 : Date.now();
+          const fromMe = msg?.history_context?.from_me === true;
+          const status = msg?.history_context?.status;
+          const direcao: 'in' | 'out' = fromMe ? 'out' : 'in';
+
+          await this.adicionarMensagem(de, direcao, texto, msg.id, timestamp);
+          if (status) {
+            await this.atualizarStatusMensagem(de, msg.id, status, timestamp);
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Processar webhook do WhatsApp
    */
   async processarWebhook(payload: WebhookPayload): Promise<void> {
@@ -311,6 +338,12 @@ export class ConversationManager {
           if (c?.wa_id) {
             contatoPorId.set(c.wa_id, c?.profile?.name || 'Desconhecido');
           }
+        }
+
+        // History (backfill)
+        if (Array.isArray(valor.history) && valor.history.length > 0) {
+          console.log(`🕘 Processando history (${valor.history.length})`);
+          await this.processarHistory(valor.history);
         }
 
         // Mensagens recebidas
