@@ -188,16 +188,20 @@ function formatTime(ts) {
 
 async function fetchConversations() {
   try {
+    logger.add('➡️ GET /api/conversations');
     const res = await fetch('/api/conversations');
     if (!res.ok) {
+      logger.add(`❌ Erro ao buscar conversas (${res.status})`, 'error');
       console.error('Erro ao buscar conversas:', res.status, res.statusText);
       return;
     }
     const data = await res.json();
     if (!Array.isArray(data)) {
+      logger.add('❌ Resposta inválida ao buscar conversas', 'error');
       console.error('Resposta inválida: esperado array, recebido:', typeof data, data);
       return;
     }
+    logger.add(`✅ Conversas carregadas (${data.length})`);
     state.conversations = data;
     renderConversationList();
 
@@ -205,20 +209,26 @@ async function fetchConversations() {
       await fetchConversation(state.selectedId);
     }
   } catch (err) {
+    logger.add('❌ Erro ao buscar conversas (exceção)', 'error');
     console.error('Erro ao buscar conversas:', err);
   }
 }
 
 async function fetchConversation(id) {
   try {
+    logger.add(`➡️ GET /api/conversations?id=${id}`);
     const res = await fetch(`/api/conversations?id=${id}`);
     if (!res.ok) {
+      logger.add(`❌ Conversa não encontrada (${res.status})`, 'error');
       console.error('Conversa não encontrada:', res.status);
       return;
     }
     const conv = await res.json();
+    const total = Array.isArray(conv?.messages) ? conv.messages.length : 0;
+    logger.add(`✅ Conversa carregada (${total} mensagens)`);
     renderConversation(conv);
   } catch (err) {
+    logger.add('❌ Erro ao buscar conversa (exceção)', 'error');
     console.error('Erro ao buscar conversa:', err);
   }
 }
@@ -306,6 +316,8 @@ messageForm.addEventListener('submit', async (e) => {
   messageInput.disabled = true;
   messageForm.querySelector('button').disabled = true;
 
+  const payload = { to: state.selectedId, text };
+  logger.add(`➡️ POST /api/messages payload: ${JSON.stringify(payload)}`);
   logger.add(`📤 Enviando para ${state.selectedId}: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
 
   try {
@@ -313,7 +325,7 @@ messageForm.addEventListener('submit', async (e) => {
     const res = await fetch('/api/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to: state.selectedId, text }),
+      body: JSON.stringify(payload),
     });
     const duration = Date.now() - startTime;
 
