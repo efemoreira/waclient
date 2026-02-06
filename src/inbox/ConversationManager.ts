@@ -276,8 +276,17 @@ export class ConversationManager {
    */
   private async processarHistory(history: any[]): Promise<void> {
     for (const item of history) {
+      const meta = item?.metadata;
+      if (meta?.phase !== undefined) {
+        console.log(`    🧭 History phase=${meta.phase} chunk=${meta.chunk_order} progress=${meta.progress}`);
+      }
+
       const threads = Array.isArray(item?.threads) ? item.threads : [];
       for (const thread of threads) {
+        const threadId = thread?.id;
+        if (!threadId) continue;
+        this.obterOuCriarConversa(threadId);
+
         const mensagens = Array.isArray(thread?.messages) ? thread.messages : [];
         for (const msg of mensagens) {
           const de = msg?.from;
@@ -285,13 +294,16 @@ export class ConversationManager {
 
           const texto = this.extrairTexto(msg);
           const timestamp = msg.timestamp ? Number(msg.timestamp) * 1000 : Date.now();
-          const fromMe = msg?.history_context?.from_me === true;
+          const fromMeFlag = msg?.history_context?.from_me;
+          const fromMe = typeof fromMeFlag === 'boolean'
+            ? fromMeFlag
+            : de !== threadId;
           const status = msg?.history_context?.status;
           const direcao: 'in' | 'out' = fromMe ? 'out' : 'in';
 
-          await this.adicionarMensagem(de, direcao, texto, msg.id, timestamp);
+          await this.adicionarMensagem(threadId, direcao, texto, msg.id, timestamp);
           if (status) {
-            await this.atualizarStatusMensagem(de, msg.id, status, timestamp);
+            await this.atualizarStatusMensagem(threadId, msg.id, status, timestamp);
           }
         }
       }
