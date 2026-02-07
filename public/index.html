@@ -118,6 +118,7 @@
                 <select id="templateSelect">
                   <option value="">-- Selecione --</option>
                   <option value="hello_world">hello_world</option>
+                  <option value="fliacao">fliacao</option>
                   <option value="custom">Outro (especifique)</option>
                 </select>
               </div>
@@ -145,6 +146,19 @@
             </div>
 
             <button id="startBulkBtn" class="btn btn-primary">🚀 Iniciar Envio</button>
+          </div>
+
+          <!-- Validação e Lista de Contatos -->
+          <div class="bulk-contacts">
+            <h3>📋 Contatos (validação)</h3>
+            <div id="bulkContactsInfo" class="bulk-contacts-info">Nenhum arquivo carregado.</div>
+            <div id="bulkContactsList" class="bulk-contacts-list"></div>
+          </div>
+
+          <!-- Logs do processo -->
+          <div class="bulk-logs">
+            <h3>🧾 Logs do Envio</h3>
+            <div id="bulkLogs" class="bulk-logs-list"></div>
           </div>
 
           <!-- Status -->

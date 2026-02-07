@@ -8,6 +8,8 @@ export interface Contact {
   numero: string;
   mensagem: string;
   link?: string;
+  template?: string;
+  language?: string;
   status?: string;
   mensagem_id?: string;
   erro?: string;
@@ -32,20 +34,38 @@ export class EnvioMassa {
     this.delayMensagens = config.bulk.delayBetweenMessages;
   }
 
+  private normalizarNumero(numero: string): string {
+    const digits = String(numero || '').replace(/\D/g, '');
+    if (!digits) return '';
+    return digits.startsWith('55') ? digits : `55${digits}`;
+  }
+
   /**
    * Enviar mensagem para um contato individual
    */
   private async enviarParaContato(contato: Contact): Promise<void> {
     try {
-      let texto = contato.mensagem;
-      if (contato.link) {
-        texto += `\n\n${contato.link}`;
+      const numero = this.normalizarNumero(contato.numero);
+      if (!numero) {
+        throw new Error('Número inválido');
       }
 
-      const response = await this.client.sendMessage(
-        contato.numero,
-        texto
-      );
+      let response;
+      if (contato.template) {
+        response = await this.client.sendTemplateMessage(
+          numero,
+          contato.template,
+          [],
+          contato.language || 'pt_BR'
+        );
+      } else {
+        let texto = contato.mensagem;
+        if (contato.link) {
+          texto += `\n\n${contato.link}`;
+        }
+
+        response = await this.client.sendMessage(numero, texto);
+      }
 
       contato.status = 'enviado';
       contato.mensagem_id = response.data.messages?.[0]?.id;

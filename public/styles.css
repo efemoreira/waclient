@@ -249,6 +249,82 @@ body {
   margin: 0 auto;
 }
 
+.bulk-contacts,
+.bulk-logs {
+  margin-top: 24px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.bulk-contacts-info {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.bulk-contacts-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bulk-contact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.bulk-contact-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bulk-contact-status {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.bulk-contact-status.valid {
+  color: #86efac;
+}
+
+.bulk-contact-status.invalid {
+  color: #fca5a5;
+}
+
+.bulk-logs-list {
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.bulk-log-item {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.bulk-log-item:last-child {
+  border-bottom: none;
+}
+
 .bulk-form {
   background: var(--panel);
   padding: 24px;

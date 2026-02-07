@@ -1,4 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import axios from 'axios';
 import { EnvioMassa } from '../src/bulk/envio-massa';
 import { config, validateConfig } from '../src/config';
 import { promises as fs } from 'fs';
@@ -33,6 +34,80 @@ const defaultStatus: BulkStatus = {
   language: 'pt_BR',
   timestamp: Date.now(),
 };
+
+function normalizarNumero(numero: string): string {
+  const digits = String(numero || '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.startsWith('55') ? digits : `55${digits}`;
+}
+
+function parseCsv(csv: string): any[] {
+  const linhas = csv.split('\n').filter(l => l.trim());
+  if (linhas.length < 2) return [];
+  const headers = linhas[0].split(',').map(h => h.trim().toLowerCase());
+  return linhas.slice(1).map(linha => {
+    const valores = linha.split(',');
+    const obj: any = {};
+    headers.forEach((h, i) => {
+      obj[h] = valores[i]?.trim() || '';
+    });
+    if (obj.telefone) obj.telefone = normalizarNumero(obj.telefone);
+    if (obj.numero) obj.numero = normalizarNumero(obj.numero);
+    return obj;
+  }).filter(obj => obj.telefone || obj.numero);
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function validarNumerosWhatsApp(numeros: string[]): Promise<Map<string, { valido: boolean; wa_id?: string; motivo?: string }>> {
+  const resultado = new Map<string, { valido: boolean; wa_id?: string; motivo?: string }>();
+
+  if (!config.whatsapp.token || !config.whatsapp.numberId) {
+    numeros.forEach((n) => resultado.set(n, { valido: false, motivo: 'Configuração WhatsApp incompleta' }));
+    return resultado;
+  }
+
+  const apiVersion = config.whatsapp.apiVersion;
+  const url = `https://graph.facebook.com/v${apiVersion}/${config.whatsapp.numberId}/contacts`;
+  const headers = { Authorization: `Bearer ${config.whatsapp.token}` };
+
+  const chunks = chunkArray(numeros, 100);
+  for (const chunk of chunks) {
+    try {
+      const payload = { blocking: 'wait', contacts: chunk };
+      const response = await axios.post(url, payload, { headers });
+      const contacts = response.data?.contacts || [];
+
+      const retornados = new Set<string>();
+      contacts.forEach((c: any) => {
+        retornados.add(c.input);
+        if (c.status === 'valid') {
+          resultado.set(c.input, { valido: true, wa_id: c.wa_id });
+        } else {
+          resultado.set(c.input, { valido: false, motivo: c.status || 'invalid' });
+        }
+      });
+
+      // Qualquer número não retornado é marcado como inválido
+      chunk.forEach((n) => {
+        if (!retornados.has(n)) {
+          resultado.set(n, { valido: false, motivo: 'não verificado' });
+        }
+      });
+    } catch (erro: any) {
+      const motivo = erro?.response?.data?.error?.message || erro.message || 'erro de validação';
+      chunk.forEach((n) => resultado.set(n, { valido: false, motivo }));
+    }
+  }
+
+  return resultado;
+}
 
 async function lerStatus(): Promise<BulkStatus> {
   try {
@@ -110,35 +185,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       try {
-        const linhas = csv.split('\n').filter(l => l.trim());
-        console.log(`  Linhas do CSV: ${linhas.length}`);
+        const dados = parseCsv(csv);
+        console.log(`  Registros válidos: ${dados.length}`);
         
-        if (linhas.length < 2) {
+        if (dados.length === 0) {
           console.log('  ❌ CSV vazio ou inválido');
           console.log('='.repeat(50) + '\n');
           res.status(400).json({ erro: 'CSV vazio ou inválido' });
           return;
         }
+        const numeros = Array.from(new Set(dados.map((d) => normalizarNumero(d.numero || d.telefone || '')).filter(Boolean)));
+        console.log(`  🔎 Validando ${numeros.length} números no WhatsApp...`);
 
-        const headers = linhas[0].split(',').map(h => h.trim().toLowerCase());
-        console.log(`  Colunas: ${headers.join(', ')}`);
-        
-        const dados = linhas.slice(1).map(linha => {
-          const valores = linha.split(',');
-          const obj: any = {};
-          headers.forEach((h, i) => {
-            obj[h] = valores[i]?.trim() || '';
-          });
-          return obj;
-        }).filter(obj => obj.telefone);
+        const validacao = await validarNumerosWhatsApp(numeros);
+        const contatos = dados.map((d) => {
+          const numero = normalizarNumero(d.numero || d.telefone || '');
+          const info = validacao.get(numero);
+          return {
+            ...d,
+            numero,
+            valido: info?.valido ?? false,
+            wa_id: info?.wa_id,
+            motivo: info?.motivo,
+          };
+        }).filter(c => c.numero);
 
-        console.log(`  ✅ Registros válidos: ${dados.length}`);
+        const validos = contatos.filter(c => c.valido).length;
+        console.log(`  ✅ Válidos: ${validos} | ❌ Inválidos: ${contatos.length - validos}`);
         console.log('='.repeat(50) + '\n');
-        
+
         res.json({
           ok: true,
-          total: dados.length,
-          preview: dados.slice(0, 3),
+          total: contatos.length,
+          validos,
+          invalidos: contatos.length - validos,
+          contatos,
+          preview: contatos.slice(0, 3),
         });
       } catch (erro: any) {
         console.log(`  ❌ ERRO: ${erro.message}`);
@@ -158,8 +240,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
-      const { contatos } = req.body as { contatos?: any[] };
-      if (!contatos || contatos.length === 0) {
+      const { contatos, csv } = req.body as { contatos?: any[]; csv?: string };
+      let contatosEntrada = contatos;
+      if ((!contatosEntrada || contatosEntrada.length === 0) && csv) {
+        contatosEntrada = parseCsv(csv);
+      }
+      if (!contatosEntrada || contatosEntrada.length === 0) {
         console.log('  ❌ Contatos não fornecidos');
         console.log('='.repeat(50) + '\n');
         res.status(400).json({ erro: 'Contatos não fornecidos' });
@@ -177,15 +263,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         console.log(`  📋 Template: ${template}`);
         console.log(`  🌍 Idioma: ${language || 'pt_BR'}`);
-        console.log(`  📞 Total de contatos: ${contatos.length}`);
+        console.log(`  📞 Total de contatos: ${contatosEntrada.length}`);
         
         // Converter contatos para formato correto
-        const contatosFormatados = contatos.map((c: any) => ({
-          numero: c.numero || c.telefone || '',
-          mensagem: c.mensagem || '',
-          link: c.link || '',
-          status: 'pendente',
-        }));
+        const contatosFormatados = contatosEntrada.reduce((acc: any[], c: any) => {
+          const numero = normalizarNumero(c.numero || c.telefone || '');
+          if (!numero) return acc;
+          if (c?.valido === false) return acc;
+
+          const base = {
+            numero,
+            mensagem: c.mensagem || '',
+            link: c.link || '',
+            status: 'pendente',
+          } as any;
+          if (template === 'fliacao') {
+            base.template = 'fliacao';
+            base.language = language || 'pt_BR';
+          }
+          acc.push(base);
+          return acc;
+        }, []);
 
         // Atualizar status como ativo
         const novoStatus: BulkStatus = {

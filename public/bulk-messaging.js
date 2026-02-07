@@ -8,6 +8,8 @@ const bulkState = {
   language: 'pt_BR',
   mission: 'Missão',
   enviando: false,
+  contatos: [],
+  validado: false,
 };
 
 // Elementos
@@ -18,11 +20,69 @@ const languageSelect = document.getElementById('languageSelect');
 const missionInput = document.getElementById('missionName');
 const startBulkBtn = document.getElementById('startBulkBtn');
 const bulkStatus = document.getElementById('bulkStatus');
+const bulkContactsInfo = document.getElementById('bulkContactsInfo');
+const bulkContactsList = document.getElementById('bulkContactsList');
+const bulkLogs = document.getElementById('bulkLogs');
+
+function logBulk(message) {
+  if (!bulkLogs) return;
+  const time = new Date().toLocaleTimeString('pt-BR');
+  const item = document.createElement('div');
+  item.className = 'bulk-log-item';
+  item.textContent = `${time} ${message}`;
+  bulkLogs.appendChild(item);
+  bulkLogs.scrollTop = bulkLogs.scrollHeight;
+}
+
+function renderContacts() {
+  if (!bulkContactsList) return;
+  bulkContactsList.innerHTML = '';
+  bulkState.contatos.forEach((c, idx) => {
+    const item = document.createElement('div');
+    item.className = 'bulk-contact-item';
+    const checked = c.selecionado ? 'checked' : '';
+    const statusClass = c.valido ? 'valid' : 'invalid';
+    const statusText = c.valido ? '✅ WhatsApp' : `❌ ${c.motivo || 'Não encontrado'}`;
+    item.innerHTML = `
+      <div class="bulk-contact-left">
+        <input type="checkbox" data-idx="${idx}" ${checked} />
+        <div>
+          <div><strong>${c.numero}</strong></div>
+          <div class="bulk-contact-status ${statusClass}">${statusText}</div>
+        </div>
+      </div>
+    `;
+    bulkContactsList.appendChild(item);
+  });
+
+  bulkContactsList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener('change', (e) => {
+      const i = Number(e.target.dataset.idx);
+      bulkState.contatos[i].selecionado = e.target.checked;
+      updateContactsInfo();
+    });
+  });
+
+  updateContactsInfo();
+}
+
+function updateContactsInfo() {
+  const total = bulkState.contatos.length;
+  const validos = bulkState.contatos.filter(c => c.valido).length;
+  const selecionados = bulkState.contatos.filter(c => c.selecionado).length;
+  if (bulkContactsInfo) {
+    bulkContactsInfo.textContent = `Total: ${total} | Válidos: ${validos} | Selecionados: ${selecionados}`;
+  }
+}
 
 // Event Listeners
 if (csvFileInput) {
   csvFileInput.addEventListener('change', (e) => {
     bulkState.csvFile = e.target.files?.[0];
+    bulkState.validado = false;
+    bulkState.contatos = [];
+    renderContacts();
+    logBulk('📄 CSV atualizado. Pronto para validar.');
   });
 }
 
@@ -76,35 +136,57 @@ async function iniciarEnvio() {
   }
 
   startBulkBtn.disabled = true;
-  startBulkBtn.textContent = '⏳ Enviando...';
+  startBulkBtn.textContent = bulkState.validado ? '⏳ Enviando...' : '⏳ Validando...';
 
   try {
-    // 1. Upload do CSV
-    const formData = new FormData();
-    formData.append('file', bulkState.csvFile);
+    if (!bulkState.validado) {
+      // 1. Upload do CSV (JSON)
+      const csvText = await bulkState.csvFile.text();
+      console.log('📤 Enviando arquivo...');
+      logBulk('📤 Enviando CSV para validação...');
+      const uploadRes = await fetch('/api/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'upload', csv: csvText }),
+      });
 
-    console.log('📤 Enviando arquivo...');
-    const uploadRes = await fetch('/api/bulk/upload', {
-      method: 'POST',
-      body: formData,
-    });
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json();
+        throw new Error(err.erro || 'Erro ao enviar arquivo');
+      }
 
-    if (!uploadRes.ok) {
-      const err = await uploadRes.json();
-      throw new Error(err.erro || 'Erro ao enviar arquivo');
+      const uploadData = await uploadRes.json();
+      console.log(`✅ ${uploadData.total} contatos encontrados`);
+      logBulk(`✅ ${uploadData.total} contatos processados`);
+
+      bulkState.contatos = (uploadData.contatos || []).map((c) => ({
+        ...c,
+        selecionado: c.valido === true,
+      }));
+      bulkState.validado = true;
+      renderContacts();
+
+      startBulkBtn.disabled = false;
+      startBulkBtn.textContent = '🚀 Iniciar Envio';
+      logBulk('✅ Validação concluída. Revise e selecione os contatos.');
+      return;
     }
 
-    const uploadData = await uploadRes.json();
-    console.log(`✅ ${uploadData.total} contatos encontrados`);
+    const selecionados = bulkState.contatos.filter(c => c.selecionado);
+    if (selecionados.length === 0) {
+      throw new Error('Selecione ao menos um contato válido');
+    }
 
     // 2. Iniciar envio
-    const startRes = await fetch('/api/bulk/start', {
+    const startRes = await fetch('/api/bulk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        action: 'start',
         template: bulkState.template,
         language: bulkState.language,
         mission: bulkState.mission,
+        contatos: selecionados,
       }),
     });
 
@@ -115,11 +197,13 @@ async function iniciarEnvio() {
 
     bulkState.enviando = true;
     if (bulkStatus) bulkStatus.classList.remove('hidden');
+    logBulk('🚀 Envio iniciado');
 
     // 3. Monitorar status
     monitorarEnvio();
   } catch (erro) {
     console.error('❌ Erro:', erro);
+    logBulk(`❌ Erro: ${erro.message}`);
     alert(`Erro: ${erro.message}`);
     startBulkBtn.disabled = false;
     startBulkBtn.textContent = '🚀 Iniciar Envio';
@@ -132,7 +216,7 @@ async function iniciarEnvio() {
 async function monitorarEnvio() {
   const interval = setInterval(async () => {
     try {
-      const res = await fetch('/api/bulk/status');
+      const res = await fetch('/api/bulk');
       const status = await res.json();
 
       // Atualizar UI
@@ -171,9 +255,11 @@ async function monitorarEnvio() {
         if (document.getElementById('statusText')) {
           document.getElementById('statusText').textContent = '✅ Envio concluído!';
         }
+        logBulk('✅ Envio concluído');
       }
     } catch (erro) {
       console.error('Erro ao monitorar:', erro);
+      logBulk(`❌ Erro ao monitorar: ${erro.message || erro}`);
       clearInterval(interval);
     }
   }, 1000); // Atualizar a cada 1 segundo
