@@ -101,7 +101,15 @@ body {
 
 #bulk-section.active {
   display: flex;
-  grid-template-columns: 1fr;
+  flex-direction: column;
+  height: calc(100vh - 64px);
+  overflow: hidden;
+}
+
+.bulk-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 24px;
 }
 
 .sidebar {
@@ -244,7 +252,7 @@ body {
 
 /* Bulk Messaging */
 .bulk-container {
-  padding: 40px;
+  padding: 32px;
   max-width: 1100px;
   margin: 0 auto;
   display: grid;
@@ -264,15 +272,15 @@ body {
 
 .bulk-contacts,
 .bulk-logs {
-  margin-top: 24px;
+  margin-top: 8px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: calc(100vh - 320px);
+  max-height: calc(100vh - 300px);
 }
 
 .bulk-contacts {
@@ -296,6 +304,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding-right: 4px;
 }
 
 .bulk-contact-item {
@@ -308,6 +317,7 @@ body {
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 13px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
 }
 
 .bulk-contact-left {
@@ -343,12 +353,14 @@ body {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 8px;
+  padding-right: 6px;
 }
 
 .bulk-log-item {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
   color: var(--muted);
+  word-break: break-word;
 }
 
 .bulk-log-item:last-child {
@@ -359,12 +371,13 @@ body {
   background: var(--panel);
   padding: 24px;
   border-radius: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 8px;
   grid-area: form;
 }
 
 .bulk-status {
   grid-area: status;
+  margin-top: 8px;
 }
 
 @media (max-width: 900px) {
