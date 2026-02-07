@@ -19,6 +19,7 @@ const customTemplate = document.getElementById('customTemplate');
 const languageSelect = document.getElementById('languageSelect');
 const missionInput = document.getElementById('missionName');
 const startBulkBtn = document.getElementById('startBulkBtn');
+const forceSendBtn = document.getElementById('forceSendBtn');
 const bulkStatus = document.getElementById('bulkStatus');
 const bulkContactsInfo = document.getElementById('bulkContactsInfo');
 const bulkContactsList = document.getElementById('bulkContactsList');
@@ -41,8 +42,12 @@ function renderContacts() {
     const item = document.createElement('div');
     item.className = 'bulk-contact-item';
     const checked = c.selecionado ? 'checked' : '';
-    const statusClass = c.valido ? 'valid' : 'invalid';
-    const statusText = c.valido ? '✅ WhatsApp' : `❌ ${c.motivo || 'Não encontrado'}`;
+    const statusClass = c.valido === true ? 'valid' : c.valido === false ? 'invalid' : 'unknown';
+    const statusText = c.valido === true
+      ? '✅ WhatsApp'
+      : c.valido === false
+        ? `❌ ${c.motivo || 'Não encontrado'}`
+        : `⚠️ ${c.motivo || 'Não verificado'}`;
     item.innerHTML = `
       <div class="bulk-contact-left">
         <input type="checkbox" data-idx="${idx}" ${checked} />
@@ -68,10 +73,11 @@ function renderContacts() {
 
 function updateContactsInfo() {
   const total = bulkState.contatos.length;
-  const validos = bulkState.contatos.filter(c => c.valido).length;
+  const validos = bulkState.contatos.filter(c => c.valido === true).length;
+  const naoVerificados = bulkState.contatos.filter(c => c.valido === null).length;
   const selecionados = bulkState.contatos.filter(c => c.selecionado).length;
   if (bulkContactsInfo) {
-    bulkContactsInfo.textContent = `Total: ${total} | Válidos: ${validos} | Selecionados: ${selecionados}`;
+    bulkContactsInfo.textContent = `Total: ${total} | Válidos: ${validos} | Não verificados: ${naoVerificados} | Selecionados: ${selecionados}`;
   }
 }
 
@@ -83,6 +89,7 @@ if (csvFileInput) {
     bulkState.contatos = [];
     renderContacts();
     logBulk('📄 CSV atualizado. Pronto para validar.');
+    if (forceSendBtn) forceSendBtn.style.display = 'none';
   });
 }
 
@@ -121,10 +128,14 @@ if (startBulkBtn) {
   startBulkBtn.addEventListener('click', iniciarEnvio);
 }
 
+if (forceSendBtn) {
+  forceSendBtn.addEventListener('click', () => iniciarEnvio(true));
+}
+
 /**
  * Iniciar envio em massa
  */
-async function iniciarEnvio() {
+async function iniciarEnvio(forcarEnvio = false) {
   if (!bulkState.csvFile) {
     alert('❌ Selecione um arquivo CSV');
     return;
@@ -137,6 +148,7 @@ async function iniciarEnvio() {
 
   startBulkBtn.disabled = true;
   startBulkBtn.textContent = bulkState.validado ? '⏳ Enviando...' : '⏳ Validando...';
+  if (forceSendBtn) forceSendBtn.disabled = true;
 
   try {
     if (!bulkState.validado) {
@@ -169,15 +181,29 @@ async function iniciarEnvio() {
 
       bulkState.contatos = (uploadData.contatos || []).map((c) => ({
         ...c,
-        selecionado: c.valido === true,
+        selecionado: c.valido !== false,
       }));
       bulkState.validado = true;
       renderContacts();
 
+      if (uploadData.validacaoDisponivel === false) {
+        logBulk('⚠️ Validação indisponível. Verifique WHATSAPP_PHONE_NUMBER_ID e permissões do token.');
+        if (forceSendBtn) forceSendBtn.style.display = 'inline-flex';
+      }
+
       startBulkBtn.disabled = false;
       startBulkBtn.textContent = '🚀 Iniciar Envio';
+      if (forceSendBtn) forceSendBtn.disabled = false;
       logBulk('✅ Validação concluída. Revise e selecione os contatos.');
       return;
+    }
+
+    if (forcarEnvio) {
+      bulkState.contatos.forEach((c) => {
+        c.selecionado = true;
+      });
+      renderContacts();
+      logBulk('⚠️ Envio forçado: todos os contatos selecionados.');
     }
 
     const selecionados = bulkState.contatos.filter(c => c.selecionado);
@@ -213,6 +239,7 @@ async function iniciarEnvio() {
     bulkState.enviando = true;
     if (bulkStatus) bulkStatus.classList.remove('hidden');
     logBulk('🚀 Envio iniciado');
+    if (forceSendBtn) forceSendBtn.style.display = 'none';
 
     // 3. Monitorar status
     monitorarEnvio();
@@ -222,6 +249,7 @@ async function iniciarEnvio() {
     alert(`Erro: ${erro.message}`);
     startBulkBtn.disabled = false;
     startBulkBtn.textContent = '🚀 Iniciar Envio';
+    if (forceSendBtn) forceSendBtn.disabled = false;
   }
 }
 

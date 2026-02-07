@@ -302,6 +302,9 @@ body {
 .bulk-contact-status.invalid {
   color: #fca5a5;
 }
+.bulk-contact-status.unknown {
+  color: #f59e0b;
+}
 
 .bulk-logs-list {
   max-height: 200px;

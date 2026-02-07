@@ -129,12 +129,16 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
-async function validarNumerosWhatsApp(numeros: string[]): Promise<Map<string, { valido: boolean; wa_id?: string; motivo?: string }>> {
-  const resultado = new Map<string, { valido: boolean; wa_id?: string; motivo?: string }>();
+async function validarNumerosWhatsApp(numeros: string[]): Promise<{
+  resultado: Map<string, { valido: boolean | null; wa_id?: string; motivo?: string }>;
+  disponivel: boolean;
+}> {
+  const resultado = new Map<string, { valido: boolean | null; wa_id?: string; motivo?: string }>();
+  let disponivel = true;
 
   if (!config.whatsapp.token || !config.whatsapp.numberId) {
-    numeros.forEach((n) => resultado.set(n, { valido: false, motivo: 'Configuração WhatsApp incompleta' }));
-    return resultado;
+    numeros.forEach((n) => resultado.set(n, { valido: null, motivo: 'Configuração WhatsApp incompleta' }));
+    return { resultado, disponivel: false };
   }
 
   const apiVersion = config.whatsapp.apiVersion;
@@ -166,11 +170,15 @@ async function validarNumerosWhatsApp(numeros: string[]): Promise<Map<string, { 
       });
     } catch (erro: any) {
       const motivo = erro?.response?.data?.error?.message || erro.message || 'erro de validação';
-      chunk.forEach((n) => resultado.set(n, { valido: false, motivo }));
+      const indisponivel = /unsupported post request/i.test(motivo) || /does not exist/i.test(motivo);
+      if (indisponivel) {
+        disponivel = false;
+      }
+      chunk.forEach((n) => resultado.set(n, { valido: indisponivel ? null : false, motivo }));
     }
   }
 
-  return resultado;
+  return { resultado, disponivel };
 }
 
 async function lerStatus(): Promise<BulkStatus> {
@@ -261,28 +269,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const numeros = Array.from(new Set(dados.map((d) => normalizarNumero(d.numero || d.telefone || '')).filter(Boolean)));
         console.log(`  🔎 Validando ${numeros.length} números no WhatsApp...`);
 
-        const validacao = await validarNumerosWhatsApp(numeros);
+        const { resultado: validacao, disponivel } = await validarNumerosWhatsApp(numeros);
         const contatos = dados.map((d) => {
           const numero = normalizarNumero(d.numero || d.telefone || '');
           const info = validacao.get(numero);
           return {
             ...d,
             numero,
-            valido: info?.valido ?? false,
+            valido: info?.valido ?? null,
             wa_id: info?.wa_id,
             motivo: info?.motivo,
           };
         }).filter(c => c.numero);
 
-        const validos = contatos.filter(c => c.valido).length;
-        console.log(`  ✅ Válidos: ${validos} | ❌ Inválidos: ${contatos.length - validos}`);
+        const validos = contatos.filter(c => c.valido === true).length;
+        const invalidos = contatos.filter(c => c.valido === false).length;
+        const naoVerificados = contatos.filter(c => c.valido === null).length;
+        console.log(`  ✅ Válidos: ${validos} | ❌ Inválidos: ${invalidos} | ⚠️ Não verificados: ${naoVerificados}`);
         console.log('='.repeat(50) + '\n');
 
         res.json({
           ok: true,
           total: contatos.length,
           validos,
-          invalidos: contatos.length - validos,
+          invalidos,
+          naoVerificados,
+          validacaoDisponivel: disponivel,
           contatos,
           preview: contatos.slice(0, 3),
         });
