@@ -8,6 +8,7 @@
     "deploy": "vercel --prod"
   },
   "devDependencies": {
+    "@types/csv-parse": "^1.2.5",
     "@types/node": "^20.11.0",
     "@vercel/node": "^4.0.0",
     "typescript": "^5.3.3"
@@ -15,6 +16,7 @@
   "dependencies": {
     "@upstash/redis": "^1.36.2",
     "axios": "^1.13.4",
+    "csv-parse": "^5.6.0",
     "dotenv": "^17.2.3"
   }
 }

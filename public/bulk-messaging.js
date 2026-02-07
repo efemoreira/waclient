@@ -151,11 +151,19 @@ async function iniciarEnvio() {
       });
 
       if (!uploadRes.ok) {
-        const err = await uploadRes.json();
-        throw new Error(err.erro || 'Erro ao enviar arquivo');
+        const raw = await uploadRes.text();
+        let errMsg = 'Erro ao enviar arquivo';
+        try {
+          const parsed = JSON.parse(raw);
+          errMsg = parsed.erro || errMsg;
+        } catch {
+          errMsg = raw || errMsg;
+        }
+        throw new Error(errMsg);
       }
 
-      const uploadData = await uploadRes.json();
+      const uploadText = await uploadRes.text();
+      const uploadData = JSON.parse(uploadText);
       console.log(`✅ ${uploadData.total} contatos encontrados`);
       logBulk(`✅ ${uploadData.total} contatos processados`);
 
@@ -191,8 +199,15 @@ async function iniciarEnvio() {
     });
 
     if (!startRes.ok) {
-      const err = await startRes.json();
-      throw new Error(err.erro || 'Erro ao iniciar envio');
+      const raw = await startRes.text();
+      let errMsg = 'Erro ao iniciar envio';
+      try {
+        const parsed = JSON.parse(raw);
+        errMsg = parsed.erro || errMsg;
+      } catch {
+        errMsg = raw || errMsg;
+      }
+      throw new Error(errMsg);
     }
 
     bulkState.enviando = true;
