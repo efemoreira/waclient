@@ -10,6 +10,9 @@ export interface Contact {
   link?: string;
   template?: string;
   language?: string;
+  marketing?: boolean;
+  productPolicy?: 'CLOUD_API_FALLBACK' | 'STRICT';
+  messageActivitySharing?: boolean;
   status?: string;
   mensagem_id?: string;
   erro?: string;
@@ -58,12 +61,25 @@ export class EnvioMassa {
 
       let response;
       if (contato.template) {
-        response = await this.client.sendTemplateMessage(
+        if (contato.marketing) {
+          response = await this.client.sendMarketingTemplateMessage(
+            numero,
+            contato.template,
+            [],
+            contato.language || 'pt_BR',
+            {
+              productPolicy: contato.productPolicy,
+              messageActivitySharing: contato.messageActivitySharing,
+            }
+          );
+        } else {
+          response = await this.client.sendTemplateMessage(
           numero,
           contato.template,
           [],
           contato.language || 'pt_BR'
-        );
+          );
+        }
       } else {
         let texto = contato.mensagem;
         if (contato.link) {

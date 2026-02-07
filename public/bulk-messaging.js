@@ -10,6 +10,11 @@ const bulkState = {
   enviando: false,
   contatos: [],
   validado: false,
+  lastErrorCount: 0,
+  lastErrorKeys: new Set(),
+  marketing: false,
+  productPolicy: '',
+  messageActivitySharing: false,
 };
 
 // Elementos
@@ -18,6 +23,9 @@ const templateSelect = document.getElementById('templateSelect');
 const customTemplate = document.getElementById('customTemplate');
 const languageSelect = document.getElementById('languageSelect');
 const missionInput = document.getElementById('missionName');
+const marketingMessages = document.getElementById('marketingMessages');
+const productPolicy = document.getElementById('productPolicy');
+const messageActivitySharing = document.getElementById('messageActivitySharing');
 const startBulkBtn = document.getElementById('startBulkBtn');
 const forceSendBtn = document.getElementById('forceSendBtn');
 const bulkStatus = document.getElementById('bulkStatus');
@@ -124,6 +132,24 @@ if (missionInput) {
   });
 }
 
+if (marketingMessages) {
+  marketingMessages.addEventListener('change', (e) => {
+    bulkState.marketing = e.target.checked;
+  });
+}
+
+if (productPolicy) {
+  productPolicy.addEventListener('change', (e) => {
+    bulkState.productPolicy = e.target.value;
+  });
+}
+
+if (messageActivitySharing) {
+  messageActivitySharing.addEventListener('change', (e) => {
+    bulkState.messageActivitySharing = e.target.checked;
+  });
+}
+
 if (startBulkBtn) {
   startBulkBtn.addEventListener('click', iniciarEnvio);
 }
@@ -220,6 +246,9 @@ async function iniciarEnvio(forcarEnvio = false) {
         template: bulkState.template,
         language: bulkState.language,
         mission: bulkState.mission,
+        marketing: bulkState.marketing,
+        productPolicy: bulkState.productPolicy || undefined,
+        messageActivitySharing: bulkState.messageActivitySharing,
         contatos: selecionados,
       }),
     });
@@ -299,6 +328,20 @@ async function monitorarEnvio() {
           document.getElementById('statusText').textContent = '✅ Envio concluído!';
         }
         logBulk('✅ Envio concluído');
+      }
+
+      if (Array.isArray(status.lastErrors)) {
+        status.lastErrors.forEach((e) => {
+          const key = `${e.numero}-${e.erro}`;
+          if (!bulkState.lastErrorKeys.has(key)) {
+            bulkState.lastErrorKeys.add(key);
+            logBulk(`❌ ${e.numero}: ${e.erro}`);
+          }
+        });
+      }
+
+      if (typeof status.erros === 'number' && status.erros > bulkState.lastErrorCount) {
+        bulkState.lastErrorCount = status.erros;
       }
     } catch (erro) {
       console.error('Erro ao monitorar:', erro);

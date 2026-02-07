@@ -150,7 +150,11 @@ export async function sendTemplateMessage(
   phoneNumber: string,
   templateName: string,
   components: any[] = [],
-  languageCode: string = 'en_US'
+  languageCode: string = 'en_US',
+  options: {
+    productPolicy?: 'CLOUD_API_FALLBACK' | 'STRICT';
+    messageActivitySharing?: boolean;
+  } = {}
 ): Promise<AxiosResponse> {
   const payload = {
     messaging_product: 'whatsapp',
@@ -162,6 +166,10 @@ export async function sendTemplateMessage(
       language: { code: languageCode },
       components: components,
     },
+    ...(options.productPolicy ? { product_policy: options.productPolicy } : {}),
+    ...(typeof options.messageActivitySharing === 'boolean'
+      ? { message_activity_sharing: options.messageActivitySharing }
+      : {}),
   };
 
   return axios.post(url, payload, {

@@ -22,6 +22,7 @@ interface BulkStatus {
   template: string;
   language: string;
   timestamp: number;
+  lastErrors?: Array<{ numero: string; erro: string; at: number }>;
 }
 
 const defaultStatus: BulkStatus = {
@@ -34,6 +35,7 @@ const defaultStatus: BulkStatus = {
   template: '',
   language: 'pt_BR',
   timestamp: Date.now(),
+  lastErrors: [],
 };
 
 function normalizarNumero(numero: string): string {
@@ -235,12 +237,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('\n' + '='.repeat(50));
     console.log('📤 POST /api/bulk');
     
-    const { action, template, language, mission, csvPath } = req.body as {
+    const { action, template, language, mission, csvPath, marketing, productPolicy, messageActivitySharing } = req.body as {
       action?: string;
       template?: string;
       language?: string;
       mission?: string;
       csvPath?: string;
+      marketing?: boolean;
+      productPolicy?: 'CLOUD_API_FALLBACK' | 'STRICT';
+      messageActivitySharing?: boolean;
     };
 
     console.log(`  Ação: ${action || 'vazio'}`);
@@ -352,6 +357,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             mensagem: c.mensagem || '',
             link: c.link || '',
             status: 'pendente',
+              marketing: Boolean(marketing),
+            productPolicy,
+            messageActivitySharing,
           } as any;
           if (template === 'fliacao') {
             base.template = 'fliacao';
@@ -372,6 +380,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           template,
           language: language || 'pt_BR',
           timestamp: Date.now(),
+          lastErrors: [],
         };
         
         await salvarStatus(novoStatus);
@@ -383,6 +392,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               novoStatus.enviados += 1;
             } else if (contato.status === 'erro') {
               novoStatus.erros += 1;
+              if (contato.erro) {
+                novoStatus.lastErrors = [
+                  { numero: contato.numero, erro: contato.erro, at: Date.now() },
+                  ...(novoStatus.lastErrors || []),
+                ].slice(0, 10);
+              }
             }
             novoStatus.timestamp = Date.now();
             await salvarStatus(novoStatus);

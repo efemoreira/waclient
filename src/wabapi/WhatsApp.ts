@@ -76,6 +76,7 @@ export class WhatsApp {
   public versionNumber: number;
   public baseUrl: string;
   public msgUrl: string;
+  public marketingMsgUrl: string;
   public mediaUrl: string;
   private dispatcher: Dispatcher;
 
@@ -90,6 +91,7 @@ export class WhatsApp {
 
     this.baseUrl = `https://graph.facebook.com/v${this.versionNumber}.0`;
     this.msgUrl = `${this.baseUrl}/${this.id}/messages`;
+    this.marketingMsgUrl = `${this.baseUrl}/${this.id}/marketing_messages`;
     this.mediaUrl = `${this.baseUrl}/${this.id}/media`;
 
     this.dispatcher = new Dispatcher(this, config.markAsRead !== false);
@@ -108,6 +110,7 @@ export class WhatsApp {
     this.versionNumber = version;
     this.baseUrl = `https://graph.facebook.com/v${this.versionNumber}.0`;
     this.msgUrl = `${this.baseUrl}/${this.id}/messages`;
+    this.marketingMsgUrl = `${this.baseUrl}/${this.id}/marketing_messages`;
     this.mediaUrl = `${this.baseUrl}/${this.id}/media`;
   }
 
@@ -176,6 +179,32 @@ export class WhatsApp {
       templateName,
       components,
       languageCode
+    );
+  }
+
+  /**
+   * Send marketing template message (marketing_messages endpoint)
+   */
+  async sendMarketingTemplateMessage(
+    phoneNumber: string,
+    templateName: string,
+    components: TemplateComponent[] = [],
+    languageCode: string = 'pt_BR',
+    options: {
+      productPolicy?: 'CLOUD_API_FALLBACK' | 'STRICT';
+      messageActivitySharing?: boolean;
+    } = {}
+  ): Promise<AxiosResponse> {
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+
+    return sendTemplateMessage(
+      this.marketingMsgUrl,
+      this.token,
+      formattedPhone,
+      templateName,
+      components,
+      languageCode,
+      options
     );
   }
 

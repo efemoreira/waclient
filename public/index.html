@@ -145,6 +145,32 @@
               </div>
             </div>
 
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="marketingMessages" />
+                Usar endpoint de marketing (marketing_messages)
+              </label>
+              <small>Requer termos de marketing aceitos e template aprovado.</small>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="productPolicy">Política de fallback</label>
+                <select id="productPolicy">
+                  <option value="">Padrão (conta)</option>
+                  <option value="CLOUD_API_FALLBACK">CLOUD_API_FALLBACK</option>
+                  <option value="STRICT">STRICT</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>
+                  <input type="checkbox" id="messageActivitySharing" />
+                  Compartilhar atividade da mensagem
+                </label>
+                <small>Controla message_activity_sharing.</small>
+              </div>
+            </div>
+
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <button id="startBulkBtn" class="btn btn-primary">🚀 Iniciar Envio</button>
               <button id="forceSendBtn" class="btn btn-secondary" style="display:none;">⚠️ Enviar mesmo assim</button>
