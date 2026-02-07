@@ -1,5 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import axios from 'axios';
+import { parse } from 'csv-parse/sync';
 import { EnvioMassa } from '../src/bulk/envio-massa';
 import { config, validateConfig } from '../src/config';
 import { promises as fs } from 'fs';
@@ -41,20 +42,31 @@ function normalizarNumero(numero: string): string {
   return digits.startsWith('55') ? digits : `55${digits}`;
 }
 
+function detectarDelimiter(csv: string): string {
+  const primeiraLinha = csv.split('\n').find(l => l.trim()) || '';
+  const virgulas = (primeiraLinha.match(/,/g) || []).length;
+  const pontosEVirgula = (primeiraLinha.match(/;/g) || []).length;
+  return pontosEVirgula > virgulas ? ';' : ',';
+}
+
 function parseCsv(csv: string): any[] {
-  const linhas = csv.split('\n').filter(l => l.trim());
-  if (linhas.length < 2) return [];
-  const headers = linhas[0].split(',').map(h => h.trim().toLowerCase());
-  return linhas.slice(1).map(linha => {
-    const valores = linha.split(',');
-    const obj: any = {};
-    headers.forEach((h, i) => {
-      obj[h] = valores[i]?.trim() || '';
-    });
-    if (obj.telefone) obj.telefone = normalizarNumero(obj.telefone);
-    if (obj.numero) obj.numero = normalizarNumero(obj.numero);
-    return obj;
-  }).filter(obj => obj.telefone || obj.numero);
+  const delimiter = detectarDelimiter(csv);
+  const records = parse(csv, {
+    columns: (header) => header.map((h: string) => h.trim().toLowerCase()),
+    skip_empty_lines: true,
+    relax_column_count: true,
+    trim: true,
+    bom: true,
+    delimiter,
+  }) as any[];
+
+  return records
+    .map((obj) => {
+      if (obj.telefone) obj.telefone = normalizarNumero(obj.telefone);
+      if (obj.numero) obj.numero = normalizarNumero(obj.numero);
+      return obj;
+    })
+    .filter((obj) => obj.telefone || obj.numero);
 }
 
 function chunkArray<T>(arr: T[], size: number): T[][] {

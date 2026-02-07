@@ -83,6 +83,7 @@ const authPassword = document.getElementById('authPassword');
 const authError = document.getElementById('authError');
 
 let appPassword = sessionStorage.getItem('appPassword') || '';
+let isAuthed = false;
 
 async function authFetch(url, options = {}) {
   const headers = {
@@ -96,6 +97,7 @@ async function tryAuth() {
   try {
     const res = await authFetch('/api/conversations');
     if (res.ok) {
+      isAuthed = true;
       authError.style.display = 'none';
       authModal.close();
       return true;
@@ -103,6 +105,7 @@ async function tryAuth() {
   } catch (_err) {
     // ignore
   }
+  isAuthed = false;
   authError.style.display = 'block';
   return false;
 }
@@ -426,7 +429,9 @@ searchInput.addEventListener('input', (e) => {
   renderConversationList();
 });
 
-setInterval(fetchConversations, 3000);
+setInterval(() => {
+  if (isAuthed) fetchConversations();
+}, 3000);
 tryAuth().then((ok) => {
   if (ok) fetchConversations();
 });
