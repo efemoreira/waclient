@@ -249,11 +249,17 @@ body {
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "title title"
+    "form form"
+    "contacts logs"
+    "status status";
   gap: 20px;
+  min-height: calc(100vh - 140px);
 }
 
 .bulk-container > h2 {
-  grid-column: 1 / -1;
+  grid-area: title;
 }
 
 .bulk-contacts,
@@ -263,14 +269,18 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(100vh - 320px);
 }
 
 .bulk-contacts {
-  grid-column: 1 / 2;
+  grid-area: contacts;
 }
 
 .bulk-logs {
-  grid-column: 2 / 3;
+  grid-area: logs;
 }
 
 .bulk-contacts-info {
@@ -280,7 +290,8 @@ body {
 }
 
 .bulk-contacts-list {
-  max-height: 320px;
+  flex: 1;
+  min-height: 140px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -322,7 +333,8 @@ body {
 }
 
 .bulk-logs-list {
-  max-height: 320px;
+  flex: 1;
+  min-height: 140px;
   overflow-y: auto;
   font-family: 'Monaco', 'Courier New', monospace;
   font-size: 11px;
@@ -348,21 +360,27 @@ body {
   padding: 24px;
   border-radius: 8px;
   margin-bottom: 24px;
-  grid-column: 1 / -1;
+  grid-area: form;
 }
 
 .bulk-status {
-  grid-column: 1 / -1;
+  grid-area: status;
 }
 
 @media (max-width: 900px) {
   .bulk-container {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "title"
+      "form"
+      "contacts"
+      "logs"
+      "status";
   }
 
   .bulk-contacts,
   .bulk-logs {
-    grid-column: 1 / -1;
+    max-height: none;
   }
 }
 
