@@ -367,8 +367,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           total: contatosFormatados.length,
           enviados: 0,
           erros: 0,
-          loteAtual: 0,
-          totalLotes: 0,
+          loteAtual: contatosFormatados.length > 0 ? 1 : 0,
+          totalLotes: contatosFormatados.length > 0 ? 1 : 0,
           template,
           language: language || 'pt_BR',
           timestamp: Date.now(),
@@ -377,7 +377,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await salvarStatus(novoStatus);
 
         // Iniciar envio em background (fire and forget)
-        const envio = new EnvioMassa();
+        const envio = new EnvioMassa({
+          onProgress: async ({ contato }) => {
+            if (contato.status === 'enviado') {
+              novoStatus.enviados += 1;
+            } else if (contato.status === 'erro') {
+              novoStatus.erros += 1;
+            }
+            novoStatus.timestamp = Date.now();
+            await salvarStatus(novoStatus);
+          },
+        });
         envio.executar(contatosFormatados).then(async () => {
           novoStatus.ativo = false;
           await salvarStatus(novoStatus);

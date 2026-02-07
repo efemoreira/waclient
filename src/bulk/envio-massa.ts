@@ -21,8 +21,13 @@ export interface Contact {
 export class EnvioMassa {
   private client: WhatsApp;
   private delayMensagens: number;
+  private onProgress?: (info: {
+    contato: Contact;
+    index: number;
+    total: number;
+  }) => Promise<void> | void;
 
-  constructor() {
+  constructor(options?: { onProgress?: (info: { contato: Contact; index: number; total: number }) => Promise<void> | void }) {
     const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
     const apiVersion = parseInt(versionStr, 10);
     console.log(`🔧 BulkMessaging: Usando API v${apiVersion}.0`);
@@ -32,6 +37,7 @@ export class EnvioMassa {
       version: apiVersion,
     });
     this.delayMensagens = config.bulk.delayBetweenMessages;
+    this.onProgress = options?.onProgress;
   }
 
   private normalizarNumero(numero: string): string {
@@ -88,6 +94,9 @@ export class EnvioMassa {
       }
 
       await this.enviarParaContato(contato);
+      if (this.onProgress) {
+        await this.onProgress({ contato, index: i + 1, total: contatos.length });
+      }
 
       if (i < contatos.length - 1) {
         await new Promise(resolve => setTimeout(resolve, this.delayMensagens));
