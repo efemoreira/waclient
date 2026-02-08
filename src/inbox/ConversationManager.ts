@@ -46,6 +46,7 @@ export class ConversationManager {
   private lastLoadTime: number = 0;
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
   private resetAt: number = 0;
+  private autoReplyText: string = 'Obrigado pela mensagem! Por favor, envie sua mensagem para o número +5585988928272.';
 
   private log(msg: string): void {
     logger.info('Inbox', msg);
@@ -515,6 +516,13 @@ export class ConversationManager {
 
             await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
             this.log(`✅ De ${de}: "${texto.substring(0, 50)}..."`);
+
+            try {
+              await this.enviarMensagem(de, this.autoReplyText);
+              this.log(`🤖 Auto-resposta enviada para ${de}`);
+            } catch (erro: any) {
+              this.log(`❌ Falha ao enviar auto-resposta para ${de}: ${erro?.message || erro}`);
+            }
           }
         }
 
