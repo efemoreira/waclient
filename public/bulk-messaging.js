@@ -28,6 +28,7 @@ const productPolicy = document.getElementById('productPolicy');
 const messageActivitySharing = document.getElementById('messageActivitySharing');
 const startBulkBtn = document.getElementById('startBulkBtn');
 const forceSendBtn = document.getElementById('forceSendBtn');
+const stopBulkBtn = document.getElementById('stopBulkBtn');
 const bulkStatus = document.getElementById('bulkStatus');
 const bulkContactsInfo = document.getElementById('bulkContactsInfo');
 const bulkContactsList = document.getElementById('bulkContactsList');
@@ -158,6 +159,10 @@ if (forceSendBtn) {
   forceSendBtn.addEventListener('click', () => iniciarEnvio(true));
 }
 
+if (stopBulkBtn) {
+  stopBulkBtn.addEventListener('click', pararEnvio);
+}
+
 /**
  * Iniciar envio em massa
  */
@@ -175,6 +180,7 @@ async function iniciarEnvio(forcarEnvio = false) {
   startBulkBtn.disabled = true;
   startBulkBtn.textContent = bulkState.validado ? '⏳ Enviando...' : '⏳ Validando...';
   if (forceSendBtn) forceSendBtn.disabled = true;
+  if (stopBulkBtn) stopBulkBtn.disabled = true;
 
   try {
     if (!bulkState.validado) {
@@ -220,6 +226,7 @@ async function iniciarEnvio(forcarEnvio = false) {
       startBulkBtn.disabled = false;
       startBulkBtn.textContent = '🚀 Iniciar Envio';
       if (forceSendBtn) forceSendBtn.disabled = false;
+      if (stopBulkBtn) stopBulkBtn.disabled = false;
       logBulk('✅ Validação concluída. Revise e selecione os contatos.');
       return;
     }
@@ -269,6 +276,10 @@ async function iniciarEnvio(forcarEnvio = false) {
     if (bulkStatus) bulkStatus.classList.remove('hidden');
     logBulk('🚀 Envio iniciado');
     if (forceSendBtn) forceSendBtn.style.display = 'none';
+    if (stopBulkBtn) {
+      stopBulkBtn.style.display = 'inline-flex';
+      stopBulkBtn.disabled = false;
+    }
 
     // 3. Monitorar status
     monitorarEnvio();
@@ -279,6 +290,29 @@ async function iniciarEnvio(forcarEnvio = false) {
     startBulkBtn.disabled = false;
     startBulkBtn.textContent = '🚀 Iniciar Envio';
     if (forceSendBtn) forceSendBtn.disabled = false;
+    if (stopBulkBtn) stopBulkBtn.disabled = false;
+  }
+}
+
+async function pararEnvio() {
+  if (!bulkState.enviando) return;
+  if (!confirm('Parar o envio em massa?')) return;
+  try {
+    if (stopBulkBtn) stopBulkBtn.disabled = true;
+    const res = await fetch('/api/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'stop' }),
+    });
+    if (!res.ok) {
+      const raw = await res.text();
+      throw new Error(raw || 'Falha ao parar envio');
+    }
+    logBulk('🛑 Envio interrompido pelo usuário');
+  } catch (erro) {
+    logBulk(`❌ Erro ao parar envio: ${erro.message}`);
+  } finally {
+    if (stopBulkBtn) stopBulkBtn.disabled = false;
   }
 }
 
@@ -325,9 +359,11 @@ async function monitorarEnvio() {
         startBulkBtn.textContent = '🚀 Iniciar Envio';
 
         if (document.getElementById('statusText')) {
-          document.getElementById('statusText').textContent = '✅ Envio concluído!';
+          const msg = status.interrompido ? '🛑 Envio interrompido' : '✅ Envio concluído!';
+          document.getElementById('statusText').textContent = msg;
         }
-        logBulk('✅ Envio concluído');
+        logBulk(status.interrompido ? '🛑 Envio interrompido' : '✅ Envio concluído');
+        if (stopBulkBtn) stopBulkBtn.style.display = 'none';
       }
 
       if (Array.isArray(status.lastErrors)) {

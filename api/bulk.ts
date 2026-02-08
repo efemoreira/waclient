@@ -11,6 +11,7 @@ if (!validateConfig()) {
 
 // Store status em arquivo (Vercel tmp)
 const statusFile = '/tmp/bulk-status.json';
+const stopFile = '/tmp/bulk-stop.json';
 
 interface BulkStatus {
   ativo: boolean;
@@ -23,6 +24,8 @@ interface BulkStatus {
   language: string;
   timestamp: number;
   lastErrors?: Array<{ numero: string; erro: string; at: number }>;
+  interrompido?: boolean;
+  mensagem?: string;
 }
 
 const defaultStatus: BulkStatus = {
@@ -36,6 +39,8 @@ const defaultStatus: BulkStatus = {
   language: 'pt_BR',
   timestamp: Date.now(),
   lastErrors: [],
+  interrompido: false,
+  mensagem: '',
 };
 
 function normalizarNumero(numero: string): string {
@@ -194,6 +199,20 @@ async function lerStatus(): Promise<BulkStatus> {
 
 async function salvarStatus(status: BulkStatus): Promise<void> {
   await fs.writeFile(statusFile, JSON.stringify(status, null, 2));
+}
+
+async function salvarStop(flag: boolean): Promise<void> {
+  await fs.writeFile(stopFile, JSON.stringify({ stop: flag, at: Date.now() }));
+}
+
+async function deveParar(): Promise<boolean> {
+  try {
+    const data = await fs.readFile(stopFile, 'utf-8');
+    const parsed = JSON.parse(data);
+    return Boolean(parsed?.stop);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -369,6 +388,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return acc;
         }, []);
 
+        await salvarStop(false);
+
         // Atualizar status como ativo
         const novoStatus: BulkStatus = {
           ativo: true,
@@ -381,6 +402,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           language: language || 'pt_BR',
           timestamp: Date.now(),
           lastErrors: [],
+          interrompido: false,
+          mensagem: '',
         };
         
         await salvarStatus(novoStatus);
@@ -402,6 +425,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             novoStatus.timestamp = Date.now();
             await salvarStatus(novoStatus);
           },
+          shouldStop: async () => {
+            const stop = await deveParar();
+            if (stop) {
+              novoStatus.ativo = false;
+              novoStatus.interrompido = true;
+              novoStatus.mensagem = 'Envio interrompido pelo usuário';
+              await salvarStatus(novoStatus);
+            }
+            return stop;
+          },
         });
         envio.executar(contatosFormatados).then(async () => {
           novoStatus.ativo = false;
@@ -410,6 +443,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }).catch(async (err) => {
           console.error('❌ Erro no envio:', err);
           novoStatus.ativo = false;
+          if (!novoStatus.interrompido) {
+            novoStatus.mensagem = err?.message || 'Erro no envio';
+          }
           await salvarStatus(novoStatus);
         });
 
@@ -417,6 +453,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (erro: any) {
         res.status(500).json({ erro: erro.message });
       }
+      return;
+    }
+
+    if (action === 'stop') {
+      console.log('  🛑 Solicitando parada do envio');
+      await salvarStop(true);
+      const status = await lerStatus();
+      status.ativo = false;
+      status.interrompido = true;
+      status.mensagem = 'Envio interrompido pelo usuário';
+      status.timestamp = Date.now();
+      await salvarStatus(status);
+      res.json({ ok: true, mensagem: 'Envio interrompido' });
       return;
     }
 

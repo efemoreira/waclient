@@ -29,8 +29,12 @@ export class EnvioMassa {
     index: number;
     total: number;
   }) => Promise<void> | void;
+  private shouldStop?: () => Promise<boolean> | boolean;
 
-  constructor(options?: { onProgress?: (info: { contato: Contact; index: number; total: number }) => Promise<void> | void }) {
+  constructor(options?: {
+    onProgress?: (info: { contato: Contact; index: number; total: number }) => Promise<void> | void;
+    shouldStop?: () => Promise<boolean> | boolean;
+  }) {
     const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
     const apiVersion = parseInt(versionStr, 10);
     console.log(`🔧 BulkMessaging: Usando API v${apiVersion}.0`);
@@ -41,6 +45,7 @@ export class EnvioMassa {
     });
     this.delayMensagens = config.bulk.delayBetweenMessages;
     this.onProgress = options?.onProgress;
+    this.shouldStop = options?.shouldStop;
   }
 
   private normalizarNumero(numero: string): string {
@@ -137,6 +142,9 @@ export class EnvioMassa {
    */
   private async procesarContatos(contatos: Contact[]): Promise<void> {
     for (let i = 0; i < contatos.length; i++) {
+      if (this.shouldStop && (await this.shouldStop())) {
+        throw new Error('Envio interrompido pelo usuário');
+      }
       const contato = contatos[i];
 
       if (contato.status === 'enviado') {
