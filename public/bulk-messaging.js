@@ -246,6 +246,8 @@ async function iniciarEnvio(forcarEnvio = false) {
       throw new Error('Selecione ao menos um contato válido');
     }
 
+    logBulk(`📌 Selecionados para envio: ${selecionados.length}`);
+
     // 2. Iniciar envio
     const startRes = await fetch('/api/bulk', {
       method: 'POST',
@@ -283,7 +285,18 @@ async function iniciarEnvio(forcarEnvio = false) {
       stopBulkBtn.disabled = false;
     }
 
-    // 3. Monitorar status
+    // 3. Disparar primeiro lote e monitorar status
+    try {
+      await fetch('/api/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'process' }),
+      });
+    } catch (_err) {
+      // silencioso
+    }
+
+    // 4. Monitorar status
     monitorarEnvio();
   } catch (erro) {
     console.error('❌ Erro:', erro);
@@ -349,7 +362,10 @@ async function monitorarEnvio() {
             ? ` - Lote ${status.loteAtual}/${status.totalLotes}`
             : '';
         if (document.getElementById('statusText')) {
-          document.getElementById('statusText').textContent = `Enviando...${lote}`;
+          const filaInfo = status.filaTotal
+            ? ` | Fila ${status.filaIndex || 0}/${status.filaTotal}`
+            : '';
+          document.getElementById('statusText').textContent = `Enviando...${lote}${filaInfo}`;
         }
       }
 

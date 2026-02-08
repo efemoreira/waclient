@@ -28,6 +28,8 @@ interface BulkStatus {
   interrompido?: boolean;
   mensagem?: string;
   lastRequests?: Array<{ url: string; payload: any; at: number }>;
+  filaTotal?: number;
+  filaIndex?: number;
 }
 
 const defaultStatus: BulkStatus = {
@@ -44,6 +46,8 @@ const defaultStatus: BulkStatus = {
   interrompido: false,
   mensagem: '',
   lastRequests: [],
+  filaTotal: 0,
+  filaIndex: 0,
 };
 
 function normalizarNumero(numero: string): string {
@@ -423,6 +427,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           interrompido: false,
           mensagem: '',
           lastRequests: [],
+          filaTotal: contatosFormatados.length,
+          filaIndex: 0,
         };
         
         await salvarStatus(novoStatus);
@@ -464,6 +470,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const inicio = fila.index || 0;
       const batchSize = config.bulk.batchSize;
+      status.filaTotal = fila.contatos.length;
+      status.filaIndex = inicio;
       const lote = fila.contatos.slice(inicio, inicio + batchSize);
       if (lote.length === 0) {
         status.ativo = false;
