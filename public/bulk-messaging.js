@@ -16,6 +16,7 @@ const bulkState = {
   productPolicy: '',
   messageActivitySharing: false,
   lastRequestKeys: new Set(),
+  processando: false,
 };
 
 // Elementos
@@ -386,6 +387,19 @@ async function monitorarEnvio() {
             logBulk(`📦 ${JSON.stringify(r.payload)}`);
           }
         });
+      }
+
+      if (status.ativo && !bulkState.processando) {
+        bulkState.processando = true;
+        try {
+          await fetch('/api/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'process' }),
+          });
+        } finally {
+          bulkState.processando = false;
+        }
       }
 
       if (typeof status.erros === 'number' && status.erros > bulkState.lastErrorCount) {

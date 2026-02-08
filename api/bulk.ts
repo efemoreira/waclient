@@ -12,6 +12,7 @@ if (!validateConfig()) {
 // Store status em arquivo (Vercel tmp)
 const statusFile = '/tmp/bulk-status.json';
 const stopFile = '/tmp/bulk-stop.json';
+const queueFile = '/tmp/bulk-queue.json';
 
 interface BulkStatus {
   ativo: boolean;
@@ -203,6 +204,19 @@ async function salvarStatus(status: BulkStatus): Promise<void> {
   await fs.writeFile(statusFile, JSON.stringify(status, null, 2));
 }
 
+async function salvarFila(payload: { contatos: any[]; index: number }): Promise<void> {
+  await fs.writeFile(queueFile, JSON.stringify(payload, null, 2));
+}
+
+async function lerFila(): Promise<{ contatos: any[]; index: number } | null> {
+  try {
+    const data = await fs.readFile(queueFile, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    return null;
+  }
+}
+
 async function salvarStop(flag: boolean): Promise<void> {
   await fs.writeFile(stopFile, JSON.stringify({ stop: flag, at: Date.now() }));
 }
@@ -392,14 +406,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         await salvarStop(false);
 
+        await salvarStop(false);
+
         // Atualizar status como ativo
         const novoStatus: BulkStatus = {
           ativo: true,
           total: contatosFormatados.length,
           enviados: 0,
           erros: 0,
-          loteAtual: contatosFormatados.length > 0 ? 1 : 0,
-          totalLotes: contatosFormatados.length > 0 ? 1 : 0,
+          loteAtual: 0,
+          totalLotes: contatosFormatados.length > 0 ? Math.ceil(contatosFormatados.length / config.bulk.batchSize) : 0,
           template,
           language: language || 'pt_BR',
           timestamp: Date.now(),
@@ -410,57 +426,109 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
         
         await salvarStatus(novoStatus);
-
-        // Iniciar envio em background (fire and forget)
-        const envio = new EnvioMassa({
-          onProgress: async ({ contato }) => {
-            if (contato.status === 'enviado') {
-              novoStatus.enviados += 1;
-            } else if (contato.status === 'erro') {
-              novoStatus.erros += 1;
-              if (contato.erro) {
-                novoStatus.lastErrors = [
-                  { numero: contato.numero, erro: contato.erro, at: Date.now() },
-                  ...(novoStatus.lastErrors || []),
-                ].slice(0, 10);
-              }
-            }
-            novoStatus.timestamp = Date.now();
-            await salvarStatus(novoStatus);
-          },
-          onRequest: async ({ url, payload }) => {
-            const item = { url, payload, at: Date.now() };
-            novoStatus.lastRequests = [item, ...(novoStatus.lastRequests || [])].slice(0, 10);
-            novoStatus.timestamp = Date.now();
-            await salvarStatus(novoStatus);
-          },
-          shouldStop: async () => {
-            const stop = await deveParar();
-            if (stop) {
-              novoStatus.ativo = false;
-              novoStatus.interrompido = true;
-              novoStatus.mensagem = 'Envio interrompido pelo usuário';
-              await salvarStatus(novoStatus);
-            }
-            return stop;
-          },
-        });
-        envio.executar(contatosFormatados).then(async () => {
-          novoStatus.ativo = false;
-          await salvarStatus(novoStatus);
-          console.log('✅ Envio concluído');
-        }).catch(async (err) => {
-          console.error('❌ Erro no envio:', err);
-          novoStatus.ativo = false;
-          if (!novoStatus.interrompido) {
-            novoStatus.mensagem = err?.message || 'Erro no envio';
-          }
-          await salvarStatus(novoStatus);
-        });
+        await salvarFila({ contatos: contatosFormatados, index: 0 });
 
         res.json({ ok: true, mensagem: 'Envio iniciado', total: contatosFormatados.length });
       } catch (erro: any) {
         res.status(500).json({ erro: erro.message });
+      }
+      return;
+    }
+
+    if (action === 'process') {
+      const status = await lerStatus();
+      if (!status.ativo) {
+        res.json(status);
+        return;
+      }
+
+      if (await deveParar()) {
+        status.ativo = false;
+        status.interrompido = true;
+        status.mensagem = 'Envio interrompido pelo usuário';
+        status.timestamp = Date.now();
+        await salvarStatus(status);
+        res.json(status);
+        return;
+      }
+
+      const fila = await lerFila();
+      if (!fila || !Array.isArray(fila.contatos)) {
+        status.ativo = false;
+        status.mensagem = 'Fila não encontrada';
+        status.timestamp = Date.now();
+        await salvarStatus(status);
+        res.json(status);
+        return;
+      }
+
+      const inicio = fila.index || 0;
+      const batchSize = config.bulk.batchSize;
+      const lote = fila.contatos.slice(inicio, inicio + batchSize);
+      if (lote.length === 0) {
+        status.ativo = false;
+        status.mensagem = 'Envio concluído';
+        status.timestamp = Date.now();
+        await salvarStatus(status);
+        res.json(status);
+        return;
+      }
+
+      status.loteAtual = Math.floor(inicio / batchSize) + 1;
+      status.timestamp = Date.now();
+      await salvarStatus(status);
+
+      const envio = new EnvioMassa({
+        onProgress: async ({ contato }) => {
+          if (contato.status === 'enviado') {
+            status.enviados += 1;
+          } else if (contato.status === 'erro') {
+            status.erros += 1;
+            if (contato.erro) {
+              status.lastErrors = [
+                { numero: contato.numero, erro: contato.erro, at: Date.now() },
+                ...(status.lastErrors || []),
+              ].slice(0, 10);
+            }
+          }
+          status.timestamp = Date.now();
+          await salvarStatus(status);
+        },
+        onRequest: async ({ url, payload }) => {
+          const item = { url, payload, at: Date.now() };
+          status.lastRequests = [item, ...(status.lastRequests || [])].slice(0, 10);
+          status.timestamp = Date.now();
+          await salvarStatus(status);
+        },
+        shouldStop: async () => {
+          const stop = await deveParar();
+          if (stop) {
+            status.ativo = false;
+            status.interrompido = true;
+            status.mensagem = 'Envio interrompido pelo usuário';
+            await salvarStatus(status);
+          }
+          return stop;
+        },
+      });
+
+      try {
+        await envio.executar(lote);
+        fila.index = inicio + lote.length;
+        await salvarFila(fila);
+        if (fila.index >= fila.contatos.length) {
+          status.ativo = false;
+          status.mensagem = 'Envio concluído';
+        }
+        status.timestamp = Date.now();
+        await salvarStatus(status);
+        res.json(status);
+      } catch (err: any) {
+        status.ativo = false;
+        status.mensagem = err?.message || 'Erro no envio';
+        status.timestamp = Date.now();
+        await salvarStatus(status);
+        res.status(500).json({ erro: status.mensagem });
       }
       return;
     }
