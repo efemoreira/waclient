@@ -61,6 +61,28 @@ export class EnvioMassa {
 
       let response;
       if (contato.template) {
+        const baseUrl = this.client.baseUrl;
+        const endpoint = contato.marketing ? 'marketing_messages' : 'messages';
+        const url = `${baseUrl}/${this.client.id}/${endpoint}`;
+        const payload = {
+          messaging_product: 'whatsapp',
+          to: numero,
+          recipient_type: 'individual',
+          type: 'template',
+          template: {
+            name: contato.template,
+            language: { code: contato.language || 'pt_BR' },
+            components: [],
+          },
+          ...(contato.marketing && contato.productPolicy ? { product_policy: contato.productPolicy } : {}),
+          ...(contato.marketing && typeof contato.messageActivitySharing === 'boolean'
+            ? { message_activity_sharing: contato.messageActivitySharing }
+            : {}),
+        };
+        console.log('📤 Bulk Template POST');
+        console.log('  URL:', url);
+        console.log('  Payload:', JSON.stringify(payload));
+
         if (contato.marketing) {
           response = await this.client.sendMarketingTemplateMessage(
             numero,
@@ -85,6 +107,18 @@ export class EnvioMassa {
         if (contato.link) {
           texto += `\n\n${contato.link}`;
         }
+
+        const url = `${this.client.baseUrl}/${this.client.id}/messages`;
+        const payload = {
+          messaging_product: 'whatsapp',
+          to: numero,
+          recipient_type: 'individual',
+          type: 'text',
+          text: { body: texto, preview_url: true },
+        };
+        console.log('📤 Bulk Text POST');
+        console.log('  URL:', url);
+        console.log('  Payload:', JSON.stringify(payload));
 
         response = await this.client.sendMessage(numero, texto);
       }
