@@ -15,6 +15,7 @@ const bulkState = {
   marketing: false,
   productPolicy: '',
   messageActivitySharing: false,
+  lastRequestKeys: new Set(),
 };
 
 // Elementos
@@ -372,6 +373,17 @@ async function monitorarEnvio() {
           if (!bulkState.lastErrorKeys.has(key)) {
             bulkState.lastErrorKeys.add(key);
             logBulk(`❌ ${e.numero}: ${e.erro}`);
+          }
+        });
+      }
+
+      if (Array.isArray(status.lastRequests)) {
+        status.lastRequests.forEach((r) => {
+          const key = `${r.url}-${JSON.stringify(r.payload)}`;
+          if (!bulkState.lastRequestKeys.has(key)) {
+            bulkState.lastRequestKeys.add(key);
+            logBulk(`➡️ POST ${r.url}`);
+            logBulk(`📦 ${JSON.stringify(r.payload)}`);
           }
         });
       }

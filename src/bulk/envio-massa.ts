@@ -30,10 +30,12 @@ export class EnvioMassa {
     total: number;
   }) => Promise<void> | void;
   private shouldStop?: () => Promise<boolean> | boolean;
+  private onRequest?: (info: { url: string; payload: any; contato: Contact }) => Promise<void> | void;
 
   constructor(options?: {
     onProgress?: (info: { contato: Contact; index: number; total: number }) => Promise<void> | void;
     shouldStop?: () => Promise<boolean> | boolean;
+    onRequest?: (info: { url: string; payload: any; contato: Contact }) => Promise<void> | void;
   }) {
     const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
     const apiVersion = parseInt(versionStr, 10);
@@ -46,6 +48,7 @@ export class EnvioMassa {
     this.delayMensagens = config.bulk.delayBetweenMessages;
     this.onProgress = options?.onProgress;
     this.shouldStop = options?.shouldStop;
+    this.onRequest = options?.onRequest;
   }
 
   private normalizarNumero(numero: string): string {
@@ -87,6 +90,9 @@ export class EnvioMassa {
         console.log('📤 Bulk Template POST');
         console.log('  URL:', url);
         console.log('  Payload:', JSON.stringify(payload));
+        if (this.onRequest) {
+          await this.onRequest({ url, payload, contato });
+        }
 
         if (contato.marketing) {
           response = await this.client.sendMarketingTemplateMessage(
@@ -124,6 +130,9 @@ export class EnvioMassa {
         console.log('📤 Bulk Text POST');
         console.log('  URL:', url);
         console.log('  Payload:', JSON.stringify(payload));
+        if (this.onRequest) {
+          await this.onRequest({ url, payload, contato });
+        }
 
         response = await this.client.sendMessage(numero, texto);
       }

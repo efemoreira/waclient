@@ -26,6 +26,7 @@ interface BulkStatus {
   lastErrors?: Array<{ numero: string; erro: string; at: number }>;
   interrompido?: boolean;
   mensagem?: string;
+  lastRequests?: Array<{ url: string; payload: any; at: number }>;
 }
 
 const defaultStatus: BulkStatus = {
@@ -41,6 +42,7 @@ const defaultStatus: BulkStatus = {
   lastErrors: [],
   interrompido: false,
   mensagem: '',
+  lastRequests: [],
 };
 
 function normalizarNumero(numero: string): string {
@@ -404,6 +406,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           lastErrors: [],
           interrompido: false,
           mensagem: '',
+          lastRequests: [],
         };
         
         await salvarStatus(novoStatus);
@@ -422,6 +425,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 ].slice(0, 10);
               }
             }
+            novoStatus.timestamp = Date.now();
+            await salvarStatus(novoStatus);
+          },
+          onRequest: async ({ url, payload }) => {
+            const item = { url, payload, at: Date.now() };
+            novoStatus.lastRequests = [item, ...(novoStatus.lastRequests || [])].slice(0, 10);
             novoStatus.timestamp = Date.now();
             await salvarStatus(novoStatus);
           },
