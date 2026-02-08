@@ -172,6 +172,10 @@ export async function sendTemplateMessage(
       : {}),
   };
 
+  console.log('📤 WhatsApp Template POST');
+  console.log('  URL:', url);
+  console.log('  Payload:', JSON.stringify(payload));
+
   return axios.post(url, payload, {
     headers: getHeaders(token),
     timeout: TIMEOUT,

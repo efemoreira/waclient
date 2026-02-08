@@ -361,8 +361,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             productPolicy,
             messageActivitySharing,
           } as any;
-          if (template === 'fliacao') {
-            base.template = 'fliacao';
+          if (template) {
+            base.template = template;
             base.language = language || 'pt_BR';
           }
           acc.push(base);
