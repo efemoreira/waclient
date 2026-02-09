@@ -74,6 +74,19 @@ export class ConversationManager {
     return { predio: map[key] || match[1], numero };
   }
 
+  private extrairPredioSomente(texto: string): string | null {
+    const normalizado = this.normalizarTexto(texto).trim();
+    const map: Record<string, string> = {
+      'monte castelo': 'Monte Castelo',
+      'caucaia': 'Caucaia',
+      'araturi': 'Araturi',
+      'novo metropole': 'Novo Metropole',
+    };
+    const match = normalizado.match(/^(monte castelo|caucaia|araturi|novo metropole)$/i);
+    if (!match) return null;
+    return map[match[1]] || match[1];
+  }
+
   private log(msg: string): void {
     logger.info('Inbox', msg);
   }
@@ -569,6 +582,16 @@ export class ConversationManager {
                 }
               }
             } else {
+              const predioSomente = this.extrairPredioSomente(texto);
+              if (predioSomente) {
+                const reply = `✅ Identifiquei o prédio ${predioSomente}. Envie o número após o nome (ex: "${predioSomente} 123").`;
+                try {
+                  await this.enviarMensagem(de, reply);
+                } catch (erro: any) {
+                  this.log(`❌ Falha ao enviar orientação: ${erro?.message || erro}`);
+                }
+                continue;
+              }
               try {
                 await this.enviarMensagem(de, this.autoReplyText);
                 this.log(`🤖 Auto-resposta enviada para ${de}`);
