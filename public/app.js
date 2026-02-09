@@ -66,7 +66,6 @@ const state = {
 const conversationList = document.getElementById('conversationList');
 const messagesEl = document.getElementById('messages');
 const chatHeader = document.getElementById('chatHeader');
-const assumeBtn = document.getElementById('assumeBtn');
 const messageForm = document.getElementById('messageForm');
 const messageInput = document.getElementById('messageInput');
 const searchInput = document.getElementById('searchInput');
@@ -76,7 +75,6 @@ const newChatForm = document.getElementById('newChatForm');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const newPhoneInput = document.getElementById('newPhoneInput');
 const newNameInput = document.getElementById('newNameInput');
-const clearConversationsBtn = document.getElementById('clearConversationsBtn');
 const refreshConversationsBtn = document.getElementById('refreshConversationsBtn');
 refreshConversationsBtn?.addEventListener('click', async () => {
   await fetchConversations();
@@ -178,28 +176,6 @@ closeModalBtn.addEventListener('click', () => {
   newChatModal.close();
 });
 
-clearConversationsBtn?.addEventListener('click', async () => {
-  if (!confirm('Apagar todas as conversas? Essa ação não pode ser desfeita.')) return;
-  logger.add('🧹 Apagando todas as conversas...', 'warning', 'Inbox');
-  try {
-    const res = await authFetch('/api/conversations', { method: 'DELETE' });
-    if (!res.ok) {
-      logger.add(`❌ Falha ao apagar conversas (${res.status})`, 'error', 'Inbox');
-      return;
-    }
-    state.conversations = [];
-    state.selectedId = null;
-    renderConversationList();
-    messagesEl.innerHTML = '';
-    chatHeader.querySelector('h2').textContent = 'Selecione uma conversa';
-    chatHeader.querySelector('.subtitle').textContent = 'Acompanhe e responda mensagens';
-    messageInput.disabled = true;
-    messageForm.querySelector('button').disabled = true;
-    logger.add('✅ Conversas apagadas', 'info', 'Inbox');
-  } catch (err) {
-    logger.add(`❌ Erro ao apagar conversas: ${err?.message || err}`, 'error', 'Inbox');
-  }
-});
 
 newChatModal.addEventListener('click', (e) => {
   if (e.target === newChatModal) {
@@ -343,9 +319,6 @@ function renderConversationList() {
 function renderConversation(conv) {
   chatHeader.querySelector('h2').textContent = conv.name || conv.phoneNumber;
   chatHeader.querySelector('.subtitle').textContent = conv.phoneNumber;
-  assumeBtn.disabled = false;
-  assumeBtn.classList.toggle('active', conv.isHuman);
-  assumeBtn.textContent = conv.isHuman ? 'Em controle' : 'Assumir controle';
 
   messageInput.disabled = false;
   messageForm.querySelector('button').disabled = false;
@@ -366,19 +339,6 @@ function renderConversation(conv) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-assumeBtn.addEventListener('click', async () => {
-  if (!state.selectedId) return;
-  const current = state.conversations.find((c) => c.id === state.selectedId);
-  const next = !current?.isHuman;
-
-  await authFetch(`/api/conversations?id=${state.selectedId}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ isHuman: next }),
-  });
-
-  await fetchConversations();
-});
 
 messageForm.addEventListener('submit', async (e) => {
   e.preventDefault();
