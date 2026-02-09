@@ -580,18 +580,18 @@ export class ConversationManager {
                 });
                 if (resultado.ok) {
                   const consumoTexto = resultado.consumo ? ` Consumo: ${resultado.consumo}` : '';
-                  const reply = `✅ Dados adicionados na planilha.${consumoTexto} Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
+                  const reply = `✅ Dados adicionados na planilha.${consumoTexto}`;
                   await this.enviarMensagem(de, reply);
                   this.log(`🧾 Planilha atualizada: ${predioInfo.predio} ${predioInfo.numero}`);
                 } else {
                   const motivo = resultado.erro ? ` Motivo: ${resultado.erro}.` : '';
-                  const reply = `❌ Não consegui adicionar os dados na planilha.${motivo} Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
+                  const reply = `❌ Não consegui adicionar os dados na planilha.${motivo}`;
                   await this.enviarMensagem(de, reply);
                 }
               } catch (erro: any) {
                 this.log(`❌ Erro ao atualizar planilha: ${erro?.message || erro}`);
                 const motivo = erro?.message ? ` Motivo: ${erro.message}.` : '';
-                const reply = `❌ Não consegui adicionar os dados na planilha.${motivo} Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
+                const reply = `❌ Não consegui adicionar os dados na planilha.${motivo}`;
                 try {
                   await this.enviarMensagem(de, reply);
                 } catch (err: any) {
