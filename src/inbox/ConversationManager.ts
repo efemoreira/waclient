@@ -579,8 +579,8 @@ export class ConversationManager {
                   numero: predioInfo.numero,
                 });
                 if (resultado.ok) {
-                  const consumoTexto = resultado.consumo ? ` Consumo: ${resultado.consumo}` : '';
-                  const reply = `✅ Dados adicionados na planilha.${consumoTexto}`;
+                  const consumoTexto = resultado.consumo ? `\n📊 Consumo: ${resultado.consumo}` : '';
+                  const reply = `✅ Dados adicionados na planilha!\n\n🧾 Colunas atualizadas:\n• C: data do envio\n• D: prédio\n• E: leitura atual\n• F: consumo (calculado)\n• G: situação${consumoTexto}`;
                   await this.enviarMensagem(de, reply);
                   this.log(`🧾 Planilha atualizada: ${predioInfo.predio} ${predioInfo.numero}`);
                 } else {
