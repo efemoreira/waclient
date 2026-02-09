@@ -77,6 +77,10 @@ const closeModalBtn = document.getElementById('closeModalBtn');
 const newPhoneInput = document.getElementById('newPhoneInput');
 const newNameInput = document.getElementById('newNameInput');
 const clearConversationsBtn = document.getElementById('clearConversationsBtn');
+const refreshConversationsBtn = document.getElementById('refreshConversationsBtn');
+refreshConversationsBtn?.addEventListener('click', async () => {
+  await fetchConversations();
+});
 const authModal = document.getElementById('authModal');
 const authForm = document.getElementById('authForm');
 const authPassword = document.getElementById('authPassword');
@@ -429,9 +433,7 @@ searchInput.addEventListener('input', (e) => {
   renderConversationList();
 });
 
-setInterval(() => {
-  if (isAuthed) fetchConversations();
-}, 8000);
+// Polling desabilitado para reduzir carga; usar webhook + botão atualizar.
 tryAuth().then((ok) => {
   if (ok) fetchConversations();
 });
