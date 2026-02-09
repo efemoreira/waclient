@@ -6,12 +6,24 @@ const SHEET_NAME = process.env.GOOGLE_SHEET_NAME || 'Base';
 const CLIENT_EMAIL = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || '';
 const PRIVATE_KEY = process.env.GOOGLE_SHEETS_PRIVATE_KEY || '';
 
+function normalizarPrivateKey(raw: string): string {
+  let key = raw.trim();
+  if (key.startsWith('"') && key.endsWith('"')) {
+    key = key.slice(1, -1);
+  }
+  if (key.startsWith('base64:')) {
+    const b64 = key.replace(/^base64:/, '');
+    return Buffer.from(b64, 'base64').toString('utf8');
+  }
+  return key.replace(/\\n/g, '\n');
+}
+
 function getAuth() {
   if (!CLIENT_EMAIL || !PRIVATE_KEY) {
     return null;
   }
 
-  const key = PRIVATE_KEY.replace(/\\n/g, '\n');
+  const key = normalizarPrivateKey(PRIVATE_KEY);
   return new google.auth.JWT({
     email: CLIENT_EMAIL,
     key,
