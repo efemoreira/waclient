@@ -42,25 +42,32 @@ export async function appendPredioEntry(params: {
     return { ok: false, erro: 'Credenciais não configuradas' };
   }
 
-  const data = params.data || new Date().toISOString();
+  const data = params.data || new Date().toLocaleDateString('pt-BR');
   const values = [[data, params.predio, '', params.numero]];
 
   const sheets = google.sheets({ version: 'v4', auth });
-  const range = `${SHEET_NAME}!A:D`;
+  const colA = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${SHEET_NAME}!A:A`,
+    valueRenderOption: 'FORMATTED_VALUE',
+  });
 
-  logger.info('Inbox', `Planilha: append ${JSON.stringify(values[0])}`);
+  const rows = colA.data?.values || [];
+  let row = rows.length;
+  while (row > 0 && (!rows[row - 1] || !rows[row - 1][0])) {
+    row -= 1;
+  }
+  if (row === 0) row = 1;
 
-  const appendRes = await sheets.spreadsheets.values.append({
+  const range = `${SHEET_NAME}!A${row}:D${row}`;
+  logger.info('Inbox', `Planilha: update ${range} ${JSON.stringify(values[0])}`);
+
+  await sheets.spreadsheets.values.update({
     spreadsheetId: SHEET_ID,
     range,
     valueInputOption: 'USER_ENTERED',
-    insertDataOption: 'INSERT_ROWS',
     requestBody: { values },
   });
-
-  const updatedRange = appendRes.data?.updates?.updatedRange || '';
-  const match = updatedRange.match(/!A(\d+)/i);
-  const row = match ? Number(match[1]) : undefined;
 
   if (!row) {
     return { ok: true };
