@@ -3,6 +3,7 @@ import type { WebhookPayload, WhatsAppMessage } from '../wabapi/types';
 import { config } from '../config';
 import { promises as fs } from 'fs';
 import { logger } from '../utils/logger';
+import { appendPredioEntry } from '../utils/predioSheet';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
 const CONVERSATIONS_META_FILE = '/tmp/conversations.meta.json';
@@ -47,6 +48,31 @@ export class ConversationManager {
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
   private resetAt: number = 0;
   private autoReplyText: string = 'Obrigado pela mensagem! Por favor, envie sua mensagem para o número +5585988928272.';
+
+  private normalizarTexto(texto: string): string {
+    return texto
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  private extrairPredioNumero(texto: string): { predio: string; numero: string } | null {
+    const normalizado = this.normalizarTexto(texto).trim();
+    const map: Record<string, string> = {
+      'monte castelo': 'Monte Castelo',
+      'caucaia': 'Caucaia',
+      'araturi': 'Araturi',
+      'novo metropole': 'Novo Metropole',
+    };
+
+    const regex = /^(monte castelo|caucaia|araturi|novo metropole)\s+([0-9]+)/i;
+    const match = normalizado.match(regex);
+    if (!match) return null;
+
+    const key = match[1];
+    const numero = match[2];
+    return { predio: map[key] || match[1], numero };
+  }
 
   private log(msg: string): void {
     logger.info('Inbox', msg);
@@ -516,6 +542,19 @@ export class ConversationManager {
 
             await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
             this.log(`✅ De ${de}: "${texto.substring(0, 50)}..."`);
+
+            const predioInfo = this.extrairPredioNumero(texto);
+            if (predioInfo) {
+              try {
+                await appendPredioEntry({
+                  predio: predioInfo.predio,
+                  numero: predioInfo.numero,
+                });
+                this.log(`🧾 Planilha atualizada: ${predioInfo.predio} ${predioInfo.numero}`);
+              } catch (erro: any) {
+                this.log(`❌ Erro ao atualizar planilha: ${erro?.message || erro}`);
+              }
+            }
 
             try {
               await this.enviarMensagem(de, this.autoReplyText);
