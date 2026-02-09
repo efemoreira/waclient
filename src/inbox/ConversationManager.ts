@@ -48,6 +48,12 @@ export class ConversationManager {
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
   private resetAt: number = 0;
   private autoReplyText: string = 'Obrigado pela mensagem! Por favor, envie sua mensagem para o número +5585988928272.';
+  private cadastrados: Set<string> = new Set(
+    String(process.env.REGISTERED_NUMBERS || '5585997223863, 558597223863')
+      .split(',')
+      .map((n) => this.normalizarWaId(n))
+      .filter(Boolean)
+  );
 
   private normalizarTexto(texto: string): string {
     return texto
@@ -94,6 +100,11 @@ export class ConversationManager {
   // Normaliza qualquer identificador para dígitos (evita conversas duplicadas)
   private normalizarWaId(id: string): string {
     return String(id || '').replace(/\D/g, '');
+  }
+
+  private isCadastrado(id: string): boolean {
+    const normalizado = this.normalizarWaId(id);
+    return this.cadastrados.has(normalizado);
   }
 
   // Garante que resets globais foram aplicados antes de operar
@@ -594,11 +605,15 @@ export class ConversationManager {
                 }
                 continue;
               }
-              try {
-                await this.enviarMensagem(de, this.autoReplyText);
-                this.log(`🤖 Auto-resposta enviada para ${de}`);
-              } catch (erro: any) {
-                this.log(`❌ Falha ao enviar auto-resposta para ${de}: ${erro?.message || erro}`);
+              if (this.isCadastrado(de)) {
+                this.log(`👤 ${de} cadastrado: auto-resposta não enviada`);
+              } else {
+                try {
+                  await this.enviarMensagem(de, this.autoReplyText);
+                  this.log(`🤖 Auto-resposta enviada para ${de}`);
+                } catch (erro: any) {
+                  this.log(`❌ Falha ao enviar auto-resposta para ${de}: ${erro?.message || erro}`);
+                }
               }
             }
           }

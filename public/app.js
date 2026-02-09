@@ -431,7 +431,7 @@ searchInput.addEventListener('input', (e) => {
 
 setInterval(() => {
   if (isAuthed) fetchConversations();
-}, 3000);
+}, 8000);
 tryAuth().then((ok) => {
   if (ok) fetchConversations();
 });
@@ -455,5 +455,5 @@ async function pollWebhookDebug() {
     // silencioso
   }
 }
-setInterval(pollWebhookDebug, 10000);
+setInterval(pollWebhookDebug, 20000);
 pollWebhookDebug();
