@@ -398,24 +398,3 @@ tryAuth().then((ok) => {
   if (ok) fetchConversations();
 });
 
-// Debug do webhook (exibe se chegar history/messages)
-let lastWebhookStamp = null;
-async function pollWebhookDebug() {
-  try {
-    const res = await fetch('/api/webhook?debug=1');
-    if (!res.ok) return;
-    const data = await res.json();
-    const stamp = data?.lastWebhook?.receivedAt || null;
-    if (stamp && stamp !== lastWebhookStamp) {
-      lastWebhookStamp = stamp;
-      logger.add(`📡 Webhook recebido: ${stamp}`);
-      if (data?.lastWebhook?.messageCount !== undefined) {
-        logger.add(`📨 Webhook messages=${data.lastWebhook.messageCount} statuses=${data.lastWebhook.statusCount}`);
-      }
-    }
-  } catch (_err) {
-    // silencioso
-  }
-}
-setInterval(pollWebhookDebug, 20000);
-pollWebhookDebug();

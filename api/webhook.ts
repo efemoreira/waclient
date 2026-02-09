@@ -27,14 +27,6 @@ const ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || '';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   logger.info('Webhook', `REQUEST ${req.method}`);
   
-  // GET - Debug de webhook
-  if (req.method === 'GET' && req.query?.debug === '1' && !req.query['hub.mode']) {
-    res.status(200).json({
-      ok: true,
-      lastWebhook: lastWebhookInfo,
-    });
-    return;
-  }
 
   // GET - Verificação de webhook
   if (req.method === 'GET') {
