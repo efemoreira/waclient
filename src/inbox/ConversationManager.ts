@@ -546,21 +546,35 @@ export class ConversationManager {
             const predioInfo = this.extrairPredioNumero(texto);
             if (predioInfo) {
               try {
-                await appendPredioEntry({
+                const resultado = await appendPredioEntry({
                   predio: predioInfo.predio,
                   numero: predioInfo.numero,
                 });
-                this.log(`🧾 Planilha atualizada: ${predioInfo.predio} ${predioInfo.numero}`);
+                if (resultado.ok) {
+                  const consumoTexto = resultado.consumo ? ` Consumo: ${resultado.consumo}` : '';
+                  const reply = `✅ Dados adicionados na planilha.${consumoTexto} Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
+                  await this.enviarMensagem(de, reply);
+                  this.log(`🧾 Planilha atualizada: ${predioInfo.predio} ${predioInfo.numero}`);
+                } else {
+                  const reply = `❌ Não consegui adicionar os dados na planilha. ${resultado.erro || ''} Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
+                  await this.enviarMensagem(de, reply);
+                }
               } catch (erro: any) {
                 this.log(`❌ Erro ao atualizar planilha: ${erro?.message || erro}`);
+                const reply = `❌ Não consegui adicionar os dados na planilha. Tente novamente. Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
+                try {
+                  await this.enviarMensagem(de, reply);
+                } catch (err: any) {
+                  this.log(`❌ Falha ao enviar resposta: ${err?.message || err}`);
+                }
               }
-            }
-
-            try {
-              await this.enviarMensagem(de, this.autoReplyText);
-              this.log(`🤖 Auto-resposta enviada para ${de}`);
-            } catch (erro: any) {
-              this.log(`❌ Falha ao enviar auto-resposta para ${de}: ${erro?.message || erro}`);
+            } else {
+              try {
+                await this.enviarMensagem(de, this.autoReplyText);
+                this.log(`🤖 Auto-resposta enviada para ${de}`);
+              } catch (erro: any) {
+                this.log(`❌ Falha ao enviar auto-resposta para ${de}: ${erro?.message || erro}`);
+              }
             }
           }
         }

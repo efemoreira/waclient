@@ -23,11 +23,11 @@ export async function appendPredioEntry(params: {
   predio: string;
   numero: string;
   data?: string;
-}): Promise<void> {
+}): Promise<{ ok: boolean; consumo?: string; row?: number; erro?: string }> {
   const auth = getAuth();
   if (!auth) {
     logger.warn('Inbox', 'Planilha: credenciais não configuradas');
-    return;
+    return { ok: false, erro: 'Credenciais não configuradas' };
   }
 
   const data = params.data || new Date().toISOString();
@@ -38,11 +38,32 @@ export async function appendPredioEntry(params: {
 
   logger.info('Inbox', `Planilha: append ${JSON.stringify(values[0])}`);
 
-  await sheets.spreadsheets.values.append({
+  const appendRes = await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
     range,
     valueInputOption: 'USER_ENTERED',
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values },
   });
+
+  const updatedRange = appendRes.data?.updates?.updatedRange || '';
+  const match = updatedRange.match(/!A(\d+)/i);
+  const row = match ? Number(match[1]) : undefined;
+
+  if (!row) {
+    return { ok: true };
+  }
+
+  try {
+    const consumoRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_NAME}!E${row}`,
+      valueRenderOption: 'FORMATTED_VALUE',
+    });
+    const consumo = consumoRes.data?.values?.[0]?.[0] ?? '';
+    return { ok: true, consumo: String(consumo), row };
+  } catch (erro: any) {
+    logger.warn('Inbox', `Planilha: erro ao ler consumo (E${row}) ${erro?.message || erro}`);
+    return { ok: true, row };
+  }
 }
