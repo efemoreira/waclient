@@ -569,12 +569,14 @@ export class ConversationManager {
                   await this.enviarMensagem(de, reply);
                   this.log(`🧾 Planilha atualizada: ${predioInfo.predio} ${predioInfo.numero}`);
                 } else {
-                  const reply = `❌ Não consegui adicionar os dados na planilha. ${resultado.erro || ''} Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
+                  const motivo = resultado.erro ? ` Motivo: ${resultado.erro}.` : '';
+                  const reply = `❌ Não consegui adicionar os dados na planilha.${motivo} Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
                   await this.enviarMensagem(de, reply);
                 }
               } catch (erro: any) {
                 this.log(`❌ Erro ao atualizar planilha: ${erro?.message || erro}`);
-                const reply = `❌ Não consegui adicionar os dados na planilha. Tente novamente. Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
+                const motivo = erro?.message ? ` Motivo: ${erro.message}.` : '';
+                const reply = `❌ Não consegui adicionar os dados na planilha.${motivo} Obrigado! Por favor, envie sua mensagem para o número +5585988928272.`;
                 try {
                   await this.enviarMensagem(de, reply);
                 } catch (err: any) {
