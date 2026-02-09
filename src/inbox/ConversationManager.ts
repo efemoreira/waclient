@@ -104,7 +104,11 @@ export class ConversationManager {
 
   private isCadastrado(id: string): boolean {
     const normalizado = this.normalizarWaId(id);
-    return this.cadastrados.has(normalizado);
+    if (this.cadastrados.has(normalizado)) return true;
+    if (normalizado.startsWith('55') && this.cadastrados.has(normalizado.slice(2))) return true;
+    const com55 = `55${normalizado}`;
+    if (this.cadastrados.has(com55)) return true;
+    return false;
   }
 
   // Garante que resets globais foram aplicados antes de operar
