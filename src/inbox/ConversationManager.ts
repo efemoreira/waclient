@@ -579,8 +579,22 @@ export class ConversationManager {
                   numero: predioInfo.numero,
                 });
                 if (resultado.ok) {
-                  const consumoTexto = resultado.consumo ? `\n📊 Consumo: ${resultado.consumo}` : '';
-                  const reply = `✅ Dados adicionados na planilha!\n\n🧾 Colunas atualizadas:\n• C: data do envio\n• D: prédio\n• E: leitura atual\n• F: consumo (calculado)\n• G: situação${consumoTexto}`;
+                  const leituraAtual = predioInfo.numero;
+                  const leituraAnterior = resultado.anterior || 'N/A';
+                  const dias = resultado.dias || 0;
+                  const consumoTotal = resultado.consumo ? parseFloat(String(resultado.consumo).replace(',', '.')) : 0;
+                  const consumoPorDia = dias > 0 && consumoTotal > 0 ? (consumoTotal / dias).toFixed(2) : 'N/A';
+                  
+                  let reply = `✅ Você atualizou os gastos de água do prédio ${predioInfo.predio}.\n\n📊 Sua leitura atual é de ${leituraAtual} m³.`;
+                  if (leituraAnterior !== 'N/A' && dias > 0) {
+                    reply += `\n📈 A leitura anterior de ${dias} dia${dias !== 1 ? 's' : ''} atrás foi de ${leituraAnterior} m³.`;
+                  }
+                  if (consumoTotal > 0 && dias > 0) {
+                    reply += `\n💧 Seu consumo entre esses dias foi de ${resultado.consumo} m³, o que dá uma média de ${consumoPorDia} m³ por dia.`;
+                  } else if (consumoTotal > 0) {
+                    reply += `\n💧 Consumo calculado: ${resultado.consumo} m³.`;
+                  }
+                  
                   await this.enviarMensagem(de, reply);
                   this.log(`🧾 Planilha atualizada: ${predioInfo.predio} ${predioInfo.numero}`);
                 } else {
