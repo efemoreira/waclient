@@ -57,16 +57,20 @@ export async function appendPredioEntry(params: {
   while (row > 0 && (!rows[row - 1] || !rows[row - 1][0])) {
     row -= 1;
   }
-  if (row === 0) row = 1;
+  const targetRow = row + 1;
 
-  const range = `${SHEET_NAME}!A${row}:D${row}`;
-  logger.info('Inbox', `Planilha: update ${range} ${JSON.stringify(values[0])}`);
+  logger.info('Inbox', `Planilha: update A${targetRow},B${targetRow},D${targetRow} ${JSON.stringify(values[0])}`);
 
-  await sheets.spreadsheets.values.update({
+  await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SHEET_ID,
-    range,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values },
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        { range: `${SHEET_NAME}!A${targetRow}`, values: [[values[0][0]]] },
+        { range: `${SHEET_NAME}!B${targetRow}`, values: [[values[0][1]]] },
+        { range: `${SHEET_NAME}!D${targetRow}`, values: [[values[0][3]]] },
+      ],
+    },
   });
 
   if (!row) {
@@ -76,13 +80,13 @@ export async function appendPredioEntry(params: {
   try {
     const consumoRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!E${row}`,
+      range: `${SHEET_NAME}!E${targetRow}`,
       valueRenderOption: 'FORMATTED_VALUE',
     });
     const consumo = consumoRes.data?.values?.[0]?.[0] ?? '';
-    return { ok: true, consumo: String(consumo), row };
+    return { ok: true, consumo: String(consumo), row: targetRow };
   } catch (erro: any) {
-    logger.warn('Inbox', `Planilha: erro ao ler consumo (E${row}) ${erro?.message || erro}`);
-    return { ok: true, row };
+    logger.warn('Inbox', `Planilha: erro ao ler consumo (E${targetRow}) ${erro?.message || erro}`);
+    return { ok: true, row: targetRow };
   }
 }
