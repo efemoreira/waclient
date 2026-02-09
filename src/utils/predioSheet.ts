@@ -49,15 +49,43 @@ export async function appendPredioEntry(params: {
   const colA = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
     range: `${SHEET_NAME}!A:A`,
+    majorDimension: 'COLUMNS',
     valueRenderOption: 'FORMATTED_VALUE',
   });
 
-  const rows = colA.data?.values || [];
-  let row = rows.length;
-  while (row > 0 && (!rows[row - 1] || !rows[row - 1][0])) {
-    row -= 1;
+  const colAValues = colA.data?.values?.[0] || [];
+  let lastRow = colAValues.length;
+  while (lastRow > 0 && !colAValues[lastRow - 1]) {
+    lastRow -= 1;
   }
-  const targetRow = row + 1;
+  const targetRow = lastRow + 1;
+
+  if (lastRow > 0) {
+    const formulasRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_NAME}!C${lastRow}:F${lastRow}`,
+      valueRenderOption: 'FORMULA',
+    });
+    const formulasRow = formulasRes.data?.values?.[0] || [];
+    const formulaC = formulasRow[0];
+    const formulaE = formulasRow[2];
+    const formulaF = formulasRow[3];
+
+    const formulaUpdates: Array<{ range: string; values: string[][] }> = [];
+    if (formulaC) formulaUpdates.push({ range: `${SHEET_NAME}!C${targetRow}`, values: [[String(formulaC)]] });
+    if (formulaE) formulaUpdates.push({ range: `${SHEET_NAME}!E${targetRow}`, values: [[String(formulaE)]] });
+    if (formulaF) formulaUpdates.push({ range: `${SHEET_NAME}!F${targetRow}`, values: [[String(formulaF)]] });
+
+    if (formulaUpdates.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: formulaUpdates,
+        },
+      });
+    }
+  }
 
   logger.info('Inbox', `Planilha: update A${targetRow},B${targetRow},D${targetRow} ${JSON.stringify(values[0])}`);
 
@@ -73,7 +101,7 @@ export async function appendPredioEntry(params: {
     },
   });
 
-  if (!row) {
+  if (!lastRow) {
     return { ok: true };
   }
 
