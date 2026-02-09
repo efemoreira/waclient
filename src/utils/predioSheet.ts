@@ -43,7 +43,7 @@ export async function appendPredioEntry(params: {
   }
 
   const data = params.data || new Date().toLocaleDateString('pt-BR');
-  const values = [[data, params.predio, '', params.numero]];
+  const values = [[data, params.predio, params.numero]];
 
   const sheets = google.sheets({ version: 'v4', auth });
   const colA = await sheets.spreadsheets.values.get({
@@ -60,34 +60,9 @@ export async function appendPredioEntry(params: {
   }
   const targetRow = lastRow + 1;
 
-  if (lastRow > 0) {
-    const formulasRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!C${lastRow}:F${lastRow}`,
-      valueRenderOption: 'FORMULA',
-    });
-    const formulasRow = formulasRes.data?.values?.[0] || [];
-    const formulaC = formulasRow[0];
-    const formulaE = formulasRow[2];
-    const formulaF = formulasRow[3];
+  // Fórmulas permanecem nas colunas após C, não é necessário copiar.
 
-    const formulaUpdates: Array<{ range: string; values: string[][] }> = [];
-    if (formulaC) formulaUpdates.push({ range: `${SHEET_NAME}!C${targetRow}`, values: [[String(formulaC)]] });
-    if (formulaE) formulaUpdates.push({ range: `${SHEET_NAME}!E${targetRow}`, values: [[String(formulaE)]] });
-    if (formulaF) formulaUpdates.push({ range: `${SHEET_NAME}!F${targetRow}`, values: [[String(formulaF)]] });
-
-    if (formulaUpdates.length > 0) {
-      await sheets.spreadsheets.values.batchUpdate({
-        spreadsheetId: SHEET_ID,
-        requestBody: {
-          valueInputOption: 'USER_ENTERED',
-          data: formulaUpdates,
-        },
-      });
-    }
-  }
-
-  logger.info('Inbox', `Planilha: update A${targetRow},B${targetRow},D${targetRow} ${JSON.stringify(values[0])}`);
+  logger.info('Inbox', `Planilha: update A${targetRow},B${targetRow},C${targetRow} ${JSON.stringify(values[0])}`);
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SHEET_ID,
@@ -96,7 +71,7 @@ export async function appendPredioEntry(params: {
       data: [
         { range: `${SHEET_NAME}!A${targetRow}`, values: [[values[0][0]]] },
         { range: `${SHEET_NAME}!B${targetRow}`, values: [[values[0][1]]] },
-        { range: `${SHEET_NAME}!D${targetRow}`, values: [[values[0][3]]] },
+        { range: `${SHEET_NAME}!C${targetRow}`, values: [[values[0][2]]] },
       ],
     },
   });
