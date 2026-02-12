@@ -4,6 +4,7 @@ import { config } from '../config';
 import { promises as fs } from 'fs';
 import { logger } from '../utils/logger';
 import { appendPredioEntry } from '../utils/predioSheet';
+import { verificarInscrito, adicionarInscrito } from '../utils/inscritosSheet';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
 const CONVERSATIONS_META_FILE = '/tmp/conversations.meta.json';
@@ -35,6 +36,7 @@ export interface Conversation {
   unreadCount: number;
   isHuman: boolean;
   messages: MessageRecord[];
+  aguardandoNomeInscricao?: boolean; // Rastreia se aguardando nome para inscrição
 }
 
 /**
@@ -570,6 +572,52 @@ export class ConversationManager {
 
             await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
             this.log(`✅ De ${de}: "${texto.substring(0, 50)}..."`);
+
+            // Verificar inscrição primeiro
+            const conversa = this.obterOuCriarConversa(de);
+            if (conversa.aguardandoNomeInscricao) {
+              // Usuário em processo de inscrição - texto é o nome
+              try {
+                const resultado = await adicionarInscrito(texto, de);
+                if (resultado.ok) {
+                  conversa.aguardandoNomeInscricao = false;
+                  await this.salvarConversas();
+                  const reply = `✅ Inscrição realizada com sucesso!\n\nBem-vindo(a) ${texto}! 🎉\n\nUID: ${resultado.uid}\nID Imóvel: ${resultado.idImovel}\n\nAgora você pode enviar as leituras de água.`;
+                  await this.enviarMensagem(de, reply);
+                  this.log(`✅ Novo inscrito: ${texto} (${de})`);
+                } else {
+                  const reply = `❌ Erro ao processar inscrição. ${resultado.erro || 'Tente novamente.'}`;
+                  await this.enviarMensagem(de, reply);
+                }
+              } catch (erro: any) {
+                this.log(`❌ Erro ao adicionar inscrito: ${erro?.message || erro}`);
+                const reply = `❌ Erro ao processar inscrição. Tente novamente.`;
+                try {
+                  await this.enviarMensagem(de, reply);
+                } catch (err: any) {
+                  this.log(`❌ Falha ao enviar resposta: ${err?.message || err}`);
+                }
+              }
+              continue;
+            }
+
+            // Verificar se já é inscrito
+            const verificacao = await verificarInscrito(de);
+            if (!verificacao.inscrito) {
+              // Não está inscrito - pedir inscrição
+              conversa.aguardandoNomeInscricao = true;
+              await this.salvarConversas();
+              const reply = `Obrigado por entrar em contato! 👋\n\nVerifiquei que você não está entre nossos inscritos.\n\nPara continuar, inicie sua inscrição enviando seu nome completo.`;
+              try {
+                await this.enviarMensagem(de, reply);
+              } catch (erro: any) {
+                this.log(`❌ Falha ao enviar solicitação de inscrição: ${erro?.message || erro}`);
+              }
+              continue;
+            }
+
+            // Usuário é inscrito - continuar com fluxo normal
+            this.log(`✅ Usuário inscrito: ${verificacao.nome} (${verificacao.uid})`);
 
             const predioInfo = this.extrairPredioNumero(texto);
             if (predioInfo) {
