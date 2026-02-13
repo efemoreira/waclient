@@ -50,33 +50,10 @@ export async function verificarInscrito(celular: string): Promise<{
   try {
     const sheets = google.sheets({ version: 'v4', auth });
     
-    // Ler coluna D (Celular)
-    const result = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!D:D`,
-      majorDimension: 'COLUMNS',
-      valueRenderOption: 'FORMATTED_VALUE',
-    });
-
-    const colunaD = result.data?.values?.[0] || [];
-    const celularNormalizado = celular.replace(/\D/g, '');
-
-    for (let i = 1; i < colunaD.length; i++) { // Começar do índice 1 (pular header)
-      const cel = String(colunaD[i] || '').replace(/\D/g, '');
-      if (cel === celularNormalizado) {
-        // Encontrado! Ler UID (coluna A) e Nome (coluna C) da mesma linha
-        const rangeResult = await sheets.spreadsheets.values.get({
-          spreadsheetId: SHEET_ID,
-          range: `${SHEET_NAME}!A${i + 1}:C${i + 1}`,
-          valueRenderOption: 'FORMATTED_VALUE',
-        });
-        const row = rangeResult.data?.values?.[0] || [];
-        const uid = row[0] || '';
-        const nome = row[2] || '';
-        
-        logger.info('Inscritos', `✅ Celular ${celular} encontrado: ${nome} (${uid})`);
-        return { inscrito: true, uid, nome };
-      }
+    const inscricoes = await listarInscricoesPorCelular(celular);
+    if (inscricoes.length > 0) {
+      logger.info('Inscritos', `✅ Celular ${celular} encontrado: ${inscricoes[0].nome} (${inscricoes[0].uid})`);
+      return { inscrito: true, uid: inscricoes[0].uid, nome: inscricoes[0].nome };
     }
 
     logger.info('Inscritos', `⚠️  Celular ${celular} não encontrado nos inscritos`);
@@ -84,6 +61,61 @@ export async function verificarInscrito(celular: string): Promise<{
   } catch (erro: any) {
     logger.warn('Inscritos', `Erro ao verificar inscrito: ${erro?.message || erro}`);
     return { inscrito: false, erro: erro?.message };
+  }
+}
+
+export type InscricaoInfo = {
+  uid: string;
+  idImovel: string;
+  nome: string;
+  celular: string;
+  bairro: string;
+  monitorandoAgua: boolean;
+  monitorandoEnergia: boolean;
+  monitorandoGas: boolean;
+};
+
+export async function listarInscricoesPorCelular(celular: string): Promise<InscricaoInfo[]> {
+  const auth = getAuth();
+  if (!auth) {
+    logger.warn('Inscritos', 'Credenciais não configuradas');
+    return [];
+  }
+
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_NAME}!A:V`,
+      majorDimension: 'ROWS',
+      valueRenderOption: 'FORMATTED_VALUE',
+    });
+
+    const rows = result.data?.values || [];
+    const celularNormalizado = celular.replace(/\D/g, '');
+    const inscritos: InscricaoInfo[] = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const cel = String(row[3] || '').replace(/\D/g, '');
+      if (cel !== celularNormalizado) continue;
+
+      inscritos.push({
+        uid: String(row[0] || ''),
+        idImovel: String(row[1] || ''),
+        nome: String(row[2] || ''),
+        celular: String(row[3] || ''),
+        bairro: String(row[6] || ''),
+        monitorandoAgua: String(row[19] || '').toLowerCase() === 'true',
+        monitorandoEnergia: String(row[20] || '').toLowerCase() === 'true',
+        monitorandoGas: String(row[21] || '').toLowerCase() === 'true',
+      });
+    }
+
+    return inscritos;
+  } catch (erro: any) {
+    logger.warn('Inscritos', `Erro ao listar inscritos: ${erro?.message || erro}`);
+    return [];
   }
 }
 
@@ -165,6 +197,9 @@ export async function adicionarInscrito(params: {
           { range: `${SHEET_NAME}!Q${targetRow}`, values: [[0]] },
           { range: `${SHEET_NAME}!R${targetRow}`, values: [[0]] },
           { range: `${SHEET_NAME}!S${targetRow}`, values: [[0]] },
+          { range: `${SHEET_NAME}!T${targetRow}`, values: [[true]] },
+          { range: `${SHEET_NAME}!U${targetRow}`, values: [[false]] },
+          { range: `${SHEET_NAME}!V${targetRow}`, values: [[false]] },
         ],
       },
     });

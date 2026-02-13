@@ -4,7 +4,8 @@ import { config } from '../config';
 import { promises as fs } from 'fs';
 import { logger } from '../utils/logger';
 import { appendPredioEntry } from '../utils/predioSheet';
-import { verificarInscrito, adicionarInscrito } from '../utils/inscritosSheet';
+import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';
+import { registrarLeitura, obterUltimaLeitura } from '../utils/leiturasSheet';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
 const CONVERSATIONS_META_FILE = '/tmp/conversations.meta.json';
@@ -52,6 +53,11 @@ export interface Conversation {
     tipo_imovel?: string;
     pessoas?: string;
     uid_indicador?: string;
+  };
+  pendingLeitura?: {
+    valor?: string;
+    tipo?: 'agua' | 'energia' | 'gas';
+    idImovel?: string;
   };
 }
 
@@ -678,6 +684,183 @@ export class ConversationManager {
             // Usuário é inscrito - continuar com fluxo normal
             this.log(`✅ Usuário inscrito: ${verificacao.nome} (${verificacao.uid})`);
 
+            const textoNormalizado = this.normalizarTexto(texto).trim();
+            const inscricoes = await listarInscricoesPorCelular(de);
+
+            const menuOpcoes =
+              '📋 Opções disponíveis:\n' +
+              '• Meu UID\n' +
+              '• Minhas casas\n' +
+              '• Como indicar\n' +
+              '• Enviar leitura (ex: 123 ou agua 123)';
+
+            const formatarCasas = async (): Promise<string> => {
+              if (!inscricoes.length) return 'Nenhum imóvel encontrado.';
+              const linhas: string[] = [];
+              for (const item of inscricoes) {
+                const tipoPreferido: 'agua' | 'energia' | 'gas' = item.monitorandoAgua
+                  ? 'agua'
+                  : item.monitorandoEnergia
+                    ? 'energia'
+                    : 'gas';
+                const ultima = await obterUltimaLeitura({ idImovel: item.idImovel, tipo: tipoPreferido });
+                const ultimaTexto = ultima.leitura
+                  ? `${ultima.leitura}${ultima.data ? ` (${ultima.data})` : ''}`
+                  : 'sem leitura';
+                linhas.push(`• ${item.idImovel} - ${item.bairro || 'bairro não informado'} - última leitura: ${ultimaTexto}`);
+              }
+              return linhas.join('\n');
+            };
+
+            const responderMeuUid = async () => {
+              if (!inscricoes.length) {
+                await this.enviarMensagem(de, 'Não encontrei seu cadastro.');
+                return;
+              }
+              const linhas = inscricoes.map((i) => `• UID: ${i.uid} | Imóvel: ${i.idImovel}`);
+              await this.enviarMensagem(de, `🔎 Seus dados:\n${linhas.join('\n')}`);
+            };
+
+            const responderMinhasCasas = async () => {
+              const lista = await formatarCasas();
+              await this.enviarMensagem(de, `🏠 Suas casas:\n${lista}`);
+            };
+
+            const responderComoIndicar = async () => {
+              if (!inscricoes.length) {
+                await this.enviarMensagem(de, 'Não encontrei seu cadastro.');
+                return;
+              }
+              const linhas = inscricoes.map((i) => `• ${i.uid}`);
+              await this.enviarMensagem(
+                de,
+                `🤝 Para indicar, compartilhe seu UID com um amigo e peça para ele informar no cadastro.\n\nSeus UIDs:\n${linhas.join('\n')}`
+              );
+            };
+
+            // Comandos rápidos
+            if (textoNormalizado === 'meu uid') {
+              await responderMeuUid();
+              continue;
+            }
+            if (textoNormalizado === 'minhas casas') {
+              await responderMinhasCasas();
+              continue;
+            }
+            if (textoNormalizado === 'como indicar') {
+              await responderComoIndicar();
+              continue;
+            }
+
+            // Fluxo de leitura pendente
+            if (conversa.pendingLeitura) {
+              const pending = conversa.pendingLeitura;
+              const tipoMatch = textoNormalizado.match(/^(agua|energia|gas)$/i);
+              if (!pending.tipo && tipoMatch) {
+                pending.tipo = tipoMatch[1].toLowerCase() as 'agua' | 'energia' | 'gas';
+              } else if (!pending.idImovel && inscricoes.length > 1) {
+                const imovel = inscricoes.find((i) => i.idImovel.toLowerCase() === textoNormalizado);
+                if (imovel) {
+                  pending.idImovel = imovel.idImovel;
+                }
+              }
+
+              const unicoImovel = inscricoes.length === 1 ? inscricoes[0] : undefined;
+              if (!pending.idImovel && unicoImovel) pending.idImovel = unicoImovel.idImovel;
+
+              if (!pending.tipo) {
+                await this.enviarMensagem(de, 'Qual o tipo de monitoramento? Responda com: água, energia ou gás.');
+                continue;
+              }
+              if (!pending.idImovel) {
+                const lista = await formatarCasas();
+                await this.enviarMensagem(de, `Qual o ID do imóvel?\n${lista}`);
+                continue;
+              }
+
+              const leituraValor = pending.valor || textoNormalizado;
+              const result = await registrarLeitura({
+                idImovel: pending.idImovel,
+                tipo: pending.tipo,
+                leitura: leituraValor,
+              });
+              if (result.ok) {
+                const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';
+                await this.enviarMensagem(de, `✅ Leitura de ${pending.tipo} registrada para ${pending.idImovel}: ${leituraValor}${consumoTxt}`);
+              } else {
+                await this.enviarMensagem(de, `❌ Não consegui registrar a leitura. ${result.erro || ''}`.trim());
+              }
+              conversa.pendingLeitura = undefined;
+              await this.salvarConversas();
+              continue;
+            }
+
+            // Interpretar envio de leitura
+            const leituraComTipo = textoNormalizado.match(/^(agua|energia|gas)\s+(\d+[\d.,]*)$/i);
+            const leituraApenasNumero = textoNormalizado.match(/^\d+[\d.,]*$/);
+            let leituraValor: string | undefined;
+            let leituraTipo: 'agua' | 'energia' | 'gas' | undefined;
+            if (leituraComTipo) {
+              leituraTipo = leituraComTipo[1].toLowerCase() as 'agua' | 'energia' | 'gas';
+              leituraValor = leituraComTipo[2];
+            } else if (leituraApenasNumero) {
+              leituraValor = leituraApenasNumero[0];
+            }
+
+            if (leituraValor) {
+              if (!inscricoes.length) {
+                await this.enviarMensagem(de, 'Não encontrei seu cadastro.');
+                continue;
+              }
+
+              const unicoImovel = inscricoes.length === 1 ? inscricoes[0] : undefined;
+              const monitoramentos = unicoImovel
+                ? [
+                    unicoImovel.monitorandoAgua ? 'agua' : null,
+                    unicoImovel.monitorandoEnergia ? 'energia' : null,
+                    unicoImovel.monitorandoGas ? 'gas' : null,
+                  ].filter(Boolean)
+                : [];
+
+              if (inscricoes.length > 1) {
+                conversa.pendingLeitura = { valor: leituraValor, tipo: leituraTipo };
+                await this.salvarConversas();
+                const lista = await formatarCasas();
+                await this.enviarMensagem(de, `Tenho mais de um imóvel para você. Informe o ID do imóvel:\n${lista}`);
+                continue;
+              }
+
+              if (unicoImovel && !leituraTipo) {
+                if (monitoramentos.length === 1) {
+                  leituraTipo = monitoramentos[0] as 'agua' | 'energia' | 'gas';
+                } else {
+                  conversa.pendingLeitura = { valor: leituraValor };
+                  await this.salvarConversas();
+                  await this.enviarMensagem(de, 'Qual o tipo de monitoramento? Responda com: água, energia ou gás.');
+                  continue;
+                }
+              }
+
+              const idImovel = unicoImovel?.idImovel;
+              if (!idImovel || !leituraTipo) {
+                await this.enviarMensagem(de, menuOpcoes);
+                continue;
+              }
+
+              const result = await registrarLeitura({
+                idImovel,
+                tipo: leituraTipo,
+                leitura: leituraValor,
+              });
+              if (result.ok) {
+                const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';
+                await this.enviarMensagem(de, `✅ Leitura de ${leituraTipo} registrada para ${idImovel}: ${leituraValor}${consumoTxt}`);
+              } else {
+                await this.enviarMensagem(de, `❌ Não consegui registrar a leitura. ${result.erro || ''}`.trim());
+              }
+              continue;
+            }
+
             const predioInfo = this.extrairPredioNumero(texto);
             if (predioInfo) {
               try {
@@ -730,7 +913,9 @@ export class ConversationManager {
                 }
                 continue;
               }
-              if (this.isCadastrado(de)) {
+              if (verificacao.inscrito) {
+                await this.enviarMensagem(de, menuOpcoes);
+              } else if (this.isCadastrado(de)) {
                 this.log(`👤 ${de} cadastrado: auto-resposta não enviada`);
               } else {
                 try {
