@@ -90,7 +90,16 @@ export async function verificarInscrito(celular: string): Promise<{
 /**
  * Adicionar novo inscrito com nome
  */
-export async function adicionarInscrito(nome: string, celular: string): Promise<{
+export async function adicionarInscrito(params: {
+  nome: string;
+  celular: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
+  tipo_imovel?: string;
+  pessoas?: string;
+  uid_indicador?: string;
+}): Promise<{
   ok: boolean;
   uid?: string;
   idImovel?: string;
@@ -124,11 +133,14 @@ export async function adicionarInscrito(nome: string, celular: string): Promise<
     const uid = randomUUID();
     const idImovel = `IMV${Date.now()}`;
     const datainscricao = new Date().toLocaleDateString('pt-BR');
-    const celularFormatado = celular.replace(/\D/g, '');
+    const dataProximoPagamento = new Date();
+    dataProximoPagamento.setDate(dataProximoPagamento.getDate() + 30);
+    const proximoPagamento = dataProximoPagamento.toLocaleDateString('pt-BR');
+    const celularFormatado = params.celular.replace(/\D/g, '');
 
-    logger.info('Inscritos', `Adicionando novo inscrito: ${nome} (${celularFormatado})`);
+    logger.info('Inscritos', `Adicionando novo inscrito: ${params.nome} (${celularFormatado})`);
 
-    // Adicionar dados nas colunas: A=UID, B=ID_Imovel, C=Nome, D=Celular, F=Data_Inscricao
+    // Adicionar dados nas colunas conforme cabeçalho
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: SHEET_ID,
       requestBody: {
@@ -136,14 +148,69 @@ export async function adicionarInscrito(nome: string, celular: string): Promise<
         data: [
           { range: `${SHEET_NAME}!A${targetRow}`, values: [[uid]] },
           { range: `${SHEET_NAME}!B${targetRow}`, values: [[idImovel]] },
-          { range: `${SHEET_NAME}!C${targetRow}`, values: [[nome]] },
+          { range: `${SHEET_NAME}!C${targetRow}`, values: [[params.nome]] },
           { range: `${SHEET_NAME}!D${targetRow}`, values: [[celularFormatado]] },
+          { range: `${SHEET_NAME}!E${targetRow}`, values: [['']] },
           { range: `${SHEET_NAME}!F${targetRow}`, values: [[datainscricao]] },
+          { range: `${SHEET_NAME}!G${targetRow}`, values: [[params.bairro || '']] },
+          { range: `${SHEET_NAME}!H${targetRow}`, values: [[params.cidade || '']] },
+          { range: `${SHEET_NAME}!I${targetRow}`, values: [[params.estado || '']] },
+          { range: `${SHEET_NAME}!J${targetRow}`, values: [[params.tipo_imovel || '']] },
+          { range: `${SHEET_NAME}!K${targetRow}`, values: [[params.pessoas || '']] },
+          { range: `${SHEET_NAME}!L${targetRow}`, values: [['Simples']] },
+          { range: `${SHEET_NAME}!M${targetRow}`, values: [[5]] },
+          { range: `${SHEET_NAME}!N${targetRow}`, values: [['']] },
+          { range: `${SHEET_NAME}!O${targetRow}`, values: [[proximoPagamento]] },
+          { range: `${SHEET_NAME}!P${targetRow}`, values: [[params.uid_indicador || '']] },
+          { range: `${SHEET_NAME}!Q${targetRow}`, values: [[0]] },
+          { range: `${SHEET_NAME}!R${targetRow}`, values: [[0]] },
+          { range: `${SHEET_NAME}!S${targetRow}`, values: [[0]] },
         ],
       },
     });
 
-    logger.info('Inscritos', `✅ Novo inscrito adicionado: ${nome} (UID: ${uid})`);
+    // Se tiver UID do indicador, somar +1 nos créditos de indicação dele
+    const uidIndicador = (params.uid_indicador || '').trim();
+    if (uidIndicador && uidIndicador.toLowerCase() !== 'não' && uidIndicador.toLowerCase() !== 'nao') {
+      try {
+        const colA = await sheets.spreadsheets.values.get({
+          spreadsheetId: SHEET_ID,
+          range: `${SHEET_NAME}!A:A`,
+          majorDimension: 'COLUMNS',
+          valueRenderOption: 'FORMATTED_VALUE',
+        });
+        const colAValues = colA.data?.values?.[0] || [];
+        let indicadorRow = -1;
+        for (let i = 1; i < colAValues.length; i++) {
+          if (String(colAValues[i]).trim() === uidIndicador) {
+            indicadorRow = i + 1;
+            break;
+          }
+        }
+        if (indicadorRow > 0) {
+          const creditosRes = await sheets.spreadsheets.values.get({
+            spreadsheetId: SHEET_ID,
+            range: `${SHEET_NAME}!Q${indicadorRow}`,
+            valueRenderOption: 'FORMATTED_VALUE',
+          });
+          const creditosAtual = Number(String(creditosRes.data?.values?.[0]?.[0] || '0').replace(',', '.')) || 0;
+          const novoCredito = creditosAtual + 1;
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SHEET_ID,
+            range: `${SHEET_NAME}!Q${indicadorRow}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[novoCredito]] },
+          });
+          logger.info('Inscritos', `Crédito de indicação atualizado para UID ${uidIndicador}: ${novoCredito}`);
+        } else {
+          logger.warn('Inscritos', `UID indicador não encontrado: ${uidIndicador}`);
+        }
+      } catch (erro: any) {
+        logger.warn('Inscritos', `Erro ao atualizar crédito do indicador: ${erro?.message || erro}`);
+      }
+    }
+
+    logger.info('Inscritos', `✅ Novo inscrito adicionado: ${params.nome} (UID: ${uid})`);
     return { ok: true, uid, idImovel };
   } catch (erro: any) {
     logger.warn('Inscritos', `Erro ao adicionar inscrito: ${erro?.message || erro}`);

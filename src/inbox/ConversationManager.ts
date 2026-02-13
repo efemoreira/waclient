@@ -36,7 +36,23 @@ export interface Conversation {
   unreadCount: number;
   isHuman: boolean;
   messages: MessageRecord[];
-  aguardandoNomeInscricao?: boolean; // Rastreia se aguardando nome para inscrição
+  inscricaoStage?:
+    | 'nome'
+    | 'bairro'
+    | 'cidade'
+    | 'estado'
+    | 'tipo_imovel'
+    | 'pessoas'
+    | 'uid_indicador';
+  inscricaoData?: {
+    nome?: string;
+    bairro?: string;
+    cidade?: string;
+    estado?: string;
+    tipo_imovel?: string;
+    pessoas?: string;
+    uid_indicador?: string;
+  };
 }
 
 /**
@@ -575,22 +591,63 @@ export class ConversationManager {
 
             // Verificar inscrição primeiro
             const conversa = this.obterOuCriarConversa(de);
-            if (conversa.aguardandoNomeInscricao) {
-              // Usuário em processo de inscrição - texto é o nome
+            if (conversa.inscricaoStage) {
+              conversa.inscricaoData = conversa.inscricaoData || {};
+              const stage = conversa.inscricaoStage;
+
+              if (stage === 'nome') conversa.inscricaoData.nome = texto;
+              if (stage === 'bairro') conversa.inscricaoData.bairro = texto;
+              if (stage === 'cidade') conversa.inscricaoData.cidade = texto;
+              if (stage === 'estado') conversa.inscricaoData.estado = texto;
+              if (stage === 'tipo_imovel') conversa.inscricaoData.tipo_imovel = texto;
+              if (stage === 'pessoas') conversa.inscricaoData.pessoas = texto;
+              if (stage === 'uid_indicador') conversa.inscricaoData.uid_indicador = texto;
+
+              const avancar = async (proximo: Conversation['inscricaoStage'], pergunta: string) => {
+                conversa.inscricaoStage = proximo;
+                await this.salvarConversas();
+                await this.enviarMensagem(de, pergunta);
+              };
+
               try {
-                const resultado = await adicionarInscrito(texto, de);
-                if (resultado.ok) {
-                  conversa.aguardandoNomeInscricao = false;
-                  await this.salvarConversas();
-                  const reply = `✅ Inscrição realizada com sucesso!\n\nBem-vindo(a) ${texto}! 🎉\n\nUID: ${resultado.uid}\nID Imóvel: ${resultado.idImovel}\n\nAgora você pode enviar as leituras de água.`;
-                  await this.enviarMensagem(de, reply);
-                  this.log(`✅ Novo inscrito: ${texto} (${de})`);
-                } else {
-                  const reply = `❌ Erro ao processar inscrição. ${resultado.erro || 'Tente novamente.'}`;
-                  await this.enviarMensagem(de, reply);
+                if (stage === 'nome') {
+                  await avancar('bairro', 'Perfeito! Agora me diga o seu bairro.');
+                } else if (stage === 'bairro') {
+                  await avancar('cidade', 'Agora, qual é a sua cidade?');
+                } else if (stage === 'cidade') {
+                  await avancar('estado', 'Qual é o seu estado?');
+                } else if (stage === 'estado') {
+                  await avancar('tipo_imovel', 'Qual é o tipo de imóvel? (casa, apto, comercial, etc.)');
+                } else if (stage === 'tipo_imovel') {
+                  await avancar('pessoas', 'Quantas pessoas moram no imóvel?');
+                } else if (stage === 'pessoas') {
+                  await avancar('uid_indicador', 'Você tem UID de indicador? Se sim, informe. Se não tiver, responda "não".');
+                } else if (stage === 'uid_indicador') {
+                  const dados = conversa.inscricaoData;
+                  const resultado = await adicionarInscrito({
+                    nome: dados?.nome || texto,
+                    celular: de,
+                    bairro: dados?.bairro || '',
+                    cidade: dados?.cidade || '',
+                    estado: dados?.estado || '',
+                    tipo_imovel: dados?.tipo_imovel || '',
+                    pessoas: dados?.pessoas || '',
+                    uid_indicador: dados?.uid_indicador || '',
+                  });
+
+                  if (resultado.ok) {
+                    conversa.inscricaoStage = undefined;
+                    conversa.inscricaoData = undefined;
+                    await this.salvarConversas();
+                    const reply = `✅ Inscrição realizada com sucesso!\n\nBem-vindo(a) ${dados?.nome || ''}! 🎉\n\nUID: ${resultado.uid}\nID Imóvel: ${resultado.idImovel}\n\nAgora você pode enviar as leituras de água.`;
+                    await this.enviarMensagem(de, reply);
+                  } else {
+                    const reply = `❌ Erro ao processar inscrição. ${resultado.erro || 'Tente novamente.'}`;
+                    await this.enviarMensagem(de, reply);
+                  }
                 }
               } catch (erro: any) {
-                this.log(`❌ Erro ao adicionar inscrito: ${erro?.message || erro}`);
+                this.log(`❌ Erro no fluxo de inscrição: ${erro?.message || erro}`);
                 const reply = `❌ Erro ao processar inscrição. Tente novamente.`;
                 try {
                   await this.enviarMensagem(de, reply);
@@ -598,6 +655,7 @@ export class ConversationManager {
                   this.log(`❌ Falha ao enviar resposta: ${err?.message || err}`);
                 }
               }
+
               continue;
             }
 
@@ -605,7 +663,8 @@ export class ConversationManager {
             const verificacao = await verificarInscrito(de);
             if (!verificacao.inscrito) {
               // Não está inscrito - pedir inscrição
-              conversa.aguardandoNomeInscricao = true;
+              conversa.inscricaoStage = 'nome';
+              conversa.inscricaoData = {};
               await this.salvarConversas();
               const reply = `Obrigado por entrar em contato! 👋\n\nVerifiquei que você não está entre nossos inscritos.\n\nPara continuar, inicie sua inscrição enviando seu nome completo.`;
               try {
