@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { appendPredioEntry } from '../utils/predioSheet';
 import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';
 import { registrarLeitura, obterUltimaLeitura } from '../utils/leiturasSheet';
+import { S } from '@upstash/redis/zmscore-BjNXmrug';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
 const CONVERSATIONS_META_FILE = '/tmp/conversations.meta.json';
@@ -731,11 +732,13 @@ export class ConversationManager {
                 await this.enviarMensagem(de, 'Não encontrei seu cadastro.');
                 return;
               }
-              const linhas = inscricoes.map((i) => `• ${i.uid}`);
               await this.enviarMensagem(
                 de,
-                `🤝 Para indicar, compartilhe seu UID com um amigo e peça para ele informar no cadastro.\n\nSeus UIDs:\n${linhas.join('\n')}`
+                '🤝 Para indicar, compartilhe seu UID com um amigo e peça para ele informar no cadastro.\n\nSeus UID\'S estão abaixo:'
               );
+              for (const item of inscricoes) {
+                await this.enviarMensagem(de, item.uid);
+              }
             };
 
             // Comandos rápidos
