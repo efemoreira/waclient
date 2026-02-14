@@ -3,8 +3,9 @@ import type { WebhookPayload, WhatsAppMessage } from '../wabapi/types';
 import { config } from '../config';
 import { promises as fs } from 'fs';
 import { logger } from '../utils/logger';
-import { appendPredioEntry, obterUltimaLeitura } from '../utils/predioSheet';
+import { appendPredioEntry } from '../utils/predioSheet';
 import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';
+import { GastosManager } from './GastosManager';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
 const CONVERSATIONS_META_FILE = '/tmp/conversations.meta.json';
@@ -62,58 +63,21 @@ export interface Conversation {
 
 /**
  * Gerenciador de conversas e mensagens
- * Responsável por armazenar e processar conversas via webhook
+ * Orquestra fluxos de acompanhamento de gastos (água, energia, gás)
  */
 export class ConversationManager {
   private client: WhatsApp;
   private conversations: Map<string, Conversation> = new Map();
+  private gastosManager: GastosManager;
   private lastLoadTime: number = 0;
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
   private resetAt: number = 0;
-  private autoReplyText: string = 'Obrigado pela mensagem! Por favor, envie sua mensagem para o número +5585988928272.';
-  private cadastrados: Set<string> = new Set(
-    String(process.env.REGISTERED_NUMBERS || '5585997223863, 558597223863')
-      .split(',')
-      .map((n) => this.normalizarWaId(n))
-      .filter(Boolean)
-  );
 
   private normalizarTexto(texto: string): string {
     return texto
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
-  }
-
-  private extrairPredioNumero(texto: string): { predio: string; numero: string } | null {
-    const normalizado = this.normalizarTexto(texto).trim();
-    const map: Record<string, string> = {
-      'monte castelo': 'Monte Castelo',
-      'caucaia': 'Caucaia',
-      'araturi': 'Araturi',
-      'novo metropole': 'Novo Metropole',
-    };
-
-    const regex = /^(monte castelo|caucaia|araturi|novo metropole)\s+([0-9]+)/i;
-    const match = normalizado.match(regex);
-    if (!match) return null;
-
-    const key = match[1];
-    const numero = match[2];
-    return { predio: map[key] || match[1], numero };
-  }
-
-  private extrairPredioSomente(texto: string): string | null {
-    const normalizado = this.normalizarTexto(texto).trim();
-    const map: Record<string, string> = {
-      'monte castelo': 'Monte Castelo',
-      'caucaia': 'Caucaia',
-      'araturi': 'Araturi',
-      'novo metropole': 'Novo Metropole',
-    };
-    const match = normalizado.match(/^(monte castelo|caucaia|araturi|novo metropole)$/i);
-    if (!match) return null;
-    return map[match[1]] || match[1];
   }
 
   private log(msg: string): void {
@@ -123,15 +87,6 @@ export class ConversationManager {
   // Normaliza qualquer identificador para dígitos (evita conversas duplicadas)
   private normalizarWaId(id: string): string {
     return String(id || '').replace(/\D/g, '');
-  }
-
-  private isCadastrado(id: string): boolean {
-    const normalizado = this.normalizarWaId(id);
-    if (this.cadastrados.has(normalizado)) return true;
-    if (normalizado.startsWith('55') && this.cadastrados.has(normalizado.slice(2))) return true;
-    const com55 = `55${normalizado}`;
-    if (this.cadastrados.has(com55)) return true;
-    return false;
   }
 
   // Garante que resets globais foram aplicados antes de operar
@@ -197,6 +152,7 @@ export class ConversationManager {
       numberId: config.whatsapp.numberId,
       version: apiVersion,
     });
+    this.gastosManager = new GastosManager(this.client);
     
     // Carregar conversas do armazenamento
     this.carregarConversas().catch(console.error);
@@ -693,277 +649,67 @@ export class ConversationManager {
               '• Como indicar\n' +
               '• Enviar leitura (ex: 123 ou agua 123)';
 
-            const formatarCasas = async (): Promise<string> => {
-              if (!inscricoes.length) return 'Nenhum imóvel encontrado.';
-              const linhas: string[] = [];
-              for (const item of inscricoes) {
-                const ultima = await obterUltimaLeitura(item.idImovel);
-                const ultimaTexto = ultima.leitura
-                  ? `${ultima.leitura}${ultima.data ? ` (${ultima.data})` : ''}`
-                  : 'sem leitura';
-                linhas.push(`• ${item.idImovel} - ${item.bairro || 'bairro não informado'} - última leitura: ${ultimaTexto}`);
-              }
-              return linhas.join('\n');
-            };
-
-            const responderMeuUid = async () => {
-              if (!inscricoes.length) {
-                await this.enviarMensagem(de, 'Não encontrei seu cadastro.');
-                return;
-              }
-              const linhas = inscricoes.map((i) => `• UID: ${i.uid} | Imóvel: ${i.idImovel}`);
-              await this.enviarMensagem(de, `🔎 Seus dados:\n${linhas.join('\n')}`);
-            };
-
-            const responderMinhasCasas = async () => {
-              const lista = await formatarCasas();
-              await this.enviarMensagem(de, `🏠 Suas casas:\n${lista}`);
-            };
-
-            const responderComoIndicar = async () => {
-              if (!inscricoes.length) {
-                await this.enviarMensagem(de, 'Não encontrei seu cadastro.');
-                return;
-              }
-              await this.enviarMensagem(
-                de,
-                '🤝 Para indicar, compartilhe seu UID com um amigo e peça para ele informar no cadastro.\n\nSeus UID\'S estão abaixo:'
-              );
-              for (const item of inscricoes) {
-                await this.enviarMensagem(de, item.uid);
-              }
-            };
-
             // Comandos rápidos
             if (textoNormalizado === 'meu uid') {
-              await responderMeuUid();
+              await this.gastosManager.responderMeuUid(de, inscricoes);
               continue;
             }
             if (textoNormalizado === 'minhas casas') {
-              await responderMinhasCasas();
+              await this.gastosManager.responderMinhasCasas(de, inscricoes);
               continue;
             }
             if (textoNormalizado === 'como indicar') {
-              await responderComoIndicar();
+              await this.gastosManager.responderComoIndicar(de, inscricoes);
               continue;
             }
 
             // Fluxo de leitura pendente
             if (conversa.pendingLeitura) {
-              const pending = conversa.pendingLeitura;
-              const tipoMatch = textoNormalizado.match(/^(agua|energia|gas)$/i);
-              if (!pending.tipo && tipoMatch) {
-                pending.tipo = tipoMatch[1].toLowerCase() as 'agua' | 'energia' | 'gas';
-              } else if (!pending.idImovel && inscricoes.length > 1) {
-                const imovel = inscricoes.find((i) => i.idImovel.toLowerCase() === textoNormalizado);
-                if (imovel) {
-                  pending.idImovel = imovel.idImovel;
-                }
-              }
-
-              const unicoImovel = inscricoes.length === 1 ? inscricoes[0] : undefined;
-              if (!pending.idImovel && unicoImovel) pending.idImovel = unicoImovel.idImovel;
-
-              if (!pending.tipo) {
-                await this.enviarMensagem(de, 'Qual o tipo de monitoramento? Responda com: água, energia ou gás.');
+              const { processado } = await this.gastosManager.processarPendingLeitura(
+                de,
+                texto,
+                textoNormalizado,
+                conversa.pendingLeitura,
+                inscricoes
+              );
+              if (processado) {
+                conversa.pendingLeitura = undefined;
+                await this.salvarConversas();
                 continue;
               }
-              if (!pending.idImovel) {
-                const lista = await formatarCasas();
-                await this.enviarMensagem(de, `Qual o ID do imóvel?\n${lista}`);
-                continue;
-              }
-
-              const leituraValor = pending.valor || textoNormalizado;
-              const result = await appendPredioEntry({
-                predio: pending.idImovel,
-                numero: leituraValor,
-                tipo: pending.tipo,
-              });
-              if (result.ok) {
-                const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';
-                await this.enviarMensagem(de, `✅ Leitura de ${pending.tipo} registrada para ${pending.idImovel}: ${leituraValor}${consumoTxt}`);
-              } else {
-                await this.enviarMensagem(de, `❌ Não consegui registrar a leitura. ${result.erro || ''}`.trim());
-              }
-              conversa.pendingLeitura = undefined;
-              await this.salvarConversas();
-              continue;
             }
 
-            // Interpretar envio de leitura
-            // Padrões aceitos:
-            // - "123" = só número (1 imóvel, só agua)
-            // - "agua 123" = tipo e número (1 imóvel)
-            // - "id tipo numero" = id, tipo e número (múltiplos imóveis)
-            // - "id numero" = id e número (múltiplos imóveis, só agua)
-            // - "id agua 123" = variação do acima
-            
-            const partes = textoNormalizado.trim().split(/\s+/);
-            let leituraValor: string | undefined;
-            let leituraTipo: 'agua' | 'energia' | 'gas' | undefined;
-            let leituraId: string | undefined;
-
-            // Tentar parse com 3 partes: id tipo numero
-            if (partes.length === 3) {
-              const [id, tipo, numero] = partes;
-              if (/^\d+[\d.,]*$/.test(numero) && /^(agua|energia|gas)$/i.test(tipo)) {
-                leituraId = id;
-                leituraTipo = tipo.toLowerCase() as 'agua' | 'energia' | 'gas';
-                leituraValor = numero;
-              }
-            }
-            
-            // Tentar parse com 2 partes: tipo numero ou id numero
-            if (!leituraValor && partes.length === 2) {
-              const [parte1, parte2] = partes;
-              if (/^\d+[\d.,]*$/.test(parte2)) {
-                if (/^(agua|energia|gas)$/i.test(parte1)) {
-                  // tipo numero
-                  leituraTipo = parte1.toLowerCase() as 'agua' | 'energia' | 'gas';
-                  leituraValor = parte2;
-                } else {
-                  // id numero
-                  leituraId = parte1;
-                  leituraValor = parte2;
-                }
-              }
-            }
-            
-            // Tentar parse com 1 parte: só número
-            if (!leituraValor && partes.length === 1) {
-              if (/^\d+[\d.,]*$/.test(partes[0])) {
-                leituraValor = partes[0];
-              }
-            }
+            // Interpretar envio de leitura usando GastosManager
+            const { leituraValor, leituraTipo, leituraId } = this.gastosManager.parseArLeitura(textoNormalizado);
 
             if (leituraValor) {
-              if (!inscricoes.length) {
-                await this.enviarMensagem(de, 'Não encontrei seu cadastro.');
-                continue;
-              }
+              const { processado, pendingLeitura, erro } = await this.gastosManager.processarLeitura(
+                de,
+                texto,
+                leituraValor,
+                leituraTipo,
+                leituraId,
+                inscricoes
+              );
 
-              const unicoImovel = inscricoes.length === 1 ? inscricoes[0] : undefined;
-              const monitoramentos = unicoImovel
-                ? [
-                    unicoImovel.monitorandoAgua ? 'agua' : null,
-                    unicoImovel.monitorandoEnergia ? 'energia' : null,
-                    unicoImovel.monitorandoGas ? 'gas' : null,
-                  ].filter(Boolean)
-                : [];
-
-              // Validar/completar ID do imóvel
-              if (leituraId && inscricoes.length > 1) {
-                const imovelEncontrado = inscricoes.find((i) => i.idImovel.toLowerCase() === leituraId.toLowerCase());
-                if (!imovelEncontrado) {
-                  const lista = await formatarCasas();
-                  await this.enviarMensagem(de, `ID de imóvel não encontrado.\n${lista}`);
-                  continue;
-                }
-              } else if (!leituraId && inscricoes.length > 1) {
-                conversa.pendingLeitura = { valor: leituraValor, tipo: leituraTipo };
-                await this.salvarConversas();
-                const lista = await formatarCasas();
-                await this.enviarMensagem(de, `Tenho mais de um imóvel para você. Informe o ID do imóvel:\n${lista}`);
-                continue;
-              }
-
-              // Se não tem tipo informado
-              if (!leituraTipo) {
-                if (monitoramentos.length === 1) {
-                  leituraTipo = monitoramentos[0] as 'agua' | 'energia' | 'gas';
-                } else if (monitoramentos.length > 1) {
-                  conversa.pendingLeitura = { valor: leituraValor, idImovel: leituraId };
+              if (processado) {
+                if (pendingLeitura) {
+                  conversa.pendingLeitura = pendingLeitura;
                   await this.salvarConversas();
-                  await this.enviarMensagem(de, 'Qual o tipo de monitoramento? Responda com: água, energia ou gás.');
-                  continue;
+                  if (erro === 'NEED_ID') {
+                    const lista = await this.gastosManager.formatarCasas(inscricoes);
+                    await this.enviarMensagem(de, `Tenho mais de um imóvel para você. Informe o ID do imóvel:\n${lista}`);
+                  } else if (erro === 'NEED_TYPE') {
+                    await this.enviarMensagem(de, 'Qual o tipo de monitoramento? Responda com: água, energia ou gás.');
+                  }
                 }
-              }
-
-              const idImovel = leituraId || unicoImovel?.idImovel;
-              if (!idImovel || !leituraTipo) {
-                await this.enviarMensagem(de, menuOpcoes);
                 continue;
               }
-
-              const result = await appendPredioEntry({
-                predio: idImovel,
-                numero: leituraValor,
-                tipo: leituraTipo,
-              });
-              if (result.ok) {
-                const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';
-                await this.enviarMensagem(de, `✅ Leitura de ${leituraTipo} registrada para ${idImovel}: ${leituraValor}${consumoTxt}`);
-              } else {
-                await this.enviarMensagem(de, `❌ Não consegui registrar a leitura. ${result.erro || ''}`.trim());
-              }
-              continue;
             }
 
-            const predioInfo = this.extrairPredioNumero(texto);
-            if (predioInfo) {
-              try {
-                const resultado = await appendPredioEntry({
-                  predio: predioInfo.predio,
-                  numero: predioInfo.numero,
-                });
-                if (resultado.ok) {
-                  const leituraAtual = predioInfo.numero;
-                  const leituraAnterior = resultado.anterior || 'N/A';
-                  const dias = resultado.dias || 0;
-                  const consumoTotal = resultado.consumo ? parseFloat(String(resultado.consumo).replace(',', '.')) : 0;
-                  const consumoPorDia = dias > 0 && consumoTotal > 0 ? (consumoTotal / dias).toFixed(2) : 'N/A';
-                  
-                  let reply = `✅ Você atualizou os gastos de água do prédio ${predioInfo.predio}.\n\n📊 Sua leitura atual é de ${leituraAtual} m³.`;
-                  if (leituraAnterior !== 'N/A' && dias > 0) {
-                    reply += `\n📈 A leitura anterior de ${dias} dia${dias !== 1 ? 's' : ''} atrás foi de ${leituraAnterior} m³.`;
-                  }
-                  if (consumoTotal > 0 && dias > 0) {
-                    reply += `\n💧 Seu consumo entre esses dias foi de ${resultado.consumo} m³, o que dá uma média de ${consumoPorDia} m³ por dia.`;
-                  } else if (consumoTotal > 0) {
-                    reply += `\n💧 Consumo calculado: ${resultado.consumo} m³.`;
-                  }
-                  
-                  await this.enviarMensagem(de, reply);
-                  this.log(`🧾 Planilha atualizada: ${predioInfo.predio} ${predioInfo.numero}`);
-                } else {
-                  const motivo = resultado.erro ? ` Motivo: ${resultado.erro}.` : '';
-                  const reply = `❌ Não consegui adicionar os dados na planilha.${motivo}`;
-                  await this.enviarMensagem(de, reply);
-                }
-              } catch (erro: any) {
-                this.log(`❌ Erro ao atualizar planilha: ${erro?.message || erro}`);
-                const motivo = erro?.message ? ` Motivo: ${erro.message}.` : '';
-                const reply = `❌ Não consegui adicionar os dados na planilha.${motivo}`;
-                try {
-                  await this.enviarMensagem(de, reply);
-                } catch (err: any) {
-                  this.log(`❌ Falha ao enviar resposta: ${err?.message || err}`);
-                }
-              }
-            } else {
-              const predioSomente = this.extrairPredioSomente(texto);
-              if (predioSomente) {
-                const reply = `✅ Identifiquei o prédio ${predioSomente}. Envie o número após o nome (ex: "${predioSomente} 123").`;
-                try {
-                  await this.enviarMensagem(de, reply);
-                } catch (erro: any) {
-                  this.log(`❌ Falha ao enviar orientação: ${erro?.message || erro}`);
-                }
-                continue;
-              }
-              if (verificacao.inscrito) {
-                await this.enviarMensagem(de, menuOpcoes);
-              } else if (this.isCadastrado(de)) {
-                this.log(`👤 ${de} cadastrado: auto-resposta não enviada`);
-              } else {
-                try {
-                  await this.enviarMensagem(de, this.autoReplyText);
-                  this.log(`🤖 Auto-resposta enviada para ${de}`);
-                } catch (erro: any) {
-                  this.log(`❌ Falha ao enviar auto-resposta para ${de}: ${erro?.message || erro}`);
-                }
-              }
+            // Mostrar menu se inscrito
+            if (verificacao.inscrito) {
+              await this.enviarMensagem(de, menuOpcoes);
             }
           }
         }
