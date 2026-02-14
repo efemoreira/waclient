@@ -778,6 +778,7 @@ export class ConversationManager {
               const result = await appendPredioEntry({
                 predio: pending.idImovel,
                 numero: leituraValor,
+                tipo: pending.tipo,
               });
               if (result.ok) {
                 const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';
@@ -791,15 +792,49 @@ export class ConversationManager {
             }
 
             // Interpretar envio de leitura
-            const leituraComTipo = textoNormalizado.match(/^(agua|energia|gas)\s+(\d+[\d.,]*)$/i);
-            const leituraApenasNumero = textoNormalizado.match(/^\d+[\d.,]*$/);
+            // Padrões aceitos:
+            // - "123" = só número (1 imóvel, só agua)
+            // - "agua 123" = tipo e número (1 imóvel)
+            // - "id tipo numero" = id, tipo e número (múltiplos imóveis)
+            // - "id numero" = id e número (múltiplos imóveis, só agua)
+            // - "id agua 123" = variação do acima
+            
+            const partes = textoNormalizado.trim().split(/\s+/);
             let leituraValor: string | undefined;
             let leituraTipo: 'agua' | 'energia' | 'gas' | undefined;
-            if (leituraComTipo) {
-              leituraTipo = leituraComTipo[1].toLowerCase() as 'agua' | 'energia' | 'gas';
-              leituraValor = leituraComTipo[2];
-            } else if (leituraApenasNumero) {
-              leituraValor = leituraApenasNumero[0];
+            let leituraId: string | undefined;
+
+            // Tentar parse com 3 partes: id tipo numero
+            if (partes.length === 3) {
+              const [id, tipo, numero] = partes;
+              if (/^\d+[\d.,]*$/.test(numero) && /^(agua|energia|gas)$/i.test(tipo)) {
+                leituraId = id;
+                leituraTipo = tipo.toLowerCase() as 'agua' | 'energia' | 'gas';
+                leituraValor = numero;
+              }
+            }
+            
+            // Tentar parse com 2 partes: tipo numero ou id numero
+            if (!leituraValor && partes.length === 2) {
+              const [parte1, parte2] = partes;
+              if (/^\d+[\d.,]*$/.test(parte2)) {
+                if (/^(agua|energia|gas)$/i.test(parte1)) {
+                  // tipo numero
+                  leituraTipo = parte1.toLowerCase() as 'agua' | 'energia' | 'gas';
+                  leituraValor = parte2;
+                } else {
+                  // id numero
+                  leituraId = parte1;
+                  leituraValor = parte2;
+                }
+              }
+            }
+            
+            // Tentar parse com 1 parte: só número
+            if (!leituraValor && partes.length === 1) {
+              if (/^\d+[\d.,]*$/.test(partes[0])) {
+                leituraValor = partes[0];
+              }
             }
 
             if (leituraValor) {
@@ -817,7 +852,15 @@ export class ConversationManager {
                   ].filter(Boolean)
                 : [];
 
-              if (inscricoes.length > 1) {
+              // Validar/completar ID do imóvel
+              if (leituraId && inscricoes.length > 1) {
+                const imovelEncontrado = inscricoes.find((i) => i.idImovel.toLowerCase() === leituraId.toLowerCase());
+                if (!imovelEncontrado) {
+                  const lista = await formatarCasas();
+                  await this.enviarMensagem(de, `ID de imóvel não encontrado.\n${lista}`);
+                  continue;
+                }
+              } else if (!leituraId && inscricoes.length > 1) {
                 conversa.pendingLeitura = { valor: leituraValor, tipo: leituraTipo };
                 await this.salvarConversas();
                 const lista = await formatarCasas();
@@ -825,18 +868,19 @@ export class ConversationManager {
                 continue;
               }
 
-              if (unicoImovel && !leituraTipo) {
+              // Se não tem tipo informado
+              if (!leituraTipo) {
                 if (monitoramentos.length === 1) {
                   leituraTipo = monitoramentos[0] as 'agua' | 'energia' | 'gas';
-                } else {
-                  conversa.pendingLeitura = { valor: leituraValor };
+                } else if (monitoramentos.length > 1) {
+                  conversa.pendingLeitura = { valor: leituraValor, idImovel: leituraId };
                   await this.salvarConversas();
                   await this.enviarMensagem(de, 'Qual o tipo de monitoramento? Responda com: água, energia ou gás.');
                   continue;
                 }
               }
 
-              const idImovel = unicoImovel?.idImovel;
+              const idImovel = leituraId || unicoImovel?.idImovel;
               if (!idImovel || !leituraTipo) {
                 await this.enviarMensagem(de, menuOpcoes);
                 continue;
@@ -845,6 +889,7 @@ export class ConversationManager {
               const result = await appendPredioEntry({
                 predio: idImovel,
                 numero: leituraValor,
+                tipo: leituraTipo,
               });
               if (result.ok) {
                 const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';

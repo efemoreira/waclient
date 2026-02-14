@@ -49,19 +49,20 @@ export async function obterUltimaLeitura(idImovel: string): Promise<{ leitura?: 
     const colBValues = colB.data?.values?.[0] || [];
     
     // Procura a última leitura do idImovel (B) de trás para frente
+    // Colunas: A=Data, B=Id, C=Tipo, D=Leitura Atual, E=Leitura Anterior, F=Consumo
     for (let i = colBValues.length - 1; i > 0; i--) {
       if (colBValues[i] === idImovel) {
         const rowNum = i + 1;
         const rangeRes = await sheets.spreadsheets.values.get({
           spreadsheetId: SHEET_ID,
-          range: `${SHEET_NAME}!A${rowNum}:E${rowNum}`,
+          range: `${SHEET_NAME}!A${rowNum}:F${rowNum}`,
           valueRenderOption: 'FORMATTED_VALUE',
         });
         const row = rangeRes.data?.values?.[0] || [];
         return {
           data: row[0] || '',
-          leitura: row[2] || '',
-          consumo: row[4] || '',
+          leitura: row[3] || '',
+          consumo: row[5] || '',
         };
       }
     }
@@ -75,6 +76,7 @@ export async function obterUltimaLeitura(idImovel: string): Promise<{ leitura?: 
 export async function appendPredioEntry(params: {
   predio: string;
   numero: string;
+  tipo?: string;
   data?: string;
 }): Promise<{ ok: boolean; consumo?: string; anterior?: string; dataAnterior?: string; dias?: number; row?: number; erro?: string }> {
   const auth = getAuth();
@@ -84,7 +86,7 @@ export async function appendPredioEntry(params: {
   }
 
   const data = params.data || new Date().toLocaleDateString('pt-BR');
-  const values = [[data, params.predio, params.numero]];
+  const valores = [data, params.predio, params.tipo || '', params.numero];
 
   const sheets = google.sheets({ version: 'v4', auth });
   const colA = await sheets.spreadsheets.values.get({
@@ -101,18 +103,18 @@ export async function appendPredioEntry(params: {
   }
   const targetRow = lastRow + 1;
 
-  // Fórmulas permanecem nas colunas após C, não é necessário copiar.
-
-  logger.info('Inbox', `Planilha: update A${targetRow},B${targetRow},C${targetRow} ${JSON.stringify(values[0])}`);
+  // Colunas: A=Data, B=Id, C=Tipo, D=Leitura Atual
+  logger.info('Inbox', `Planilha: update A${targetRow},B${targetRow},C${targetRow},D${targetRow} ${JSON.stringify(valores)}`);
 
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: SHEET_ID,
     requestBody: {
       valueInputOption: 'USER_ENTERED',
       data: [
-        { range: `${SHEET_NAME}!A${targetRow}`, values: [[values[0][0]]] },
-        { range: `${SHEET_NAME}!B${targetRow}`, values: [[values[0][1]]] },
-        { range: `${SHEET_NAME}!C${targetRow}`, values: [[values[0][2]]] },
+        { range: `${SHEET_NAME}!A${targetRow}`, values: [[valores[0]]] },
+        { range: `${SHEET_NAME}!B${targetRow}`, values: [[valores[1]]] },
+        { range: `${SHEET_NAME}!C${targetRow}`, values: [[valores[2]]] },
+        { range: `${SHEET_NAME}!D${targetRow}`, values: [[valores[3]]] },
       ],
     },
   });
@@ -168,13 +170,13 @@ export async function appendPredioEntry(params: {
   try {
     const consumoRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!E${targetRow}`,
+      range: `${SHEET_NAME}!F${targetRow}`,
       valueRenderOption: 'FORMATTED_VALUE',
     });
     const consumo = consumoRes.data?.values?.[0]?.[0] ?? '';
     return { ok: true, consumo: String(consumo), anterior, dataAnterior, dias, row: targetRow };
   } catch (erro: any) {
-    logger.warn('Inbox', `Planilha: erro ao ler consumo (E${targetRow}) ${erro?.message || erro}`);
+    logger.warn('Inbox', `Planilha: erro ao ler consumo (F${targetRow}) ${erro?.message || erro}`);
     return { ok: true, anterior, dataAnterior, dias, row: targetRow };
   }
 }
