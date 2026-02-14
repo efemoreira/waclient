@@ -3,10 +3,8 @@ import type { WebhookPayload, WhatsAppMessage } from '../wabapi/types';
 import { config } from '../config';
 import { promises as fs } from 'fs';
 import { logger } from '../utils/logger';
-import { appendPredioEntry } from '../utils/predioSheet';
+import { appendPredioEntry, obterUltimaLeitura } from '../utils/predioSheet';
 import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';
-import { registrarLeitura, obterUltimaLeitura } from '../utils/leiturasSheet';
-import { S } from '@upstash/redis/zmscore-BjNXmrug';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
 const CONVERSATIONS_META_FILE = '/tmp/conversations.meta.json';
@@ -699,12 +697,7 @@ export class ConversationManager {
               if (!inscricoes.length) return 'Nenhum imóvel encontrado.';
               const linhas: string[] = [];
               for (const item of inscricoes) {
-                const tipoPreferido: 'agua' | 'energia' | 'gas' = item.monitorandoAgua
-                  ? 'agua'
-                  : item.monitorandoEnergia
-                    ? 'energia'
-                    : 'gas';
-                const ultima = await obterUltimaLeitura({ idImovel: item.idImovel, tipo: tipoPreferido });
+                const ultima = await obterUltimaLeitura(item.idImovel);
                 const ultimaTexto = ultima.leitura
                   ? `${ultima.leitura}${ultima.data ? ` (${ultima.data})` : ''}`
                   : 'sem leitura';
@@ -782,10 +775,9 @@ export class ConversationManager {
               }
 
               const leituraValor = pending.valor || textoNormalizado;
-              const result = await registrarLeitura({
-                idImovel: pending.idImovel,
-                tipo: pending.tipo,
-                leitura: leituraValor,
+              const result = await appendPredioEntry({
+                predio: pending.idImovel,
+                numero: leituraValor,
               });
               if (result.ok) {
                 const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';
@@ -850,10 +842,9 @@ export class ConversationManager {
                 continue;
               }
 
-              const result = await registrarLeitura({
-                idImovel,
-                tipo: leituraTipo,
-                leitura: leituraValor,
+              const result = await appendPredioEntry({
+                predio: idImovel,
+                numero: leituraValor,
               });
               if (result.ok) {
                 const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';

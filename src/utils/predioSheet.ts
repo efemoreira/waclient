@@ -31,6 +31,47 @@ function getAuth() {
   });
 }
 
+export async function obterUltimaLeitura(idImovel: string): Promise<{ leitura?: string; data?: string; consumo?: string }> {
+  const auth = getAuth();
+  if (!auth) {
+    logger.warn('Inbox', 'Planilha: credenciais não configuradas');
+    return {};
+  }
+
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+    const colB = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_NAME}!B:B`,
+      majorDimension: 'COLUMNS',
+      valueRenderOption: 'FORMATTED_VALUE',
+    });
+    const colBValues = colB.data?.values?.[0] || [];
+    
+    // Procura a última leitura do idImovel (B) de trás para frente
+    for (let i = colBValues.length - 1; i > 0; i--) {
+      if (colBValues[i] === idImovel) {
+        const rowNum = i + 1;
+        const rangeRes = await sheets.spreadsheets.values.get({
+          spreadsheetId: SHEET_ID,
+          range: `${SHEET_NAME}!A${rowNum}:E${rowNum}`,
+          valueRenderOption: 'FORMATTED_VALUE',
+        });
+        const row = rangeRes.data?.values?.[0] || [];
+        return {
+          data: row[0] || '',
+          leitura: row[2] || '',
+          consumo: row[4] || '',
+        };
+      }
+    }
+    return {};
+  } catch (erro: any) {
+    logger.warn('Inbox', `Planilha: erro ao obter última leitura ${erro?.message || erro}`);
+    return {};
+  }
+}
+
 export async function appendPredioEntry(params: {
   predio: string;
   numero: string;
