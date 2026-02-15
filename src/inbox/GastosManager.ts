@@ -145,11 +145,26 @@ export class GastosManager {
     });
 
     if (result.ok) {
-      const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';
-      await this.client.sendMessage(
-        de,
-        `✅ Leitura de ${pending.tipo} registrada para ${pending.idImovel}: ${leituraValor}${consumoTxt}`
-      );
+      let reply = `✅ Você atualizou os gastos de ${pending.tipo} da ${pending.idImovel}.`;
+      
+      const leituraAtual = pending.valor;
+      reply += `\n\n📊 Sua leitura atual é de ${leituraAtual} m³.`;
+      
+      if (result.anterior && result.dias && result.dias > 0) {
+        reply += `\n📈 A leitura anterior de ${result.dias} dia${result.dias !== 1 ? 's' : ''} atrás foi de ${result.anterior} m³.`;
+      }
+      
+      if (result.consumo) {
+        const consumoNum = parseFloat(String(result.consumo).replace(',', '.'));
+        if (result.dias && result.dias > 0) {
+          const mediaStr = (consumoNum / result.dias).toFixed(2);
+          reply += `\n💧 Seu consumo entre esses dias foi de ${result.consumo} m³, o que dá uma média de ${mediaStr} m³ por dia.`;
+        } else {
+          reply += `\n💧 Consumo calculado: ${result.consumo} m³.`;
+        }
+      }
+      
+      await this.client.sendMessage(de, reply);
     } else {
       await this.client.sendMessage(de, `❌ Não consegui registrar a leitura. ${result.erro || ''}`.trim());
     }
@@ -275,11 +290,25 @@ export class GastosManager {
     });
 
     if (result.ok) {
-      const consumoTxt = result.consumo ? `\n💧 Consumo: ${result.consumo}` : '';
-      await this.client.sendMessage(
-        de,
-        `✅ Leitura de ${leituraTipo} registrada para ${idImovel}: ${leituraValor}${consumoTxt}`
-      );
+      let reply = `✅ Você atualizou os gastos de ${leituraTipo} da ${idImovel}.`;
+      
+      reply += `\n\n📊 Sua leitura atual é de ${leituraValor} m³.`;
+      
+      if (result.anterior && result.dias && result.dias > 0) {
+        reply += `\n📈 A leitura anterior de ${result.dias} dia${result.dias !== 1 ? 's' : ''} atrás foi de ${result.anterior} m³.`;
+      }
+      
+      if (result.consumo) {
+        const consumoNum = parseFloat(String(result.consumo).replace(',', '.'));
+        if (result.dias && result.dias > 0) {
+          const mediaStr = (consumoNum / result.dias).toFixed(2);
+          reply += `\n💧 Seu consumo entre esses dias foi de ${result.consumo} m³, o que dá uma média de ${mediaStr} m³ por dia.`;
+        } else {
+          reply += `\n💧 Consumo calculado: ${result.consumo} m³.`;
+        }
+      }
+      
+      await this.client.sendMessage(de, reply);
     } else {
       await this.client.sendMessage(de, `❌ Não consegui registrar a leitura. ${result.erro || ''}`.trim());
     }
