@@ -223,14 +223,14 @@ export async function adicionarInscrito(params: {
         if (indicadorRow > 0) {
           const creditosRes = await sheets.spreadsheets.values.get({
             spreadsheetId: SHEET_ID,
-            range: `${SHEET_NAME}!Q${indicadorRow}`,
+            range: `${SHEET_NAME}!P${indicadorRow}`,
             valueRenderOption: 'FORMATTED_VALUE',
           });
           const creditosAtual = Number(String(creditosRes.data?.values?.[0]?.[0] || '0').replace(',', '.')) || 0;
           const novoCredito = creditosAtual + 1;
           await sheets.spreadsheets.values.update({
             spreadsheetId: SHEET_ID,
-            range: `${SHEET_NAME}!Q${indicadorRow}`,
+            range: `${SHEET_NAME}!P${indicadorRow}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [[novoCredito]] },
           });
