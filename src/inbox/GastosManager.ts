@@ -155,11 +155,29 @@ export class GastosManager {
       pending.idImovel = unicoImovel.idImovel;
     }
 
-    // Auto-detectar tipo se todas as inscrições monitoram apenas um tipo comum
+    // Auto-detectar tipo:
+    // 1) Se um imóvel já foi selecionado, considerar apenas as inscrições daquele imóvel
+    //    e auto-detectar somente se houver exatamente um tipo possível para ele.
+    // 2) Caso contrário (ou se o imóvel tiver mais de um tipo possível), cair no
+    //    comportamento atual: tipo comum entre todas as inscrições.
     if (!pending.tipo) {
-      const monitoramentos = this.obterMonitoramentosComuns(inscricoes);
-      if (monitoramentos.length === 1) {
-        pending.tipo = monitoramentos[0];
+      if (pending.idImovel) {
+        const inscricoesDoImovel = inscricoes.filter(
+          (i) => i.idImovel === pending.idImovel
+        );
+        if (inscricoesDoImovel.length > 0) {
+          const monitoramentosImovel = this.obterMonitoramentosComuns(inscricoesDoImovel);
+          if (monitoramentosImovel.length === 1) {
+            pending.tipo = monitoramentosImovel[0];
+          }
+        }
+      }
+
+      if (!pending.tipo) {
+        const monitoramentos = this.obterMonitoramentosComuns(inscricoes);
+        if (monitoramentos.length === 1) {
+          pending.tipo = monitoramentos[0];
+        }
       }
     }
 
