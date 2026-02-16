@@ -41,14 +41,21 @@ export class GastosManager {
   private obterMonitoramentosComuns(inscricoes: InscritoDados[]): ('agua' | 'energia' | 'gas')[] {
     if (!inscricoes.length) return [];
 
+    // Mapeamento entre tipos e suas propriedades correspondentes
+    const tipoParaPropriedade: Record<'agua' | 'energia' | 'gas', keyof InscritoDados> = {
+      agua: 'monitorandoAgua',
+      energia: 'monitorandoEnergia',
+      gas: 'monitorandoGas',
+    };
+
     // Coletar todos os tipos que TODAS as inscrições monitoram
     const tipos = ['agua', 'energia', 'gas'] as const;
     const tiposComuns: ('agua' | 'energia' | 'gas')[] = [];
 
     for (const tipo of tipos) {
-      const chave = `monitorando${tipo.charAt(0).toUpperCase() + tipo.slice(1)}` as keyof InscritoDados;
+      const propriedade = tipoParaPropriedade[tipo];
       // Se TODAS as inscrições monitoram este tipo
-      const todasMonitoram = inscricoes.every((inscricao) => inscricao[chave] === true);
+      const todasMonitoram = inscricoes.every((inscricao) => inscricao[propriedade] === true);
       if (todasMonitoram) {
         tiposComuns.push(tipo);
       }
