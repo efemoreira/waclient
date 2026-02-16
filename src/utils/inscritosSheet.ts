@@ -86,7 +86,7 @@ export async function listarInscricoesPorCelular(celular: string): Promise<Inscr
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A:V`,
+      range: `${SHEET_NAME}!A:T`,
       majorDimension: 'ROWS',
       valueRenderOption: 'FORMATTED_VALUE',
     });
@@ -106,9 +106,9 @@ export async function listarInscricoesPorCelular(celular: string): Promise<Inscr
         nome: String(row[2] || ''),
         celular: String(row[3] || ''),
         bairro: String(row[6] || ''),
-        monitorandoAgua: String(row[19] || '').toLowerCase() === 'true',
-        monitorandoEnergia: String(row[20] || '').toLowerCase() === 'true',
-        monitorandoGas: String(row[21] || '').toLowerCase() === 'true',
+        monitorandoAgua: String(row[16] || '').toLowerCase() === 'true',
+        monitorandoEnergia: String(row[17] || '').toLowerCase() === 'true',
+        monitorandoGas: String(row[18] || '').toLowerCase() === 'true',
       });
     }
 
