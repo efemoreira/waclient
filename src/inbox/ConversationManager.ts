@@ -40,8 +40,7 @@ export interface Conversation {
   inscricaoStage?:
     | 'nome'
     | 'bairro'
-    | 'cidade'
-    | 'estado'
+    | 'cep'
     | 'tipo_imovel'
     | 'pessoas'
     | 'uid_indicador';
