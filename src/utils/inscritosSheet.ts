@@ -126,8 +126,7 @@ export async function adicionarInscrito(params: {
   nome: string;
   celular: string;
   bairro?: string;
-  cidade?: string;
-  estado?: string;
+  cep?: string;
   tipo_imovel?: string;
   pessoas?: string;
   uid_indicador?: string;
@@ -185,19 +184,18 @@ export async function adicionarInscrito(params: {
           { range: `${SHEET_NAME}!E${targetRow}`, values: [['']] },
           { range: `${SHEET_NAME}!F${targetRow}`, values: [[datainscricao]] },
           { range: `${SHEET_NAME}!G${targetRow}`, values: [[params.bairro || '']] },
-          { range: `${SHEET_NAME}!H${targetRow}`, values: [[params.cidade || '']] },
-          { range: `${SHEET_NAME}!I${targetRow}`, values: [[params.estado || '']] },
-          { range: `${SHEET_NAME}!J${targetRow}`, values: [[params.tipo_imovel || '']] },
-          { range: `${SHEET_NAME}!K${targetRow}`, values: [[params.pessoas || '']] },
-          { range: `${SHEET_NAME}!L${targetRow}`, values: [['Simples']] },
-          { range: `${SHEET_NAME}!M${targetRow}`, values: [['']] },
-          { range: `${SHEET_NAME}!N${targetRow}`, values: [[proximoPagamento]] },
-          { range: `${SHEET_NAME}!O${targetRow}`, values: [[params.uid_indicador || '']] },
+          { range: `${SHEET_NAME}!H${targetRow}`, values: [[params.cep || '']] },
+          { range: `${SHEET_NAME}!I${targetRow}`, values: [[params.tipo_imovel || '']] },
+          { range: `${SHEET_NAME}!J${targetRow}`, values: [[params.pessoas || '']] },
+          { range: `${SHEET_NAME}!K${targetRow}`, values: [['Simples']] },
+          { range: `${SHEET_NAME}!L${targetRow}`, values: [['']] },
+          { range: `${SHEET_NAME}!M${targetRow}`, values: [[proximoPagamento]] },
+          { range: `${SHEET_NAME}!N${targetRow}`, values: [[params.uid_indicador || '']] },
+          { range: `${SHEET_NAME}!O${targetRow}`, values: [[0]] },
           { range: `${SHEET_NAME}!P${targetRow}`, values: [[0]] },
-          { range: `${SHEET_NAME}!Q${targetRow}`, values: [[0]] },
-          { range: `${SHEET_NAME}!R${targetRow}`, values: [[true]] },
+          { range: `${SHEET_NAME}!Q${targetRow}`, values: [[true]] },
+          { range: `${SHEET_NAME}!R${targetRow}`, values: [[false]] },
           { range: `${SHEET_NAME}!S${targetRow}`, values: [[false]] },
-          { range: `${SHEET_NAME}!T${targetRow}`, values: [[false]] },
         ],
       },
     });
@@ -223,14 +221,14 @@ export async function adicionarInscrito(params: {
         if (indicadorRow > 0) {
           const creditosRes = await sheets.spreadsheets.values.get({
             spreadsheetId: SHEET_ID,
-            range: `${SHEET_NAME}!P${indicadorRow}`,
+            range: `${SHEET_NAME}!O${indicadorRow}`,
             valueRenderOption: 'FORMATTED_VALUE',
           });
           const creditosAtual = Number(String(creditosRes.data?.values?.[0]?.[0] || '0').replace(',', '.')) || 0;
           const novoCredito = creditosAtual + 1;
           await sheets.spreadsheets.values.update({
             spreadsheetId: SHEET_ID,
-            range: `${SHEET_NAME}!P${indicadorRow}`,
+            range: `${SHEET_NAME}!O${indicadorRow}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [[novoCredito]] },
           });
