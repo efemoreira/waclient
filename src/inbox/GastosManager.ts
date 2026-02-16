@@ -35,6 +35,36 @@ export class GastosManager {
   }
 
   /**
+   * Determinar tipos de monitoramento comuns a todas as inscrições.
+   * Retorna um array com todos os tipos comuns (vazio se não houver nenhum).
+   */
+  private obterMonitoramentosComuns(inscricoes: InscritoDados[]): ('agua' | 'energia' | 'gas')[] {
+    if (!inscricoes.length) return [];
+
+    // Mapeamento entre tipos e suas propriedades correspondentes
+    const tipoParaPropriedade: Record<'agua' | 'energia' | 'gas', keyof InscritoDados> = {
+      agua: 'monitorandoAgua',
+      energia: 'monitorandoEnergia',
+      gas: 'monitorandoGas',
+    };
+
+    // Coletar todos os tipos que TODAS as inscrições monitoram
+    const tipos = ['agua', 'energia', 'gas'] as const;
+    const tiposComuns: ('agua' | 'energia' | 'gas')[] = [];
+
+    for (const tipo of tipos) {
+      const propriedade = tipoParaPropriedade[tipo];
+      // Se TODAS as inscrições monitoram este tipo
+      const todasMonitoram = inscricoes.every((inscricao) => inscricao[propriedade] === true);
+      if (todasMonitoram) {
+        tiposComuns.push(tipo);
+      }
+    }
+
+    return tiposComuns;
+  }
+
+  /**
    * Verificar e listar inscrições de um usuário
    */
   async obterInscricoes(celular: string): Promise<InscritoDados[]> {
@@ -123,6 +153,32 @@ export class GastosManager {
     const unicoImovel = inscricoes.length === 1 ? inscricoes[0] : undefined;
     if (!pending.idImovel && unicoImovel) {
       pending.idImovel = unicoImovel.idImovel;
+    }
+
+    // Auto-detectar tipo:
+    // 1) Se um imóvel já foi selecionado, considerar apenas as inscrições daquele imóvel
+    //    e auto-detectar somente se houver exatamente um tipo possível para ele.
+    // 2) Caso contrário (ou se o imóvel tiver mais de um tipo possível), cair no
+    //    comportamento atual: tipo comum entre todas as inscrições.
+    if (!pending.tipo) {
+      if (pending.idImovel) {
+        const inscricoesDoImovel = inscricoes.filter(
+          (i) => i.idImovel === pending.idImovel
+        );
+        if (inscricoesDoImovel.length > 0) {
+          const monitoramentosImovel = this.obterMonitoramentosComuns(inscricoesDoImovel);
+          if (monitoramentosImovel.length === 1) {
+            pending.tipo = monitoramentosImovel[0];
+          }
+        }
+      }
+
+      if (!pending.tipo) {
+        const monitoramentos = this.obterMonitoramentosComuns(inscricoes);
+        if (monitoramentos.length === 1) {
+          pending.tipo = monitoramentos[0];
+        }
+      }
     }
 
     if (!pending.tipo) {
@@ -240,13 +296,8 @@ export class GastosManager {
     }
 
     const unicoImovel = inscricoes.length === 1 ? inscricoes[0] : undefined;
-    const monitoramentos = unicoImovel
-      ? [
-          unicoImovel.monitorandoAgua ? 'agua' : null,
-          unicoImovel.monitorandoEnergia ? 'energia' : null,
-          unicoImovel.monitorandoGas ? 'gas' : null,
-        ].filter(Boolean)
-      : [];
+    // Obter tipos de monitoramento comuns a todas as inscrições
+    const monitoramentos = this.obterMonitoramentosComuns(inscricoes);
 
     // Validar/completar ID do imóvel
     if (leituraId && inscricoes.length > 1) {
