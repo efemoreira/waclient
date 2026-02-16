@@ -35,6 +35,29 @@ export class GastosManager {
   }
 
   /**
+   * Determinar tipos de monitoramento comuns a todas as inscrições
+   * Retorna array vazio se não houver monitoramento comum único
+   */
+  private obterMonitoramentosComuns(inscricoes: InscritoDados[]): ('agua' | 'energia' | 'gas')[] {
+    if (!inscricoes.length) return [];
+
+    // Coletar todos os tipos que TODAS as inscrições monitoram
+    const tipos = ['agua', 'energia', 'gas'] as const;
+    const tiposComuns: ('agua' | 'energia' | 'gas')[] = [];
+
+    for (const tipo of tipos) {
+      const chave = `monitorando${tipo.charAt(0).toUpperCase() + tipo.slice(1)}` as keyof InscritoDados;
+      // Se TODAS as inscrições monitoram este tipo
+      const todasMonitoram = inscricoes.every((inscricao) => inscricao[chave] === true);
+      if (todasMonitoram) {
+        tiposComuns.push(tipo);
+      }
+    }
+
+    return tiposComuns;
+  }
+
+  /**
    * Verificar e listar inscrições de um usuário
    */
   async obterInscricoes(celular: string): Promise<InscritoDados[]> {
@@ -123,6 +146,14 @@ export class GastosManager {
     const unicoImovel = inscricoes.length === 1 ? inscricoes[0] : undefined;
     if (!pending.idImovel && unicoImovel) {
       pending.idImovel = unicoImovel.idImovel;
+    }
+
+    // Auto-detectar tipo se todas as inscrições monitoram apenas um tipo comum
+    if (!pending.tipo) {
+      const monitoramentos = this.obterMonitoramentosComuns(inscricoes);
+      if (monitoramentos.length === 1) {
+        pending.tipo = monitoramentos[0];
+      }
     }
 
     if (!pending.tipo) {
@@ -240,13 +271,8 @@ export class GastosManager {
     }
 
     const unicoImovel = inscricoes.length === 1 ? inscricoes[0] : undefined;
-    const monitoramentos = unicoImovel
-      ? [
-          unicoImovel.monitorandoAgua ? 'agua' : null,
-          unicoImovel.monitorandoEnergia ? 'energia' : null,
-          unicoImovel.monitorandoGas ? 'gas' : null,
-        ].filter(Boolean)
-      : [];
+    // Obter tipos de monitoramento comuns a todas as inscrições
+    const monitoramentos = this.obterMonitoramentosComuns(inscricoes);
 
     // Validar/completar ID do imóvel
     if (leituraId && inscricoes.length > 1) {
