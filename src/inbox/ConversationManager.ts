@@ -47,8 +47,7 @@ export interface Conversation {
   inscricaoData?: {
     nome?: string;
     bairro?: string;
-    cidade?: string;
-    estado?: string;
+    cep?: string;
     tipo_imovel?: string;
     pessoas?: string;
     uid_indicador?: string;
@@ -555,67 +554,68 @@ export class ConversationManager {
               conversa.inscricaoData = conversa.inscricaoData || {};
               const stage = conversa.inscricaoStage;
 
-              if (stage === 'nome') conversa.inscricaoData.nome = texto;
-              if (stage === 'bairro') conversa.inscricaoData.bairro = texto;
-              if (stage === 'cidade') conversa.inscricaoData.cidade = texto;
-              if (stage === 'estado') conversa.inscricaoData.estado = texto;
-              if (stage === 'tipo_imovel') conversa.inscricaoData.tipo_imovel = texto;
-              if (stage === 'pessoas') conversa.inscricaoData.pessoas = texto;
-              if (stage === 'uid_indicador') conversa.inscricaoData.uid_indicador = texto;
+              // Mapeamento de salvamento de dados por estágio
+              const handlers: Record<string, () => void> = {
+                'nome': () => { conversa.inscricaoData!.nome = texto; },
+                'bairro': () => { conversa.inscricaoData!.bairro = texto; },
+                'cep': () => { conversa.inscricaoData!.cep = texto; },
+                'tipo_imovel': () => { conversa.inscricaoData!.tipo_imovel = texto; },
+                'pessoas': () => { conversa.inscricaoData!.pessoas = texto; },
+                'uid_indicador': () => { conversa.inscricaoData!.uid_indicador = texto; },
+              };
+
+              if (handlers[stage]) handlers[stage]();
 
               const avancar = async (proximo: Conversation['inscricaoStage'], pergunta: string) => {
                 conversa.inscricaoStage = proximo;
-                await this.salvarConversas();
+                await this.salvarConversas(); // Salva o progresso no storage
                 await this.enviarMensagem(de, pergunta);
               };
 
               try {
-                if (stage === 'nome') {
-                  await avancar('bairro', 'Perfeito! Agora me diga o seu bairro.');
-                } else if (stage === 'bairro') {
-                  await avancar('cidade', 'Agora, qual é a sua cidade?');
-                } else if (stage === 'cidade') {
-                  await avancar('estado', 'Qual é o seu estado?');
-                } else if (stage === 'estado') {
-                  await avancar('tipo_imovel', 'Qual é o tipo de imóvel? (casa, apto, comercial, etc.)');
-                } else if (stage === 'tipo_imovel') {
-                  await avancar('pessoas', 'Quantas pessoas moram no imóvel?');
-                } else if (stage === 'pessoas') {
-                  await avancar('uid_indicador', 'Você tem UID de indicador? Se sim, informe. Se não tiver, responda "não".');
-                } else if (stage === 'uid_indicador') {
-                  const dados = conversa.inscricaoData;
-                  const resultado = await adicionarInscrito({
-                    nome: dados?.nome || texto,
-                    celular: de,
-                    bairro: dados?.bairro || '',
-                    cidade: dados?.cidade || '',
-                    estado: dados?.estado || '',
-                    tipo_imovel: dados?.tipo_imovel || '',
-                    pessoas: dados?.pessoas || '',
-                    uid_indicador: dados?.uid_indicador || '',
-                  });
+                switch (stage) {
+                  case 'nome':
+                    await avancar('bairro', 'Perfeito! Agora me diga o seu bairro.');
+                    break;
+                  case 'bairro':
+                    await avancar('cep', 'Agora, qual é o seu CEP?');
+                    break;
+                  case 'cep':
+                    await avancar('tipo_imovel', 'Qual é o tipo de imóvel? (casa, apto, comercial, etc.)');
+                    break;
+                  case 'tipo_imovel':
+                    await avancar('pessoas', 'Quantas pessoas moram no imóvel?');
+                    break;
+                  case 'pessoas':
+                    await avancar('uid_indicador', 'Você tem UID de indicador? Se sim, informe. Se não tiver, responda "não".');
+                    break;
+                  case 'uid_indicador':
+                    const dados = conversa.inscricaoData;
+                    const resultado = await adicionarInscrito({
+                      nome: dados?.nome || '',
+                      celular: de,
+                      bairro: dados?.bairro || '',
+                      cep: dados?.cep || '', // Enviando CEP
+                      tipo_imovel: dados?.tipo_imovel || '',
+                      pessoas: dados?.pessoas || '',
+                      uid_indicador: dados?.uid_indicador || '',
+                    });
 
-                  if (resultado.ok) {
-                    conversa.inscricaoStage = undefined;
-                    conversa.inscricaoData = undefined;
-                    await this.salvarConversas();
-                    const reply = `✅ Inscrição realizada com sucesso!\n\nBem-vindo(a) ${dados?.nome || ''}! 🎉\n\nUID: ${resultado.uid}\nID Imóvel: ${resultado.idImovel}\n\nAgora você pode enviar as leituras de água.`;
-                    await this.enviarMensagem(de, reply);
-                  } else {
-                    const reply = `❌ Erro ao processar inscrição. ${resultado.erro || 'Tente novamente.'}`;
-                    await this.enviarMensagem(de, reply);
-                  }
+                    if (resultado.ok) {
+                      conversa.inscricaoStage = undefined;
+                      conversa.inscricaoData = undefined;
+                      await this.salvarConversas();
+                      const reply = `✅ Inscrição realizada com sucesso!\n\nBem-vindo(a) ${dados?.nome || ''}! 🎉\n\nUID: ${resultado.uid}\nID Imóvel: ${resultado.idImovel}\n\nAgora você pode enviar as leituras.`;
+                      await this.enviarMensagem(de, reply);
+                    } else {
+                      await this.enviarMensagem(de, `❌ Erro: ${resultado.erro || 'Tente novamente.'}`);
+                    }
+                    break;
                 }
               } catch (erro: any) {
-                this.log(`❌ Erro no fluxo de inscrição: ${erro?.message || erro}`);
-                const reply = `❌ Erro ao processar inscrição. Tente novamente.`;
-                try {
-                  await this.enviarMensagem(de, reply);
-                } catch (err: any) {
-                  this.log(`❌ Falha ao enviar resposta: ${err?.message || err}`);
-                }
+                this.log(`❌ Erro no onboarding: ${erro?.message}`);
+                await this.enviarMensagem(de, `❌ Ocorreu um erro. Por favor, tente responder a última pergunta novamente.`);
               }
-
               continue;
             }
 
