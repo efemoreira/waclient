@@ -35,8 +35,8 @@ export class GastosManager {
   }
 
   /**
-   * Determinar tipos de monitoramento comuns a todas as inscrições
-   * Retorna array vazio se não houver monitoramento comum único
+   * Determinar tipos de monitoramento comuns a todas as inscrições.
+   * Retorna um array com todos os tipos comuns (vazio se não houver nenhum).
    */
   private obterMonitoramentosComuns(inscricoes: InscritoDados[]): ('agua' | 'energia' | 'gas')[] {
     if (!inscricoes.length) return [];
