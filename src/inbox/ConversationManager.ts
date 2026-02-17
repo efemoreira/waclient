@@ -8,9 +8,6 @@ import { GastosManager } from './GastosManager';
 import { normalizarTexto, normalizarWaId } from '../utils/text-normalizer';
 import { lerConversas, salvarConversas, lerMeta, salvarMeta } from '../utils/conversation-storage';
 
-const UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL || '';
-const UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || '';
-
 /**
  * Representa uma mensagem individual
  */
@@ -128,7 +125,7 @@ export class ConversationManager {
     const versionStr = config.whatsapp.apiVersion.replace(/\.0$/, '');
     const apiVersion = parseInt(versionStr, 10);
     this.log(`🔧 Usando API v${apiVersion}.0`);
-    const storageMode = UPSTASH_REDIS_REST_URL && UPSTASH_REDIS_REST_TOKEN ? 'Upstash Redis' : '/tmp local';
+    const storageMode = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? 'Upstash Redis' : '/tmp local';
     this.log(`🗄️  Storage mode: ${storageMode}`);
     this.client = new WhatsApp({
       token: config.whatsapp.token,

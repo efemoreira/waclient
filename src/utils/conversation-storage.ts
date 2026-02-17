@@ -31,6 +31,10 @@ export async function lerConversas(): Promise<Record<string, Conversation> | nul
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
       });
+      if (!res.ok) {
+        console.warn(`⚠️  Erro de resposta do Upstash ao ler conversas: status ${res.status} ${res.statusText || ''}`.trim());
+        throw new Error(`Upstash GET failed: ${res.status}`);
+      }
       const data: any = await res.json();
       if (data?.result) {
         return JSON.parse(data.result);
@@ -60,7 +64,7 @@ export async function salvarConversas(data: Record<string, Conversation>): Promi
   if (isUpstashConfigured()) {
     try {
       const url = `${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(UPSTASH_KEY)}`;
-      await fetch(url, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}`,
@@ -68,6 +72,9 @@ export async function salvarConversas(data: Record<string, Conversation>): Promi
         },
         body: json,
       });
+      if (!res.ok) {
+        throw new Error(`Upstash SET failed: ${res.status}`);
+      }
     } catch (err: any) {
       console.warn('⚠️  Erro ao salvar no Upstash:', err?.message || err);
     }
@@ -126,7 +133,7 @@ export async function salvarMeta(meta: { resetAt: number }): Promise<void> {
   if (isUpstashConfigured()) {
     try {
       const url = `${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(UPSTASH_META_KEY)}`;
-      await fetch(url, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}`,
@@ -134,6 +141,9 @@ export async function salvarMeta(meta: { resetAt: number }): Promise<void> {
         },
         body: json,
       });
+      if (!res.ok) {
+        throw new Error(`Upstash SET failed: ${res.status}`);
+      }
     } catch (err: any) {
       console.warn('⚠️  Erro ao salvar meta no Upstash:', err?.message || err);
     }
