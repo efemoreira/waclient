@@ -1,5 +1,6 @@
 import { WhatsApp } from '../wabapi';
 import { config } from '../config';
+import { normalizarNumero } from '../utils/phone-normalizer';
 
 /**
  * Representa um contato para envio
@@ -51,18 +52,12 @@ export class EnvioMassa {
     this.onRequest = options?.onRequest;
   }
 
-  private normalizarNumero(numero: string): string {
-    const digits = String(numero || '').replace(/\D/g, '');
-    if (!digits) return '';
-    return digits.startsWith('55') ? digits : `55${digits}`;
-  }
-
   /**
    * Enviar mensagem para um contato individual
    */
   private async enviarParaContato(contato: Contact): Promise<void> {
     try {
-      const numero = this.normalizarNumero(contato.numero);
+      const numero = normalizarNumero(contato.numero);
       if (!numero) {
         throw new Error('Número inválido');
       }
