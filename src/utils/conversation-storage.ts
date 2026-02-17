@@ -92,9 +92,15 @@ export async function lerMeta(): Promise<{ resetAt?: number }> {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
       });
-      const data: any = await res.json();
-      if (data?.result) {
-        return JSON.parse(data.result);
+      if (!res.ok) {
+        console.warn(
+          `⚠️  Erro de resposta do Upstash ao ler meta: status ${res.status} ${res.statusText || ''}`.trim(),
+        );
+      } else {
+        const data: any = await res.json();
+        if (data?.result) {
+          return JSON.parse(data.result);
+        }
       }
     } catch (err: any) {
       console.warn('⚠️  Erro ao ler meta do Upstash:', err?.message || err);
