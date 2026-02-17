@@ -6,8 +6,11 @@
 import { appendPredioEntry, obterUltimaLeitura } from '../utils/predioSheet';
 import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular, atualizarMonitoramento, adicionarImovel } from '../utils/inscritosSheet';
 import type { WhatsApp } from '../wabapi';
-import { MENU_OPCOES } from './ConversationManager';
 
+// NOTE: Use CommonJS require to avoid a static circular dependency between
+// ConversationManager and GastosManager while keeping MENU_OPCOES available.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { MENU_OPCOES } = require('./ConversationManager');
 export interface PendingLeitura {
   valor?: string;
   tipo?: 'agua' | 'energia' | 'gas';
