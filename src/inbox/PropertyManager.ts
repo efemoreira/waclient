@@ -1,6 +1,9 @@
 /**
  * Gerenciador de Propriedades/Imóveis
  * Permite adicionar novos imóveis e configurar tipos de monitoramento
+ * 
+ * Nota: Imóveis adicionais não exigem UID de indicador, pois o sistema
+ * de indicações é aplicado apenas no cadastro inicial do usuário.
  */
 
 import { adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';

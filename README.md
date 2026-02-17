@@ -5,9 +5,14 @@ Sistema minimalista para envio em massa e gestão de conversas via WhatsApp Clou
 ## Funcionalidades
 
 - 📨 **Receber mensagens** via webhook
+- 💬 **Bot inteligente** - conversas automáticas com comandos extensíveis
+- 📊 **Monitoramento** - água, energia e gás
+- 🏠 **Gestão de imóveis** - adicionar e gerenciar múltiplas propriedades
 - 📤 **Envio em massa** de mensagens (CSV)
 - 💬 **Conversas** - visualizar histórico de mensagens
 - 🚀 **Serverless** - executa completamente na Vercel (sem servidor dedicado)
+
+> 📖 **[Ver Guia Completo de Comandos](COMANDOS.md)** - Documentação detalhada de todos os comandos disponíveis
 
 ## ⚡ Quick Start
 

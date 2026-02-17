@@ -468,7 +468,7 @@ export class ConversationManager {
             await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
             this.log(`✅ De ${de}: "${texto.substring(0, 50)}..."`);
 
-            // Obter conversa uma única vez
+            // Obter conversa - pode ser reatribuída durante o processamento
             let conversa = this.obterOuCriarConversa(de);
             
             // Verificar fluxo de novo imóvel primeiro

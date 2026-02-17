@@ -49,96 +49,93 @@ export class CommandHandler {
    * Registrar comandos padrão do sistema
    */
   private registerDefaultCommands(): void {
-    // Comando: Ajuda/Menu
-    this.register({
-      names: ['ajuda', 'help', 'menu'],
-      description: 'Exibir menu de ajuda',
-      aliases: ['?', 'comandos'],
-      handler: async (ctx) => {
-        await this.client.sendMessage(ctx.celular, MESSAGES.MENU_PRINCIPAL);
-        return { handled: true };
-      },
-    });
-
-    // Comando: Meu UID
-    this.register({
-      names: ['meu uid', 'uid'],
-      description: 'Ver seus UIDs',
-      aliases: ['id', 'meu id'],
-      handler: async (ctx) => {
-        await ctx.gastosManager.responderMeuUid(ctx.celular, ctx.inscricoes);
-        return { handled: true };
-      },
-    });
-
-    // Comando: Minhas Casas
-    this.register({
-      names: ['minhas casas', 'casas'],
-      description: 'Listar seus imóveis',
-      aliases: ['imoveis', 'meus imoveis', 'propriedades'],
-      handler: async (ctx) => {
-        await ctx.gastosManager.responderMinhasCasas(ctx.celular, ctx.inscricoes);
-        return { handled: true };
-      },
-    });
-
-    // Comando: Como Indicar
-    this.register({
-      names: ['como indicar'],
-      description: 'Informações sobre indicações',
-      aliases: ['indicar', 'indicacao', 'indicações'],
-      handler: async (ctx) => {
-        await ctx.gastosManager.responderComoIndicar(ctx.celular, ctx.inscricoes);
-        return { handled: true };
-      },
-    });
-
-    // Comando: Status de Monitoramento
-    this.register({
-      names: ['status', 'monitoramento'],
-      description: 'Ver status de monitoramento dos imóveis',
-      aliases: ['meu status', 'meus monitoramentos'],
-      handler: async (ctx) => {
-        if (!ctx.inscricoes.length) {
-          await this.client.sendMessage(ctx.celular, MESSAGES.ERRO_CADASTRO_NAO_ENCONTRADO);
+    const commands = [
+      // Comando: Ajuda/Menu
+      {
+        names: ['ajuda', 'help', 'menu'],
+        description: 'Exibir menu de ajuda',
+        aliases: ['?', 'comandos'],
+        handler: async (ctx: CommandContext) => {
+          await this.client.sendMessage(ctx.celular, MESSAGES.MENU_PRINCIPAL);
           return { handled: true };
-        }
-
-        const info = MESSAGES.INFO_STATUS_MONITORAMENTO(ctx.inscricoes.map((i) => ({
-          idImovel: i.idImovel,
-          bairro: i.bairro,
-          monitorandoAgua: i.monitorandoAgua,
-          monitorandoEnergia: i.monitorandoEnergia,
-          monitorandoGas: i.monitorandoGas,
-        })));
-
-        await this.client.sendMessage(ctx.celular, info);
-        return { handled: true };
+        },
       },
-    });
-
-    // Comando: Ajuda sobre Enviar Leitura
-    this.register({
-      names: ['como enviar', 'enviar leitura'],
-      description: 'Como enviar leituras',
-      aliases: ['ajuda leitura', 'help leitura'],
-      handler: async (ctx) => {
-        await this.client.sendMessage(ctx.celular, MESSAGES.HELP_ENVIAR_LEITURA);
-        return { handled: true };
+      // Comando: Meu UID
+      {
+        names: ['meu uid', 'uid'],
+        description: 'Ver seus UIDs',
+        aliases: ['id', 'meu id'],
+        handler: async (ctx: CommandContext) => {
+          await ctx.gastosManager.responderMeuUid(ctx.celular, ctx.inscricoes);
+          return { handled: true };
+        },
       },
-    });
-
-    // Comando: Lista de Comandos
-    this.register({
-      names: ['comandos', 'lista comandos'],
-      description: 'Listar todos os comandos',
-      aliases: ['todos comandos', 'opcoes'],
-      handler: async (ctx) => {
-        await this.client.sendMessage(ctx.celular, MESSAGES.HELP_COMMANDS);
-        return { handled: true };
+      // Comando: Minhas Casas
+      {
+        names: ['minhas casas', 'casas'],
+        description: 'Listar seus imóveis',
+        aliases: ['imoveis', 'meus imoveis', 'propriedades'],
+        handler: async (ctx: CommandContext) => {
+          await ctx.gastosManager.responderMinhasCasas(ctx.celular, ctx.inscricoes);
+          return { handled: true };
+        },
       },
-    });
+      // Comando: Como Indicar
+      {
+        names: ['como indicar'],
+        description: 'Informações sobre indicações',
+        aliases: ['indicar', 'indicacao', 'indicações'],
+        handler: async (ctx: CommandContext) => {
+          await ctx.gastosManager.responderComoIndicar(ctx.celular, ctx.inscricoes);
+          return { handled: true };
+        },
+      },
+      // Comando: Status de Monitoramento
+      {
+        names: ['status', 'monitoramento'],
+        description: 'Ver status de monitoramento dos imóveis',
+        aliases: ['meu status', 'meus monitoramentos'],
+        handler: async (ctx: CommandContext) => {
+          if (!ctx.inscricoes.length) {
+            await this.client.sendMessage(ctx.celular, MESSAGES.ERRO_CADASTRO_NAO_ENCONTRADO);
+            return { handled: true };
+          }
 
+          const info = MESSAGES.INFO_STATUS_MONITORAMENTO(ctx.inscricoes.map((i) => ({
+            idImovel: i.idImovel,
+            bairro: i.bairro,
+            monitorandoAgua: i.monitorandoAgua,
+            monitorandoEnergia: i.monitorandoEnergia,
+            monitorandoGas: i.monitorandoGas,
+          })));
+
+          await this.client.sendMessage(ctx.celular, info);
+          return { handled: true };
+        },
+      },
+      // Comando: Ajuda sobre Enviar Leitura
+      {
+        names: ['como enviar', 'enviar leitura'],
+        description: 'Como enviar leituras',
+        aliases: ['ajuda leitura', 'help leitura'],
+        handler: async (ctx: CommandContext) => {
+          await this.client.sendMessage(ctx.celular, MESSAGES.HELP_ENVIAR_LEITURA);
+          return { handled: true };
+        },
+      },
+      // Comando: Lista de Comandos
+      {
+        names: ['comandos', 'lista comandos'],
+        description: 'Listar todos os comandos',
+        aliases: ['todos comandos', 'opcoes'],
+        handler: async (ctx: CommandContext) => {
+          await this.client.sendMessage(ctx.celular, MESSAGES.HELP_COMMANDS);
+          return { handled: true };
+        },
+      },
+    ];
+
+    commands.forEach((cmd) => this.register(cmd));
     logger.info('CommandHandler', `✅ ${this.commands.size} comandos registrados`);
   }
 
@@ -151,28 +148,30 @@ export class CommandHandler {
     allNames.forEach((name) => {
       const normalized = name.toLowerCase().trim();
       this.commands.set(normalized, command);
-      logger.info('CommandHandler', `📝 Comando registrado: "${name}"`);
     });
   }
 
   /**
    * Processar comando do usuário
+   * Busca por correspondência exata primeiro, depois por correspondência no início
    */
   async process(context: CommandContext): Promise<CommandResult> {
     const normalized = context.textoNormalizado.trim();
 
-    // Procurar comando exato
+    // Procurar comando exato primeiro
     const command = this.commands.get(normalized);
     if (command) {
       logger.info('CommandHandler', `⚡ Executando comando: "${normalized}"`);
       return await command.handler(context);
     }
 
-    // Procurar comando que comece com o texto
-    for (const [key, cmd] of this.commands.entries()) {
-      if (normalized.startsWith(key + ' ') || key.startsWith(normalized)) {
-        logger.info('CommandHandler', `⚡ Executando comando parcial: "${key}"`);
-        return await cmd.handler(context);
+    // Procurar comando que comece com o texto (mínimo 3 caracteres para evitar ambiguidade)
+    if (normalized.length >= 3) {
+      for (const [key, cmd] of this.commands.entries()) {
+        if (normalized.startsWith(key + ' ')) {
+          logger.info('CommandHandler', `⚡ Executando comando com parâmetros: "${key}"`);
+          return await cmd.handler(context);
+        }
       }
     }
 
