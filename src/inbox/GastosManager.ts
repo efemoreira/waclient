@@ -4,7 +4,7 @@
  */
 
 import { appendPredioEntry, obterUltimaLeitura } from '../utils/predioSheet';
-import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';
+import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular, atualizarMonitoramento, adicionarImovel } from '../utils/inscritosSheet';
 import type { WhatsApp } from '../wabapi';
 
 export interface PendingLeitura {
@@ -127,6 +127,57 @@ export class GastosManager {
     for (const item of inscricoes) {
       await this.client.sendMessage(de, item.uid);
     }
+  }
+
+  /**
+   * Responder comando "Menu" ou "Ajuda"
+   */
+  async responderMenu(de: string): Promise<void> {
+    const menu = 
+      '📋 *Menu de Opções*\n\n' +
+      '🔍 *Consultas:*\n' +
+      '• Meu UID - Ver seus UIDs\n' +
+      '• Minhas casas - Ver suas propriedades\n' +
+      '• Meus monitoramentos - Ver o que está sendo monitorado\n\n' +
+      '📊 *Leituras:*\n' +
+      '• Enviar leitura (ex: 123 ou agua 123)\n\n' +
+      '⚙️ *Configurações:*\n' +
+      '• Configurar monitoramento - Ativar/desativar água, energia ou gás\n' +
+      '• Adicionar casa - Cadastrar nova propriedade\n\n' +
+      '🤝 *Outros:*\n' +
+      '• Como indicar - Indicar um amigo';
+    
+    await this.client.sendMessage(de, menu);
+  }
+
+  /**
+   * Responder comando "Meus monitoramentos"
+   */
+  async responderMeusMonitoramentos(de: string, inscricoes: InscritoDados[]): Promise<void> {
+    if (!inscricoes.length) {
+      await this.client.sendMessage(de, 'Não encontrei seu cadastro.');
+      return;
+    }
+
+    let resposta = '⚙️ *Seus Monitoramentos*\n\n';
+    
+    for (const inscricao of inscricoes) {
+      resposta += `📍 *${inscricao.idImovel}* - ${inscricao.bairro || 'bairro não informado'}\n`;
+      
+      const monitoramentos = [];
+      if (inscricao.monitorandoAgua) monitoramentos.push('💧 Água');
+      if (inscricao.monitorandoEnergia) monitoramentos.push('⚡ Energia');
+      if (inscricao.monitorandoGas) monitoramentos.push('🔥 Gás');
+      
+      if (monitoramentos.length > 0) {
+        resposta += `   Monitorando: ${monitoramentos.join(', ')}\n\n`;
+      } else {
+        resposta += '   ⚠️ Nenhum monitoramento ativo\n\n';
+      }
+    }
+
+    resposta += '\nPara alterar, digite: *Configurar monitoramento*';
+    await this.client.sendMessage(de, resposta);
   }
 
   /**

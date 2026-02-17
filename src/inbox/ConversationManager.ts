@@ -4,7 +4,7 @@ import { config } from '../config';
 import { promises as fs } from 'fs';
 import { logger } from '../utils/logger';
 import { appendPredioEntry } from '../utils/predioSheet';
-import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';
+import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular, atualizarMonitoramento, adicionarImovel } from '../utils/inscritosSheet';
 import { GastosManager } from './GastosManager';
 
 const CONVERSATIONS_FILE = '/tmp/conversations.json';
@@ -43,7 +43,8 @@ export interface Conversation {
     | 'cep'
     | 'tipo_imovel'
     | 'pessoas'
-    | 'uid_indicador';
+    | 'uid_indicador'
+    | 'monitor_config';
   inscricaoData?: {
     nome?: string;
     bairro?: string;
@@ -51,11 +52,26 @@ export interface Conversation {
     tipo_imovel?: string;
     pessoas?: string;
     uid_indicador?: string;
+    monitor_agua?: string;
+    monitor_energia?: string;
+    monitor_gas?: string;
   };
   pendingLeitura?: {
     valor?: string;
     tipo?: 'agua' | 'energia' | 'gas';
     idImovel?: string;
+  };
+  configurandoMonitoramento?: {
+    idImovel?: string;
+    stage?: 'selecionar_imovel' | 'selecionar_tipo' | 'selecionar_acao';
+    tipo?: 'agua' | 'energia' | 'gas';
+  };
+  adicionandoCasa?: {
+    stage?: 'bairro' | 'cep' | 'tipo_imovel' | 'pessoas' | 'monitoramentos';
+    bairro?: string;
+    cep?: string;
+    tipo_imovel?: string;
+    pessoas?: string;
   };
 }
 
@@ -562,6 +578,12 @@ export class ConversationManager {
                 'tipo_imovel': () => { conversa.inscricaoData!.tipo_imovel = texto; },
                 'pessoas': () => { conversa.inscricaoData!.pessoas = texto; },
                 'uid_indicador': () => { conversa.inscricaoData!.uid_indicador = texto; },
+                'monitor_config': () => { 
+                  const normalizado = this.normalizarTexto(texto);
+                  conversa.inscricaoData!.monitor_agua = normalizado.includes('agua') ? 'true' : 'false';
+                  conversa.inscricaoData!.monitor_energia = normalizado.includes('energia') ? 'true' : 'false';
+                  conversa.inscricaoData!.monitor_gas = normalizado.includes('gas') ? 'true' : 'false';
+                },
               };
 
               if (handlers[stage]) handlers[stage]();
@@ -590,22 +612,51 @@ export class ConversationManager {
                     await avancar('uid_indicador', 'Você tem UID de indicador? Se sim, informe. Se não tiver, responda "não".');
                     break;
                   case 'uid_indicador':
+                    await avancar('monitor_config', '💧⚡🔥 Ótimo! Agora vamos configurar o monitoramento.\n\nQuais tipos você quer monitorar?\n\nResponda com:\n• agua\n• energia\n• gas\n• agua energia\n• agua gas\n• energia gas\n• agua energia gas\n• nenhum');
+                    break;
+                  case 'monitor_config':
                     const dados = conversa.inscricaoData;
                     const resultado = await adicionarInscrito({
                       nome: dados?.nome || '',
                       celular: de,
                       bairro: dados?.bairro || '',
-                      cep: dados?.cep || '', // Enviando CEP
+                      cep: dados?.cep || '',
                       tipo_imovel: dados?.tipo_imovel || '',
                       pessoas: dados?.pessoas || '',
                       uid_indicador: dados?.uid_indicador || '',
                     });
 
                     if (resultado.ok) {
+                      // Atualizar monitoramentos
+                      const monitorAgua = dados?.monitor_agua === 'true';
+                      const monitorEnergia = dados?.monitor_energia === 'true';
+                      const monitorGas = dados?.monitor_gas === 'true';
+                      
+                      await atualizarMonitoramento({
+                        idImovel: resultado.idImovel!,
+                        monitorandoAgua: monitorAgua,
+                        monitorandoEnergia: monitorEnergia,
+                        monitorandoGas: monitorGas,
+                      });
+
                       conversa.inscricaoStage = undefined;
                       conversa.inscricaoData = undefined;
                       await this.salvarConversas();
-                      const reply = `✅ Inscrição realizada com sucesso!\n\nBem-vindo(a) ${dados?.nome || ''}! 🎉\n\nUID: ${resultado.uid}\nID Imóvel: ${resultado.idImovel}\n\nAgora você pode enviar as leituras.`;
+                      
+                      let monitorTexto = [];
+                      if (monitorAgua) monitorTexto.push('💧 Água');
+                      if (monitorEnergia) monitorTexto.push('⚡ Energia');
+                      if (monitorGas) monitorTexto.push('🔥 Gás');
+                      
+                      const reply = 
+                        `✅ Inscrição realizada com sucesso!\n\n` +
+                        `Bem-vindo(a) ${dados?.nome || ''}! 🎉\n\n` +
+                        `🆔 UID: ${resultado.uid}\n` +
+                        `🏠 ID Imóvel: ${resultado.idImovel}\n\n` +
+                        (monitorTexto.length > 0 
+                          ? `Monitorando: ${monitorTexto.join(', ')}\n\n` 
+                          : '⚠️ Nenhum monitoramento ativo\n\n') +
+                        `Agora você pode enviar leituras ou digitar "menu" para ver todas as opções!`;
                       await this.enviarMensagem(de, reply);
                     } else {
                       await this.enviarMensagem(de, `❌ Erro: ${resultado.erro || 'Tente novamente.'}`);
@@ -642,13 +693,25 @@ export class ConversationManager {
             const inscricoes = await listarInscricoesPorCelular(de);
 
             const menuOpcoes =
-              '📋 Opções disponíveis:\n' +
+              '📋 *Menu de Opções*\n\n' +
+              '🔍 *Consultas:*\n' +
               '• Meu UID\n' +
               '• Minhas casas\n' +
+              '• Meus monitoramentos\n\n' +
+              '📊 *Leituras:*\n' +
+              '• Enviar leitura (ex: 123 ou agua 123)\n\n' +
+              '⚙️ *Configurações:*\n' +
+              '• Configurar monitoramento\n' +
+              '• Adicionar casa\n\n' +
+              '🤝 *Outros:*\n' +
               '• Como indicar\n' +
-              '• Enviar leitura (ex: 123 ou agua 123)';
+              '• Menu ou Ajuda';
 
             // Comandos rápidos
+            if (textoNormalizado === 'menu' || textoNormalizado === 'ajuda') {
+              await this.gastosManager.responderMenu(de);
+              continue;
+            }
             if (textoNormalizado === 'meu uid') {
               await this.gastosManager.responderMeuUid(de, inscricoes);
               continue;
@@ -657,9 +720,205 @@ export class ConversationManager {
               await this.gastosManager.responderMinhasCasas(de, inscricoes);
               continue;
             }
+            if (textoNormalizado === 'meus monitoramentos') {
+              await this.gastosManager.responderMeusMonitoramentos(de, inscricoes);
+              continue;
+            }
             if (textoNormalizado === 'como indicar') {
               await this.gastosManager.responderComoIndicar(de, inscricoes);
               continue;
+            }
+
+            // Fluxo de adicionar casa
+            if (conversa.adicionandoCasa) {
+              const stage = conversa.adicionandoCasa.stage;
+              
+              if (stage === 'bairro') {
+                conversa.adicionandoCasa.bairro = texto;
+                conversa.adicionandoCasa.stage = 'cep';
+                await this.salvarConversas();
+                await this.enviarMensagem(de, 'Qual é o CEP da nova casa?');
+                continue;
+              } else if (stage === 'cep') {
+                conversa.adicionandoCasa.cep = texto;
+                conversa.adicionandoCasa.stage = 'tipo_imovel';
+                await this.salvarConversas();
+                await this.enviarMensagem(de, 'Qual é o tipo de imóvel? (casa, apto, comercial, etc.)');
+                continue;
+              } else if (stage === 'tipo_imovel') {
+                conversa.adicionandoCasa.tipo_imovel = texto;
+                conversa.adicionandoCasa.stage = 'pessoas';
+                await this.salvarConversas();
+                await this.enviarMensagem(de, 'Quantas pessoas moram no imóvel?');
+                continue;
+              } else if (stage === 'pessoas') {
+                conversa.adicionandoCasa.pessoas = texto;
+                conversa.adicionandoCasa.stage = 'monitoramentos';
+                await this.salvarConversas();
+                await this.enviarMensagem(de, '💧⚡🔥 Quais tipos você quer monitorar?\n\nResponda com:\n• agua\n• energia\n• gas\n• agua energia\n• agua gas\n• energia gas\n• agua energia gas\n• nenhum');
+                continue;
+              } else if (stage === 'monitoramentos') {
+                const monitorAgua = textoNormalizado.includes('agua');
+                const monitorEnergia = textoNormalizado.includes('energia');
+                const monitorGas = textoNormalizado.includes('gas');
+                
+                const resultado = await adicionarImovel({
+                  celular: de,
+                  bairro: conversa.adicionandoCasa.bairro,
+                  cep: conversa.adicionandoCasa.cep,
+                  tipo_imovel: conversa.adicionandoCasa.tipo_imovel,
+                  pessoas: conversa.adicionandoCasa.pessoas,
+                  monitorandoAgua: monitorAgua,
+                  monitorandoEnergia: monitorEnergia,
+                  monitorandoGas: monitorGas,
+                });
+
+                conversa.adicionandoCasa = undefined;
+                await this.salvarConversas();
+
+                if (resultado.ok) {
+                  let monitorTexto = [];
+                  if (monitorAgua) monitorTexto.push('💧 Água');
+                  if (monitorEnergia) monitorTexto.push('⚡ Energia');
+                  if (monitorGas) monitorTexto.push('🔥 Gás');
+                  
+                  const resposta = 
+                    `✅ Nova casa adicionada com sucesso!\n\n` +
+                    `🏠 ID Imóvel: ${resultado.idImovel}\n` +
+                    `🆔 UID: ${resultado.uid}\n\n` +
+                    (monitorTexto.length > 0 
+                      ? `Monitorando: ${monitorTexto.join(', ')}\n\n` 
+                      : '⚠️ Nenhum monitoramento ativo\n\n') +
+                    `Agora você pode enviar leituras para esta casa!`;
+                  await this.enviarMensagem(de, resposta);
+                } else {
+                  await this.enviarMensagem(de, `❌ Erro ao adicionar casa: ${resultado.erro || 'Tente novamente.'}`);
+                }
+                continue;
+              }
+            }
+
+            // Fluxo de configurar monitoramento
+            if (conversa.configurandoMonitoramento) {
+              const config = conversa.configurandoMonitoramento;
+              
+              if (config.stage === 'selecionar_imovel') {
+                const imovel = inscricoes.find((i) => i.idImovel.toLowerCase() === textoNormalizado);
+                if (!imovel) {
+                  await this.enviarMensagem(de, 'ID de imóvel não encontrado. Tente novamente ou digite "cancelar".');
+                  continue;
+                }
+                config.idImovel = imovel.idImovel;
+                config.stage = 'selecionar_tipo';
+                await this.salvarConversas();
+                await this.enviarMensagem(de, 'Qual tipo deseja configurar?\n\n• agua\n• energia\n• gas\n\nOu digite "cancelar"');
+                continue;
+              } else if (config.stage === 'selecionar_tipo') {
+                if (textoNormalizado === 'agua' || textoNormalizado === 'energia' || textoNormalizado === 'gas') {
+                  config.tipo = textoNormalizado as 'agua' | 'energia' | 'gas';
+                  config.stage = 'selecionar_acao';
+                  await this.salvarConversas();
+                  
+                  const imovel = inscricoes.find((i) => i.idImovel === config.idImovel);
+                  const tipoEmoji = config.tipo === 'agua' ? '💧' : config.tipo === 'energia' ? '⚡' : '🔥';
+                  const tipoNome = config.tipo === 'agua' ? 'Água' : config.tipo === 'energia' ? 'Energia' : 'Gás';
+                  
+                  let statusAtual = 'desativado';
+                  if (imovel) {
+                    if (config.tipo === 'agua' && imovel.monitorandoAgua) statusAtual = 'ativado';
+                    if (config.tipo === 'energia' && imovel.monitorandoEnergia) statusAtual = 'ativado';
+                    if (config.tipo === 'gas' && imovel.monitorandoGas) statusAtual = 'ativado';
+                  }
+                  
+                  await this.enviarMensagem(
+                    de, 
+                    `${tipoEmoji} Monitoramento de ${tipoNome} está atualmente: *${statusAtual}*\n\n` +
+                    'O que deseja fazer?\n\n' +
+                    '• ativar\n' +
+                    '• desativar\n' +
+                    '• cancelar'
+                  );
+                  continue;
+                } else {
+                  await this.enviarMensagem(de, 'Tipo inválido. Digite: agua, energia ou gas. Ou "cancelar"');
+                  continue;
+                }
+              } else if (config.stage === 'selecionar_acao') {
+                if (textoNormalizado === 'ativar' || textoNormalizado === 'desativar') {
+                  const ativar = textoNormalizado === 'ativar';
+                  const updateParams: any = { idImovel: config.idImovel };
+                  
+                  if (config.tipo === 'agua') updateParams.monitorandoAgua = ativar;
+                  else if (config.tipo === 'energia') updateParams.monitorandoEnergia = ativar;
+                  else if (config.tipo === 'gas') updateParams.monitorandoGas = ativar;
+                  
+                  const resultado = await atualizarMonitoramento(updateParams);
+                  
+                  conversa.configurandoMonitoramento = undefined;
+                  await this.salvarConversas();
+                  
+                  if (resultado.ok) {
+                    const tipoEmoji = config.tipo === 'agua' ? '💧' : config.tipo === 'energia' ? '⚡' : '🔥';
+                    const tipoNome = config.tipo === 'agua' ? 'Água' : config.tipo === 'energia' ? 'Energia' : 'Gás';
+                    await this.enviarMensagem(
+                      de, 
+                      `✅ Monitoramento de ${tipoEmoji} ${tipoNome} ${ativar ? 'ativado' : 'desativado'} com sucesso!`
+                    );
+                  } else {
+                    await this.enviarMensagem(de, `❌ Erro ao atualizar: ${resultado.erro || 'Tente novamente.'}`);
+                  }
+                  continue;
+                } else {
+                  await this.enviarMensagem(de, 'Resposta inválida. Digite: ativar ou desativar. Ou "cancelar"');
+                  continue;
+                }
+              }
+            }
+
+            // Iniciar configuração de monitoramento
+            if (textoNormalizado === 'configurar monitoramento') {
+              if (inscricoes.length === 1) {
+                conversa.configurandoMonitoramento = {
+                  idImovel: inscricoes[0].idImovel,
+                  stage: 'selecionar_tipo',
+                };
+                await this.salvarConversas();
+                await this.enviarMensagem(de, 'Qual tipo deseja configurar?\n\n• agua\n• energia\n• gas\n\nOu digite "cancelar"');
+              } else if (inscricoes.length > 1) {
+                conversa.configurandoMonitoramento = {
+                  stage: 'selecionar_imovel',
+                };
+                await this.salvarConversas();
+                const lista = await this.gastosManager.formatarCasas(inscricoes);
+                await this.enviarMensagem(de, `Qual imóvel deseja configurar?\n\n${lista}\n\nResponda com o ID do imóvel ou digite "cancelar"`);
+              } else {
+                await this.enviarMensagem(de, 'Você ainda não tem imóveis cadastrados.');
+              }
+              continue;
+            }
+
+            // Iniciar adição de casa
+            if (textoNormalizado === 'adicionar casa') {
+              conversa.adicionandoCasa = { stage: 'bairro' };
+              await this.salvarConversas();
+              await this.enviarMensagem(de, '🏠 Vamos adicionar uma nova casa!\n\nQual é o bairro?');
+              continue;
+            }
+
+            // Cancelar fluxos
+            if (textoNormalizado === 'cancelar') {
+              if (conversa.configurandoMonitoramento) {
+                conversa.configurandoMonitoramento = undefined;
+                await this.salvarConversas();
+                await this.enviarMensagem(de, '❌ Configuração de monitoramento cancelada.');
+                continue;
+              }
+              if (conversa.adicionandoCasa) {
+                conversa.adicionandoCasa = undefined;
+                await this.salvarConversas();
+                await this.enviarMensagem(de, '❌ Adição de casa cancelada.');
+                continue;
+              }
             }
 
             // Fluxo de leitura pendente
