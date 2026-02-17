@@ -198,18 +198,17 @@ export class GastosManager {
 
     if (result.ok) {
       const leituraAtual = pending.valor || leituraValor;
-      const media = result.consumo && result.dias && result.dias > 0
-        ? (parseFloat(String(result.consumo).replace(',', '.')) / result.dias).toFixed(2)
-        : undefined;
-
+      
       const reply = MESSAGES.LEITURA_COM_HISTORICO({
         tipo: pending.tipo,
         idImovel: pending.idImovel,
+        data: result.data,
         leituraAtual,
         leituraAnterior: result.anterior,
         dias: result.dias,
         consumo: result.consumo,
-        media,
+        media: result.media,
+        observacao: result.observacao,
       });
       
       await this.client.sendMessage(de, reply);
@@ -333,18 +332,16 @@ export class GastosManager {
     });
 
     if (result.ok) {
-      const media = result.consumo && result.dias && result.dias > 0
-        ? (parseFloat(String(result.consumo).replace(',', '.')) / result.dias).toFixed(2)
-        : undefined;
-
       const reply = MESSAGES.LEITURA_COM_HISTORICO({
         tipo: leituraTipo,
         idImovel,
+        data: result.data,
         leituraAtual: leituraValor,
         leituraAnterior: result.anterior,
         dias: result.dias,
         consumo: result.consumo,
-        media,
+        media: result.media,
+        observacao: result.observacao,
       });
       
       await this.client.sendMessage(de, reply);

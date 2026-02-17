@@ -78,7 +78,17 @@ export async function appendPredioEntry(params: {
   numero: string;
   tipo?: string;
   data?: string;
-}): Promise<{ ok: boolean; consumo?: string; anterior?: string; dataAnterior?: string; dias?: number; row?: number; erro?: string }> {
+}): Promise<{ 
+  ok: boolean; 
+  consumo?: string; 
+  anterior?: string; 
+  data?: string;
+  dias?: number; 
+  media?: string;
+  observacao?: string;
+  row?: number; 
+  erro?: string 
+}> {
   const auth = getAuth();
   if (!auth) {
     logger.warn('Inbox', 'Planilha: credenciais não configuradas');
@@ -119,64 +129,40 @@ export async function appendPredioEntry(params: {
     },
   });
 
-  // Encontrar leitura anterior do mesmo prédio
-  let anterior = '';
-  let dataAnterior = '';
-  let dias = 0;
+  // Aguardar um pouco para que as fórmulas da planilha sejam calculadas
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  // Ler todos os dados calculados da linha inserida
+  // Colunas: A=Data, B=Id, C=Tipo, D=Leitura Atual, E=Leitura Anterior, F=Consumo, G=Dias, H=Média_Dia, I=Observação
   try {
-    const colB = await sheets.spreadsheets.values.get({
+    const rowDataRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!B:B`,
-      majorDimension: 'COLUMNS',
+      range: `${SHEET_NAME}!A${targetRow}:I${targetRow}`,
       valueRenderOption: 'FORMATTED_VALUE',
     });
-    const colBValues = colB.data?.values?.[0] || [];
-    for (let i = colBValues.length - 1; i >= 0; i--) {
-      if (colBValues[i] === params.predio && i + 1 !== targetRow) { // i+1 porque array 0-based, row 1-based
-        const rowAnterior = i + 1;
-        // Ler A e C da linha anterior
-        const rangeRes = await sheets.spreadsheets.values.get({
-          spreadsheetId: SHEET_ID,
-          range: `${SHEET_NAME}!A${rowAnterior}:C${rowAnterior}`,
-          valueRenderOption: 'FORMATTED_VALUE',
-        });
-        const row = rangeRes.data?.values?.[0] || [];
-        dataAnterior = row[0] || '';
-        anterior = row[2] || '';
-        
-        // Calcular diferença de dias
-        if (dataAnterior && data) {
-          try {
-            const [dAnterior, mAnterior, aAnterior] = dataAnterior.split('/').map(Number);
-            const [dAtual, mAtual, aAtual] = data.split('/').map(Number);
-            const dateAnterior = new Date(aAnterior, mAnterior - 1, dAnterior);
-            const dateAtual = new Date(aAtual, mAtual - 1, dAtual);
-            dias = Math.floor((dateAtual.getTime() - dateAnterior.getTime()) / (1000 * 60 * 60 * 24));
-          } catch (e) {
-            logger.warn('Inbox', `Erro ao calcular dias: ${e}`);
-          }
-        }
-        break;
-      }
-    }
+    const rowData = rowDataRes.data?.values?.[0] || [];
+    
+    const dataAtual = rowData[0] || data;
+    const anterior = rowData[4] || ''; // Coluna E
+    const consumo = rowData[5] || ''; // Coluna F
+    const diasStr = rowData[6] || ''; // Coluna G
+    const media = rowData[7] || ''; // Coluna H
+    const observacao = rowData[8] || ''; // Coluna I
+    
+    const dias = diasStr ? parseInt(String(diasStr), 10) : 0;
+    
+    return { 
+      ok: true, 
+      consumo: String(consumo), 
+      anterior: String(anterior), 
+      data: dataAtual,
+      dias: dias || 0,
+      media: String(media),
+      observacao: String(observacao),
+      row: targetRow 
+    };
   } catch (erro: any) {
-    logger.warn('Inbox', `Planilha: erro ao ler anterior ${erro?.message || erro}`);
-  }
-
-  if (!lastRow) {
-    return { ok: true, anterior, dataAnterior, dias };
-  }
-
-  try {
-    const consumoRes = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!F${targetRow}`,
-      valueRenderOption: 'FORMATTED_VALUE',
-    });
-    const consumo = consumoRes.data?.values?.[0]?.[0] ?? '';
-    return { ok: true, consumo: String(consumo), anterior, dataAnterior, dias, row: targetRow };
-  } catch (erro: any) {
-    logger.warn('Inbox', `Planilha: erro ao ler consumo (F${targetRow}) ${erro?.message || erro}`);
-    return { ok: true, anterior, dataAnterior, dias, row: targetRow };
+    logger.warn('Inbox', `Planilha: erro ao ler dados calculados ${erro?.message || erro}`);
+    return { ok: true, row: targetRow };
   }
 }

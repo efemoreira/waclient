@@ -86,28 +86,38 @@ Você pode enviar de várias formas:
   LEITURA_COM_HISTORICO: (params: {
     tipo: string;
     idImovel: string;
+    data?: string;
     leituraAtual: string;
     leituraAnterior?: string;
     dias?: number;
     consumo?: string;
     media?: string;
+    observacao?: string;
   }) => {
     let msg = `✅ *Leitura registrada!*
 
+📅 Data: ${params.data || new Date().toLocaleDateString('pt-BR')}
 📍 Imóvel: ${params.idImovel}
 💧 Tipo: ${params.tipo}
 📊 Leitura atual: ${params.leituraAtual} m³`;
 
-    if (params.leituraAnterior && params.dias) {
-      msg += `\n📈 Leitura anterior: ${params.leituraAnterior} m³ (${params.dias} dia${params.dias !== 1 ? 's' : ''} atrás)`;
+    if (params.leituraAnterior) {
+      msg += `\n📈 Leitura anterior: ${params.leituraAnterior} m³`;
+      if (params.dias) {
+        msg += ` (${params.dias} dia${params.dias !== 1 ? 's' : ''} atrás)`;
+      }
     }
 
     if (params.consumo) {
-      msg += `\n💧 Consumo no período: ${params.consumo} m³`;
+      msg += `\n💧 Consumo: ${params.consumo} m³`;
     }
 
     if (params.media) {
-      msg += `\n📊 Média diária: ${params.media} m³/dia`;
+      msg += `\n📊 Média/Dia: ${params.media} m³/dia`;
+    }
+
+    if (params.observacao) {
+      msg += `\n📝 Observação: ${params.observacao}`;
     }
 
     return msg;
