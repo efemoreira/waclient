@@ -120,10 +120,23 @@ export class ConversationManager {
     gas: boolean;
   } {
     const normalizado = this.normalizarTexto(texto);
+
+    // Split into tokens to avoid partial-word matches (e.g., "aguardando" != "agua")
+    const tokens = normalizado.split(/[\s,;]+/).filter(Boolean);
+
+    // If user explicitly says "nenhum", return all monitoring flags as false
+    if (tokens.includes('nenhum')) {
+      return {
+        agua: false,
+        energia: false,
+        gas: false,
+      };
+    }
+
     return {
-      agua: normalizado.includes('agua'),
-      energia: normalizado.includes('energia'),
-      gas: normalizado.includes('gas'),
+      agua: tokens.includes('agua'),
+      energia: tokens.includes('energia'),
+      gas: tokens.includes('gas'),
     };
   }
 
