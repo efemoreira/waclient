@@ -7,6 +7,8 @@ import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from
 import { GastosManager } from './GastosManager';
 import { normalizarTexto, normalizarWaId } from '../utils/text-normalizer';
 import { lerConversas, salvarConversas, lerMeta, salvarMeta } from '../utils/conversation-storage';
+import { MESSAGES } from './messages';
+import { CommandHandler } from './CommandHandler';
 
 /**
  * Representa uma mensagem individual
@@ -61,6 +63,7 @@ export class ConversationManager {
   private client: WhatsApp;
   private conversations: Map<string, Conversation> = new Map();
   private gastosManager: GastosManager;
+  private commandHandler: CommandHandler;
   private lastLoadTime: number = 0;
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
   private resetAt: number = 0;
@@ -133,6 +136,7 @@ export class ConversationManager {
       version: apiVersion,
     });
     this.gastosManager = new GastosManager(this.client);
+    this.commandHandler = new CommandHandler(this.client);
     
     // Carregar conversas do armazenamento
     this.carregarConversas().catch(console.error);
@@ -455,19 +459,19 @@ export class ConversationManager {
               try {
                 switch (stage) {
                   case 'nome':
-                    await avancar('bairro', 'Perfeito! Agora me diga o seu bairro.');
+                    await avancar('bairro', MESSAGES.INSCRICAO_BAIRRO);
                     break;
                   case 'bairro':
-                    await avancar('cep', 'Agora, qual é o seu CEP?');
+                    await avancar('cep', MESSAGES.INSCRICAO_CEP);
                     break;
                   case 'cep':
-                    await avancar('tipo_imovel', 'Qual é o tipo de imóvel? (casa, apto, comercial, etc.)');
+                    await avancar('tipo_imovel', MESSAGES.INSCRICAO_TIPO_IMOVEL);
                     break;
                   case 'tipo_imovel':
-                    await avancar('pessoas', 'Quantas pessoas moram no imóvel?');
+                    await avancar('pessoas', MESSAGES.INSCRICAO_PESSOAS);
                     break;
                   case 'pessoas':
-                    await avancar('uid_indicador', 'Você tem UID de indicador? Se sim, informe. Se não tiver, responda "não".');
+                    await avancar('uid_indicador', MESSAGES.INSCRICAO_UID_INDICADOR);
                     break;
                   case 'uid_indicador':
                     const dados = conversa.inscricaoData;
@@ -485,16 +489,20 @@ export class ConversationManager {
                       conversa.inscricaoStage = undefined;
                       conversa.inscricaoData = undefined;
                       await this.persistirConversas();
-                      const reply = `✅ Inscrição realizada com sucesso!\n\nBem-vindo(a) ${dados?.nome || ''}! 🎉\n\nUID: ${resultado.uid}\nID Imóvel: ${resultado.idImovel}\n\nAgora você pode enviar as leituras.`;
+                      const reply = MESSAGES.INSCRICAO_SUCESSO(
+                        dados?.nome || '',
+                        resultado.uid || '',
+                        resultado.idImovel || ''
+                      );
                       await this.enviarMensagem(de, reply);
                     } else {
-                      await this.enviarMensagem(de, `❌ Erro: ${resultado.erro || 'Tente novamente.'}`);
+                      await this.enviarMensagem(de, MESSAGES.INSCRICAO_ERRO(resultado.erro));
                     }
                     break;
                 }
               } catch (erro: any) {
                 this.log(`❌ Erro no onboarding: ${erro?.message}`);
-                await this.enviarMensagem(de, `❌ Ocorreu um erro. Por favor, tente responder a última pergunta novamente.`);
+                await this.enviarMensagem(de, MESSAGES.INSCRICAO_ERRO(erro?.message));
               }
               continue;
             }
@@ -506,7 +514,7 @@ export class ConversationManager {
               conversa.inscricaoStage = 'nome';
               conversa.inscricaoData = {};
               await this.persistirConversas();
-              const reply = `Obrigado por entrar em contato! 👋\n\nVerifiquei que você não está entre nossos inscritos.\n\nPara continuar, inicie sua inscrição enviando seu nome completo.`;
+              const reply = MESSAGES.WELCOME_NEW_USER;
               try {
                 await this.enviarMensagem(de, reply);
               } catch (erro: any) {
@@ -521,24 +529,17 @@ export class ConversationManager {
             const textoNormalizado = normalizarTexto(texto).trim();
             const inscricoes = await listarInscricoesPorCelular(de);
 
-            const menuOpcoes =
-              '📋 Opções disponíveis:\n' +
-              '• Meu UID\n' +
-              '• Minhas casas\n' +
-              '• Como indicar\n' +
-              '• Enviar leitura (ex: 123 ou agua 123)';
+            // Tentar processar como comando primeiro
+            const commandResult = await this.commandHandler.process({
+              celular: de,
+              texto,
+              textoNormalizado,
+              inscricoes,
+              gastosManager: this.gastosManager,
+              client: this.client,
+            });
 
-            // Comandos rápidos
-            if (textoNormalizado === 'meu uid') {
-              await this.gastosManager.responderMeuUid(de, inscricoes);
-              continue;
-            }
-            if (textoNormalizado === 'minhas casas') {
-              await this.gastosManager.responderMinhasCasas(de, inscricoes);
-              continue;
-            }
-            if (textoNormalizado === 'como indicar') {
-              await this.gastosManager.responderComoIndicar(de, inscricoes);
+            if (commandResult.handled) {
               continue;
             }
 
@@ -577,19 +578,17 @@ export class ConversationManager {
                   await this.persistirConversas();
                   if (erro === 'NEED_ID') {
                     const lista = await this.gastosManager.formatarCasas(inscricoes);
-                    await this.enviarMensagem(de, `Tenho mais de um imóvel para você. Informe o ID do imóvel:\n${lista}`);
+                    await this.enviarMensagem(de, MESSAGES.AGUARDANDO_ID_IMOVEL(lista));
                   } else if (erro === 'NEED_TYPE') {
-                    await this.enviarMensagem(de, 'Qual o tipo de monitoramento? Responda com: água, energia ou gás.');
+                    await this.enviarMensagem(de, MESSAGES.AGUARDANDO_TIPO);
                   }
                 }
                 continue;
               }
             }
 
-            // Mostrar menu se inscrito
-            if (verificacao.inscrito) {
-              await this.enviarMensagem(de, menuOpcoes);
-            }
+            // Comando não reconhecido - mostrar menu
+            await this.enviarMensagem(de, MESSAGES.COMANDO_NAO_RECONHECIDO);
           }
         }
 

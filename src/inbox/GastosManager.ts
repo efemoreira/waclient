@@ -6,6 +6,7 @@
 import { appendPredioEntry, obterUltimaLeitura } from '../utils/predioSheet';
 import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';
 import type { WhatsApp } from '../wabapi';
+import { MESSAGES } from './messages';
 
 export interface PendingLeitura {
   valor?: string;
@@ -97,11 +98,11 @@ export class GastosManager {
    */
   async responderMeuUid(de: string, inscricoes: InscritoDados[]): Promise<void> {
     if (!inscricoes.length) {
-      await this.client.sendMessage(de, 'Não encontrei seu cadastro.');
+      await this.client.sendMessage(de, MESSAGES.ERRO_CADASTRO_NAO_ENCONTRADO);
       return;
     }
-    const linhas = inscricoes.map((i) => `• UID: ${i.uid} | Imóvel: ${i.idImovel}`);
-    await this.client.sendMessage(de, `🔎 Seus dados:\n${linhas.join('\n')}`);
+    const uids = inscricoes.map((i) => ({ uid: i.uid, idImovel: i.idImovel }));
+    await this.client.sendMessage(de, MESSAGES.INFO_MEUS_UIDS(uids));
   }
 
   /**
@@ -109,7 +110,7 @@ export class GastosManager {
    */
   async responderMinhasCasas(de: string, inscricoes: InscritoDados[]): Promise<void> {
     const lista = await this.formatarCasas(inscricoes);
-    await this.client.sendMessage(de, `🏠 Suas casas:\n${lista}`);
+    await this.client.sendMessage(de, MESSAGES.INFO_MINHAS_CASAS(lista));
   }
 
   /**
@@ -117,16 +118,11 @@ export class GastosManager {
    */
   async responderComoIndicar(de: string, inscricoes: InscritoDados[]): Promise<void> {
     if (!inscricoes.length) {
-      await this.client.sendMessage(de, 'Não encontrei seu cadastro.');
+      await this.client.sendMessage(de, MESSAGES.ERRO_CADASTRO_NAO_ENCONTRADO);
       return;
     }
-    await this.client.sendMessage(
-      de,
-      '🤝 Para indicar, compartilhe seu UID com um amigo e peça para ele informar no cadastro.\n\nSeus UID\'S estão abaixo:'
-    );
-    for (const item of inscricoes) {
-      await this.client.sendMessage(de, item.uid);
-    }
+    const uids = inscricoes.map((i) => i.uid);
+    await this.client.sendMessage(de, MESSAGES.INFO_COMO_INDICAR(uids));
   }
 
   /**
@@ -182,7 +178,7 @@ export class GastosManager {
     }
 
     if (!pending.tipo) {
-      await this.client.sendMessage(de, 'Qual o tipo de monitoramento? Responda com: água, energia ou gás.');
+      await this.client.sendMessage(de, MESSAGES.ERRO_PRECISA_TIPO);
       return { processado: true, proximoStage: 'tipo' };
     }
 
@@ -201,28 +197,24 @@ export class GastosManager {
     });
 
     if (result.ok) {
-      let reply = `✅ Você atualizou os gastos de ${pending.tipo} da ${pending.idImovel}.`;
-      
-      const leituraAtual = pending.valor;
-      reply += `\n\n📊 Sua leitura atual é de ${leituraAtual} m³.`;
-      
-      if (result.anterior && result.dias && result.dias > 0) {
-        reply += `\n📈 A leitura anterior de ${result.dias} dia${result.dias !== 1 ? 's' : ''} atrás foi de ${result.anterior} m³.`;
-      }
-      
-      if (result.consumo) {
-        const consumoNum = parseFloat(String(result.consumo).replace(',', '.'));
-        if (result.dias && result.dias > 0) {
-          const mediaStr = (consumoNum / result.dias).toFixed(2);
-          reply += `\n💧 Seu consumo entre esses dias foi de ${result.consumo} m³, o que dá uma média de ${mediaStr} m³ por dia.`;
-        } else {
-          reply += `\n💧 Consumo calculado: ${result.consumo} m³.`;
-        }
-      }
+      const leituraAtual = pending.valor || leituraValor;
+      const media = result.consumo && result.dias && result.dias > 0
+        ? (parseFloat(String(result.consumo).replace(',', '.')) / result.dias).toFixed(2)
+        : undefined;
+
+      const reply = MESSAGES.LEITURA_COM_HISTORICO({
+        tipo: pending.tipo,
+        idImovel: pending.idImovel,
+        leituraAtual,
+        leituraAnterior: result.anterior,
+        dias: result.dias,
+        consumo: result.consumo,
+        media,
+      });
       
       await this.client.sendMessage(de, reply);
     } else {
-      await this.client.sendMessage(de, `❌ Não consegui registrar a leitura. ${result.erro || ''}`.trim());
+      await this.client.sendMessage(de, MESSAGES.ERRO_LEITURA_REGISTRO(result.erro));
     }
 
     return { processado: true };
@@ -291,7 +283,7 @@ export class GastosManager {
     inscricoes: InscritoDados[]
   ): Promise<{ processado: boolean; erro?: string; pendingLeitura?: PendingLeitura }> {
     if (!inscricoes.length) {
-      await this.client.sendMessage(de, 'Não encontrei seu cadastro.');
+      await this.client.sendMessage(de, MESSAGES.ERRO_CADASTRO_NAO_ENCONTRADO);
       return { processado: true };
     }
 
@@ -341,27 +333,23 @@ export class GastosManager {
     });
 
     if (result.ok) {
-      let reply = `✅ Você atualizou os gastos de ${leituraTipo} da ${idImovel}.`;
-      
-      reply += `\n\n📊 Sua leitura atual é de ${leituraValor} m³.`;
-      
-      if (result.anterior && result.dias && result.dias > 0) {
-        reply += `\n📈 A leitura anterior de ${result.dias} dia${result.dias !== 1 ? 's' : ''} atrás foi de ${result.anterior} m³.`;
-      }
-      
-      if (result.consumo) {
-        const consumoNum = parseFloat(String(result.consumo).replace(',', '.'));
-        if (result.dias && result.dias > 0) {
-          const mediaStr = (consumoNum / result.dias).toFixed(2);
-          reply += `\n💧 Seu consumo entre esses dias foi de ${result.consumo} m³, o que dá uma média de ${mediaStr} m³ por dia.`;
-        } else {
-          reply += `\n💧 Consumo calculado: ${result.consumo} m³.`;
-        }
-      }
+      const media = result.consumo && result.dias && result.dias > 0
+        ? (parseFloat(String(result.consumo).replace(',', '.')) / result.dias).toFixed(2)
+        : undefined;
+
+      const reply = MESSAGES.LEITURA_COM_HISTORICO({
+        tipo: leituraTipo,
+        idImovel,
+        leituraAtual: leituraValor,
+        leituraAnterior: result.anterior,
+        dias: result.dias,
+        consumo: result.consumo,
+        media,
+      });
       
       await this.client.sendMessage(de, reply);
     } else {
-      await this.client.sendMessage(de, `❌ Não consegui registrar a leitura. ${result.erro || ''}`.trim());
+      await this.client.sendMessage(de, MESSAGES.ERRO_LEITURA_REGISTRO(result.erro));
     }
 
     return { processado: true };
