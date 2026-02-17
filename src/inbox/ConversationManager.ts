@@ -52,9 +52,9 @@ export interface Conversation {
     tipo_imovel?: string;
     pessoas?: string;
     uid_indicador?: string;
-    monitor_agua?: string;
-    monitor_energia?: string;
-    monitor_gas?: string;
+    monitor_agua?: boolean;
+    monitor_energia?: boolean;
+    monitor_gas?: boolean;
   };
   pendingLeitura?: {
     valor?: string;
@@ -613,9 +613,9 @@ export class ConversationManager {
                 'uid_indicador': () => { conversa.inscricaoData!.uid_indicador = texto; },
                 'monitor_config': () => { 
                   const tipos = this.parseMonitoringTypes(texto);
-                  conversa.inscricaoData!.monitor_agua = String(tipos.agua);
-                  conversa.inscricaoData!.monitor_energia = String(tipos.energia);
-                  conversa.inscricaoData!.monitor_gas = String(tipos.gas);
+                  conversa.inscricaoData!.monitor_agua = tipos.agua;
+                  conversa.inscricaoData!.monitor_energia = tipos.energia;
+                  conversa.inscricaoData!.monitor_gas = tipos.gas;
                 },
               };
 
@@ -661,9 +661,9 @@ export class ConversationManager {
 
                     if (resultado.ok) {
                       // Atualizar monitoramentos
-                      const monitorAgua = dados?.monitor_agua === 'true';
-                      const monitorEnergia = dados?.monitor_energia === 'true';
-                      const monitorGas = dados?.monitor_gas === 'true';
+                      const monitorAgua = dados?.monitor_agua ?? false;
+                      const monitorEnergia = dados?.monitor_energia ?? false;
+                      const monitorGas = dados?.monitor_gas ?? false;
                       
                       await atualizarMonitoramento({
                         idImovel: resultado.idImovel!,
@@ -862,7 +862,12 @@ export class ConversationManager {
               } else if (config.stage === 'selecionar_acao') {
                 if (textoNormalizado === 'ativar' || textoNormalizado === 'desativar') {
                   const ativar = textoNormalizado === 'ativar';
-                  const updateParams: any = { idImovel: config.idImovel };
+                  const updateParams: {
+                    idImovel: string;
+                    monitorandoAgua?: boolean;
+                    monitorandoEnergia?: boolean;
+                    monitorandoGas?: boolean;
+                  } = { idImovel: config.idImovel! };
                   
                   if (config.tipo === 'agua') updateParams.monitorandoAgua = ativar;
                   else if (config.tipo === 'energia') updateParams.monitorandoEnergia = ativar;
