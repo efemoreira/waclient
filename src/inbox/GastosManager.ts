@@ -6,6 +6,7 @@
 import { appendPredioEntry, obterUltimaLeitura } from '../utils/predioSheet';
 import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular, atualizarMonitoramento, adicionarImovel } from '../utils/inscritosSheet';
 import type { WhatsApp } from '../wabapi';
+import { MENU_OPCOES } from './ConversationManager';
 
 export interface PendingLeitura {
   valor?: string;
@@ -133,21 +134,7 @@ export class GastosManager {
    * Responder comando "Menu" ou "Ajuda"
    */
   async responderMenu(de: string): Promise<void> {
-    const menu = 
-      '📋 *Menu de Opções*\n\n' +
-      '🔍 *Consultas:*\n' +
-      '• Meu UID - Ver seus UIDs\n' +
-      '• Minhas casas - Ver suas propriedades\n' +
-      '• Meus monitoramentos - Ver o que está sendo monitorado\n\n' +
-      '📊 *Leituras:*\n' +
-      '• Enviar leitura (ex: 123 ou agua 123)\n\n' +
-      '⚙️ *Configurações:*\n' +
-      '• Configurar monitoramento - Ativar/desativar água, energia ou gás\n' +
-      '• Adicionar casa - Cadastrar nova propriedade\n\n' +
-      '🤝 *Outros:*\n' +
-      '• Como indicar - Indicar um amigo';
-    
-    await this.client.sendMessage(de, menu);
+    await this.client.sendMessage(de, MENU_OPCOES);
   }
 
   /**

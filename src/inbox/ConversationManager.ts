@@ -75,6 +75,22 @@ export interface Conversation {
   };
 }
 
+// Menu constant shared across the conversation manager and gastos manager
+export const MENU_OPCOES =
+  '📋 *Menu de Opções*\n\n' +
+  '🔍 *Consultas:*\n' +
+  '• Meu UID\n' +
+  '• Minhas casas\n' +
+  '• Meus monitoramentos\n\n' +
+  '📊 *Leituras:*\n' +
+  '• Enviar leitura (ex: 123 ou agua 123)\n\n' +
+  '⚙️ *Configurações:*\n' +
+  '• Configurar monitoramento\n' +
+  '• Adicionar casa\n\n' +
+  '🤝 *Outros:*\n' +
+  '• Como indicar\n' +
+  '• Menu ou Ajuda';
+
 /**
  * Gerenciador de conversas e mensagens
  * Orquestra fluxos de acompanhamento de gastos (água, energia, gás)
@@ -92,6 +108,23 @@ export class ConversationManager {
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
+  }
+
+  /**
+   * Parse monitoring types from user text
+   * Returns object with boolean flags for each monitoring type
+   */
+  private parseMonitoringTypes(texto: string): {
+    agua: boolean;
+    energia: boolean;
+    gas: boolean;
+  } {
+    const normalizado = this.normalizarTexto(texto);
+    return {
+      agua: normalizado.includes('agua'),
+      energia: normalizado.includes('energia'),
+      gas: normalizado.includes('gas'),
+    };
   }
 
   private log(msg: string): void {
@@ -579,10 +612,10 @@ export class ConversationManager {
                 'pessoas': () => { conversa.inscricaoData!.pessoas = texto; },
                 'uid_indicador': () => { conversa.inscricaoData!.uid_indicador = texto; },
                 'monitor_config': () => { 
-                  const normalizado = this.normalizarTexto(texto);
-                  conversa.inscricaoData!.monitor_agua = normalizado.includes('agua') ? 'true' : 'false';
-                  conversa.inscricaoData!.monitor_energia = normalizado.includes('energia') ? 'true' : 'false';
-                  conversa.inscricaoData!.monitor_gas = normalizado.includes('gas') ? 'true' : 'false';
+                  const tipos = this.parseMonitoringTypes(texto);
+                  conversa.inscricaoData!.monitor_agua = String(tipos.agua);
+                  conversa.inscricaoData!.monitor_energia = String(tipos.energia);
+                  conversa.inscricaoData!.monitor_gas = String(tipos.gas);
                 },
               };
 
@@ -692,21 +725,6 @@ export class ConversationManager {
             const textoNormalizado = this.normalizarTexto(texto).trim();
             const inscricoes = await listarInscricoesPorCelular(de);
 
-            const menuOpcoes =
-              '📋 *Menu de Opções*\n\n' +
-              '🔍 *Consultas:*\n' +
-              '• Meu UID\n' +
-              '• Minhas casas\n' +
-              '• Meus monitoramentos\n\n' +
-              '📊 *Leituras:*\n' +
-              '• Enviar leitura (ex: 123 ou agua 123)\n\n' +
-              '⚙️ *Configurações:*\n' +
-              '• Configurar monitoramento\n' +
-              '• Adicionar casa\n\n' +
-              '🤝 *Outros:*\n' +
-              '• Como indicar\n' +
-              '• Menu ou Ajuda';
-
             // Comandos rápidos
             if (textoNormalizado === 'menu' || textoNormalizado === 'ajuda') {
               await this.gastosManager.responderMenu(de);
@@ -758,9 +776,7 @@ export class ConversationManager {
                 await this.enviarMensagem(de, '💧⚡🔥 Quais tipos você quer monitorar?\n\nResponda com:\n• agua\n• energia\n• gas\n• agua energia\n• agua gas\n• energia gas\n• agua energia gas\n• nenhum');
                 continue;
               } else if (stage === 'monitoramentos') {
-                const monitorAgua = textoNormalizado.includes('agua');
-                const monitorEnergia = textoNormalizado.includes('energia');
-                const monitorGas = textoNormalizado.includes('gas');
+                const tipos = this.parseMonitoringTypes(texto);
                 
                 const resultado = await adicionarImovel({
                   celular: de,
@@ -768,9 +784,9 @@ export class ConversationManager {
                   cep: conversa.adicionandoCasa.cep,
                   tipo_imovel: conversa.adicionandoCasa.tipo_imovel,
                   pessoas: conversa.adicionandoCasa.pessoas,
-                  monitorandoAgua: monitorAgua,
-                  monitorandoEnergia: monitorEnergia,
-                  monitorandoGas: monitorGas,
+                  monitorandoAgua: tipos.agua,
+                  monitorandoEnergia: tipos.energia,
+                  monitorandoGas: tipos.gas,
                 });
 
                 conversa.adicionandoCasa = undefined;
@@ -778,9 +794,9 @@ export class ConversationManager {
 
                 if (resultado.ok) {
                   let monitorTexto = [];
-                  if (monitorAgua) monitorTexto.push('💧 Água');
-                  if (monitorEnergia) monitorTexto.push('⚡ Energia');
-                  if (monitorGas) monitorTexto.push('🔥 Gás');
+                  if (tipos.agua) monitorTexto.push('💧 Água');
+                  if (tipos.energia) monitorTexto.push('⚡ Energia');
+                  if (tipos.gas) monitorTexto.push('🔥 Gás');
                   
                   const resposta = 
                     `✅ Nova casa adicionada com sucesso!\n\n` +
@@ -967,7 +983,7 @@ export class ConversationManager {
 
             // Mostrar menu se inscrito
             if (verificacao.inscrito) {
-              await this.enviarMensagem(de, menuOpcoes);
+              await this.enviarMensagem(de, MENU_OPCOES);
             }
           }
         }

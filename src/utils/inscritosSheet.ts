@@ -438,9 +438,9 @@ export async function adicionarImovel(params: {
           { range: `${SHEET_NAME}!N${targetRow}`, values: [['']] }, // Sem indicador para imóveis adicionais
           { range: `${SHEET_NAME}!O${targetRow}`, values: [[0]] },
           { range: `${SHEET_NAME}!P${targetRow}`, values: [[0]] },
-          { range: `${SHEET_NAME}!Q${targetRow}`, values: [[params.monitorandoAgua !== false]] }, // true por padrão
-          { range: `${SHEET_NAME}!R${targetRow}`, values: [[params.monitorandoEnergia || false]] },
-          { range: `${SHEET_NAME}!S${targetRow}`, values: [[params.monitorandoGas || false]] },
+          { range: `${SHEET_NAME}!Q${targetRow}`, values: [[params.monitorandoAgua ?? true]] }, // true por padrão
+          { range: `${SHEET_NAME}!R${targetRow}`, values: [[params.monitorandoEnergia ?? false]] },
+          { range: `${SHEET_NAME}!S${targetRow}`, values: [[params.monitorandoGas ?? false]] },
         ],
       },
     });
