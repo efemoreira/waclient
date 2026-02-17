@@ -369,28 +369,7 @@ export async function adicionarImovel(params: {
 
     // Usar dados da primeira inscrição como referência
     const inscricaoRef = inscricoes[0];
-
-    // Buscar todos os dados do usuário para pegar o nome completo
-    const result = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A:T`,
-      majorDimension: 'ROWS',
-      valueRenderOption: 'FORMATTED_VALUE',
-    });
-
-    const rows = result.data?.values || [];
-    const celularNormalizado = params.celular.replace(/\D/g, '');
-    let nomeCompleto = inscricaoRef.nome;
-
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i] || [];
-      const cel = String(row[3] || '').replace(/\D/g, '');
-      if (cel === celularNormalizado) {
-        nomeCompleto = String(row[2] || '');
-        break;
-      }
-    }
-
+    const nomeCompleto = inscricaoRef.nome;
     // Encontrar última linha não vazia
     const colA = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
