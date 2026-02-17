@@ -26,6 +26,7 @@ Você pode usar os seguintes comandos:
 
 💡 *Ações*
 • *Enviar leitura* - Registrar consumo (ex: "123" ou "agua 123")
+• *Adicionar casa* - Cadastrar um novo imóvel
 • *Ajuda* - Ver este menu novamente
 
 🤝 *Indicações*
@@ -64,9 +65,9 @@ Você pode enviar de várias formas:
 • status / monitoramento
 • ultima leitura
 
-⚙️ *Configurações*
-• adicionar casa (em breve)
-• adicionar monitoramento (em breve)
+⚙️ *Ações*
+• adicionar casa / nova casa
+• enviar leitura
 
 ❓ *Suporte*
 • ajuda / help / menu

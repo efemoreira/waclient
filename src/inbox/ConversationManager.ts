@@ -9,6 +9,7 @@ import { normalizarTexto, normalizarWaId } from '../utils/text-normalizer';
 import { lerConversas, salvarConversas, lerMeta, salvarMeta } from '../utils/conversation-storage';
 import { MESSAGES } from './messages';
 import { CommandHandler } from './CommandHandler';
+import { PropertyManager, type ConversaNovoImovel } from './PropertyManager';
 
 /**
  * Representa uma mensagem individual
@@ -53,6 +54,7 @@ export interface Conversation {
     tipo?: 'agua' | 'energia' | 'gas';
     idImovel?: string;
   };
+  novoImovel?: ConversaNovoImovel;
 }
 
 /**
@@ -64,6 +66,7 @@ export class ConversationManager {
   private conversations: Map<string, Conversation> = new Map();
   private gastosManager: GastosManager;
   private commandHandler: CommandHandler;
+  private propertyManager: PropertyManager;
   private lastLoadTime: number = 0;
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
   private resetAt: number = 0;
@@ -136,10 +139,43 @@ export class ConversationManager {
       version: apiVersion,
     });
     this.gastosManager = new GastosManager(this.client);
+    this.propertyManager = new PropertyManager(this.client);
     this.commandHandler = new CommandHandler(this.client);
+    
+    // Registrar comando de adicionar casa
+    this.registerPropertyCommands();
     
     // Carregar conversas do armazenamento
     this.carregarConversas().catch(console.error);
+  }
+
+  /**
+   * Registrar comandos relacionados a propriedades
+   */
+  private registerPropertyCommands(): void {
+    this.commandHandler.register({
+      names: ['adicionar casa', 'nova casa'],
+      description: 'Adicionar um novo imóvel ao seu cadastro',
+      aliases: ['add casa', 'adicionar imovel', 'novo imovel', 'cadastrar casa'],
+      handler: async (ctx) => {
+        const verificacao = await this.propertyManager.podeAdicionarImovel(ctx.celular);
+        
+        if (!verificacao.pode) {
+          await this.client.sendMessage(ctx.celular, `❌ ${verificacao.erro}`);
+          return { handled: true };
+        }
+
+        // Iniciar fluxo de adição de imóvel
+        const conversa = this.obterOuCriarConversa(ctx.celular);
+        conversa.novoImovel = await this.propertyManager.iniciarAdicaoImovel(
+          ctx.celular,
+          verificacao.nome!
+        );
+        await this.persistirConversas();
+
+        return { handled: true };
+      },
+    });
   }
 
   /**
@@ -432,8 +468,27 @@ export class ConversationManager {
             await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
             this.log(`✅ De ${de}: "${texto.substring(0, 50)}..."`);
 
-            // Verificar inscrição primeiro
-            const conversa = this.obterOuCriarConversa(de);
+            // Obter conversa uma única vez
+            let conversa = this.obterOuCriarConversa(de);
+            
+            // Verificar fluxo de novo imóvel primeiro
+            if (conversa.novoImovel) {
+              const resultado = await this.propertyManager.processarProximoPasso(
+                conversa.novoImovel,
+                texto
+              );
+
+              if (resultado.concluido) {
+                conversa.novoImovel = undefined;
+                await this.persistirConversas();
+              } else if (resultado.proximoStage) {
+                conversa.novoImovel = resultado.proximoStage;
+                await this.persistirConversas();
+              }
+              continue;
+            }
+
+            // Verificar inscrição
             if (conversa.inscricaoStage) {
               conversa.inscricaoData = conversa.inscricaoData || {};
               const stage = conversa.inscricaoStage;
