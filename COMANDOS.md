@@ -148,12 +148,14 @@ Mostra instruções detalhadas sobre como enviar leituras.
 ```
 Usuário: 123
 Bot: ✅ Leitura registrada!
+
+📅 Data: 17/02/2026
 📍 Imóvel: IMV001
 💧 Tipo: agua
 📊 Leitura atual: 123 m³
 📈 Leitura anterior: 100 m³ (30 dias atrás)
-💧 Consumo no período: 23 m³
-📊 Média diária: 0.77 m³/dia
+💧 Consumo: 23 m³
+📊 Média/Dia: 0.77 m³/dia
 ```
 
 ### Cenário 2: Usuário com múltiplos imóveis
