@@ -186,7 +186,7 @@ export class ConversationManager {
   /**
    * Salvar conversas no armazenamento (Upstash ou /tmp)
    */
-  private async salvarConversasInternas(): Promise<void> {
+  private async persistirConversas(): Promise<void> {
     try {
       await this.garantirResetAtualizado();
       const data: Record<string, Conversation> = {};
@@ -283,7 +283,7 @@ export class ConversationManager {
     }
 
     // Salvar após cada mensagem
-    await this.salvarConversasInternas();
+    await this.persistirConversas();
   }
 
   /**
@@ -303,7 +303,7 @@ export class ConversationManager {
       if (timestamp) {
         conversa.lastTimestamp = timestamp;
       }
-      await this.salvarConversasInternas();
+      await this.persistirConversas();
       this.log(`✅ Status atualizado: ${mensagemId} -> ${status}`);
     } else {
       this.log(`⚠️  Status recebido para mensagem desconhecida: ${mensagemId}`);
@@ -451,7 +451,7 @@ export class ConversationManager {
 
               const avancar = async (proximo: Conversation['inscricaoStage'], pergunta: string) => {
                 conversa.inscricaoStage = proximo;
-                await this.salvarConversasInternas(); // Salva o progresso no storage
+                await this.persistirConversas(); // Salva o progresso no storage
                 await this.enviarMensagem(de, pergunta);
               };
 
@@ -487,7 +487,7 @@ export class ConversationManager {
                     if (resultado.ok) {
                       conversa.inscricaoStage = undefined;
                       conversa.inscricaoData = undefined;
-                      await this.salvarConversasInternas();
+                      await this.persistirConversas();
                       const reply = `✅ Inscrição realizada com sucesso!\n\nBem-vindo(a) ${dados?.nome || ''}! 🎉\n\nUID: ${resultado.uid}\nID Imóvel: ${resultado.idImovel}\n\nAgora você pode enviar as leituras.`;
                       await this.enviarMensagem(de, reply);
                     } else {
@@ -508,7 +508,7 @@ export class ConversationManager {
               // Não está inscrito - pedir inscrição
               conversa.inscricaoStage = 'nome';
               conversa.inscricaoData = {};
-              await this.salvarConversasInternas();
+              await this.persistirConversas();
               const reply = `Obrigado por entrar em contato! 👋\n\nVerifiquei que você não está entre nossos inscritos.\n\nPara continuar, inicie sua inscrição enviando seu nome completo.`;
               try {
                 await this.enviarMensagem(de, reply);
@@ -556,7 +556,7 @@ export class ConversationManager {
               );
               if (processado) {
                 conversa.pendingLeitura = undefined;
-                await this.salvarConversasInternas();
+                await this.persistirConversas();
                 continue;
               }
             }
@@ -577,7 +577,7 @@ export class ConversationManager {
               if (processado) {
                 if (pendingLeitura) {
                   conversa.pendingLeitura = pendingLeitura;
-                  await this.salvarConversasInternas();
+                  await this.persistirConversas();
                   if (erro === 'NEED_ID') {
                     const lista = await this.gastosManager.formatarCasas(inscricoes);
                     await this.enviarMensagem(de, `Tenho mais de um imóvel para você. Informe o ID do imóvel:\n${lista}`);
@@ -728,7 +728,7 @@ export class ConversationManager {
       this.log('ℹ️  Conversa já existe, atualizando nome se fornecido');
       if (nome && !existente.name) {
         existente.name = nome;
-        await this.salvarConversasInternas();
+        await this.persistirConversas();
       }
       return existente;
     }
@@ -743,7 +743,7 @@ export class ConversationManager {
     };
     
     this.conversations.set(telefoneNormalizado, conversa);
-    await this.salvarConversasInternas();
+    await this.persistirConversas();
     
     // Recarregar do arquivo para garantir que está salvo
     await this.recarregarConversas();

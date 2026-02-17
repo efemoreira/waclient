@@ -27,7 +27,7 @@ export async function lerConversas(): Promise<Record<string, Conversation> | nul
   // Try Upstash first if configured
   if (isUpstashConfigured()) {
     try {
-      const url = `${UPSTASH_REDIS_REST_URL}/get/${UPSTASH_KEY}`;
+      const url = `${UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(UPSTASH_KEY)}`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
       });
@@ -59,7 +59,7 @@ export async function salvarConversas(data: Record<string, Conversation>): Promi
   // Save to Upstash if configured
   if (isUpstashConfigured()) {
     try {
-      const url = `${UPSTASH_REDIS_REST_URL}/set/${UPSTASH_KEY}`;
+      const url = `${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(UPSTASH_KEY)}`;
       await fetch(url, {
         method: 'POST',
         headers: {
@@ -88,7 +88,7 @@ export async function lerMeta(): Promise<{ resetAt?: number }> {
   // Try Upstash first
   if (isUpstashConfigured()) {
     try {
-      const url = `${UPSTASH_REDIS_REST_URL}/get/${UPSTASH_META_KEY}`;
+      const url = `${UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(UPSTASH_META_KEY)}`;
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${UPSTASH_REDIS_REST_TOKEN}` },
       });
@@ -119,7 +119,7 @@ export async function salvarMeta(meta: { resetAt: number }): Promise<void> {
   // Save to Upstash
   if (isUpstashConfigured()) {
     try {
-      const url = `${UPSTASH_REDIS_REST_URL}/set/${UPSTASH_META_KEY}`;
+      const url = `${UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(UPSTASH_META_KEY)}`;
       await fetch(url, {
         method: 'POST',
         headers: {
