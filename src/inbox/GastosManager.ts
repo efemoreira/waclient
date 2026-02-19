@@ -99,7 +99,8 @@ export class GastosManager {
     if (!ultimoRelatorio) return true;
     const ultima = this.parseDateBR(ultimoRelatorio);
     if (!ultima) return true;
-    const hoje = new Date();
+    const hoje = this.parseDateBR(new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }));
+    if (!hoje) return true;
     return hoje.getFullYear() !== ultima.getFullYear() || hoje.getMonth() !== ultima.getMonth();
   }
 
@@ -113,7 +114,7 @@ export class GastosManager {
     result: { consumoSemana?: string; mediaSemana?: string; consumoMes?: string; mediaMes?: string },
     inscricao: InscritoDados
   ): Promise<void> {
-    const hoje = new Date().toLocaleDateString('pt-BR');
+    const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
     if (this.precisaRelatorioSemanal(inscricao.ultimoRelatorioSemanal)) {
       try {

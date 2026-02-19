@@ -98,7 +98,7 @@ export async function appendPredioEntry(params: {
     return { ok: false, erro: 'Credenciais não configuradas' };
   }
 
-  const data = params.data || new Date().toLocaleDateString('pt-BR');
+  const data = params.data || new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const valores = [data, params.predio, params.tipo || '', params.numero];
 
   const sheets = google.sheets({ version: 'v4', auth });
