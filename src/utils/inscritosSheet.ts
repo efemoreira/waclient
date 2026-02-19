@@ -73,6 +73,8 @@ export type InscricaoInfo = {
   monitorandoAgua: boolean;
   monitorandoEnergia: boolean;
   monitorandoGas: boolean;
+  ultimoRelatorioSemanal?: string;
+  ultimoRelatorioMensal?: string;
 };
 
 export async function listarInscricoesPorCelular(celular: string): Promise<InscricaoInfo[]> {
@@ -86,7 +88,7 @@ export async function listarInscricoesPorCelular(celular: string): Promise<Inscr
     const sheets = google.sheets({ version: 'v4', auth });
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A:T`,
+      range: `${SHEET_NAME}!A:V`,
       majorDimension: 'ROWS',
       valueRenderOption: 'FORMATTED_VALUE',
     });
@@ -109,6 +111,8 @@ export async function listarInscricoesPorCelular(celular: string): Promise<Inscr
         monitorandoAgua: String(row[16] || '').toLowerCase() === 'true',
         monitorandoEnergia: String(row[17] || '').toLowerCase() === 'true',
         monitorandoGas: String(row[18] || '').toLowerCase() === 'true',
+        ultimoRelatorioSemanal: String(row[19] || ''),
+        ultimoRelatorioMensal: String(row[20] || ''),
       });
     }
 
@@ -245,6 +249,60 @@ export async function adicionarInscrito(params: {
     return { ok: true, uid, idImovel };
   } catch (erro: any) {
     logger.warn('Inscritos', `Erro ao adicionar inscrito: ${erro?.message || erro}`);
+    return { ok: false, erro: erro?.message };
+  }
+}
+
+/**
+ * Atualizar data do último relatório (semanal ou mensal) de um inscrito pelo UID
+ */
+export async function atualizarUltimoRelatorio(
+  uid: string,
+  tipo: 'semanal' | 'mensal',
+  data: string
+): Promise<{ ok: boolean; erro?: string }> {
+  const auth = getAuth();
+  if (!auth) {
+    logger.warn('Inscritos', 'Credenciais não configuradas');
+    return { ok: false, erro: 'Credenciais não configuradas' };
+  }
+
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const colA = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_NAME}!A:A`,
+      majorDimension: 'COLUMNS',
+      valueRenderOption: 'FORMATTED_VALUE',
+    });
+    const colAValues = colA.data?.values?.[0] || [];
+    let targetRow = -1;
+    for (let i = 1; i < colAValues.length; i++) {
+      if (String(colAValues[i]).trim() === uid) {
+        targetRow = i + 1;
+        break;
+      }
+    }
+
+    if (targetRow < 0) {
+      logger.warn('Inscritos', `UID não encontrado para atualizar relatório: ${uid}`);
+      return { ok: false, erro: 'UID não encontrado' };
+    }
+
+    // T = Ultimo_relatorio_semanal (index 19), U = Ultimo_relatorio_mensal (index 20)
+    const coluna = tipo === 'semanal' ? `T${targetRow}` : `U${targetRow}`;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${SHEET_NAME}!${coluna}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[data]] },
+    });
+
+    logger.info('Inscritos', `✅ Último relatório ${tipo} atualizado para UID ${uid}: ${data}`);
+    return { ok: true };
+  } catch (erro: any) {
+    logger.warn('Inscritos', `Erro ao atualizar último relatório: ${erro?.message || erro}`);
     return { ok: false, erro: erro?.message };
   }
 }
