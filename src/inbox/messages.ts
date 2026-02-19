@@ -260,6 +260,33 @@ Quando seu amigo se cadastrar, peça para ele informar seu UID no campo de indic
 ✨ Você ganha benefícios a cada indicação!`;
   },
 
+  // Relatórios periódicos
+  RELATORIO_SEMANAL: (params: {
+    idImovel: string;
+    tipo: string;
+    consumoSemana?: string;
+    mediaSemana?: string;
+  }) =>
+    `📊 *Relatório Semanal*
+
+🏠 Imóvel: ${params.idImovel}
+💧 Tipo: ${params.tipo}
+📈 Consumo na semana: ${params.consumoSemana || 'Sem dados'} m³
+📊 Média diária: ${params.mediaSemana || 'Sem dados'} m³/dia`,
+
+  RELATORIO_MENSAL: (params: {
+    idImovel: string;
+    tipo: string;
+    consumoMes?: string;
+    mediaMes?: string;
+  }) =>
+    `📅 *Relatório Mensal*
+
+🏠 Imóvel: ${params.idImovel}
+💧 Tipo: ${params.tipo}
+📈 Consumo no mês: ${params.consumoMes || 'Sem dados'} m³
+📊 Média diária: ${params.mediaMes || 'Sem dados'} m³/dia`,
+
   // Comandos não reconhecidos
   COMANDO_NAO_RECONHECIDO: `🤔 Desculpe, não entendi esse comando.
 

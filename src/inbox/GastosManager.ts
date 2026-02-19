@@ -4,9 +4,10 @@
  */
 
 import { appendPredioEntry, obterUltimaLeitura } from '../utils/predioSheet';
-import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';
+import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular, atualizarUltimoRelatorio } from '../utils/inscritosSheet';
 import type { WhatsApp } from '../wabapi';
 import { MESSAGES } from './messages';
+import { logger } from '../utils/logger';
 
 export interface PendingLeitura {
   valor?: string;
@@ -23,6 +24,8 @@ export interface InscritoDados {
   monitorandoAgua?: boolean;
   monitorandoEnergia?: boolean;
   monitorandoGas?: boolean;
+  ultimoRelatorioSemanal?: string;
+  ultimoRelatorioMensal?: string;
 }
 
 /**
@@ -63,6 +66,82 @@ export class GastosManager {
     }
 
     return tiposComuns;
+  }
+
+  /**
+   * Parsear data no formato brasileiro dd/mm/yyyy
+   */
+  private parseDateBR(dateStr: string): Date | null {
+    if (!dateStr) return null;
+    const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return null;
+    const d = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  /**
+   * Verificar se o relatório semanal precisa ser enviado
+   * (última entrega há mais de 7 dias ou nunca enviado)
+   */
+  private precisaRelatorioSemanal(ultimoRelatorio?: string): boolean {
+    if (!ultimoRelatorio) return true;
+    const ultima = this.parseDateBR(ultimoRelatorio);
+    if (!ultima) return true;
+    const diffMs = Date.now() - ultima.getTime();
+    return diffMs / (1000 * 60 * 60 * 24) >= 7;
+  }
+
+  /**
+   * Verificar se o relatório mensal precisa ser enviado
+   * (mês/ano diferente do último envio ou nunca enviado)
+   */
+  private precisaRelatorioMensal(ultimoRelatorio?: string): boolean {
+    if (!ultimoRelatorio) return true;
+    const ultima = this.parseDateBR(ultimoRelatorio);
+    if (!ultima) return true;
+    const hoje = new Date();
+    return hoje.getFullYear() !== ultima.getFullYear() || hoje.getMonth() !== ultima.getMonth();
+  }
+
+  /**
+   * Enviar relatórios periódicos (semanal/mensal) quando devidos e atualizar planilha
+   */
+  private async enviarRelatoriosPeriodicos(
+    de: string,
+    idImovel: string,
+    tipo: string,
+    result: { consumoSemana?: string; mediaSemana?: string; consumoMes?: string; mediaMes?: string },
+    inscricao: InscritoDados
+  ): Promise<void> {
+    const hoje = new Date().toLocaleDateString('pt-BR');
+
+    if (this.precisaRelatorioSemanal(inscricao.ultimoRelatorioSemanal)) {
+      try {
+        await this.client.sendMessage(de, MESSAGES.RELATORIO_SEMANAL({
+          idImovel,
+          tipo,
+          consumoSemana: result.consumoSemana,
+          mediaSemana: result.mediaSemana,
+        }));
+        await atualizarUltimoRelatorio(inscricao.uid, 'semanal', hoje);
+      } catch (erro: any) {
+        logger.warn('GastosManager', `Erro ao enviar relatório semanal para ${idImovel}: ${erro?.message || erro}`);
+      }
+    }
+
+    if (this.precisaRelatorioMensal(inscricao.ultimoRelatorioMensal)) {
+      try {
+        await this.client.sendMessage(de, MESSAGES.RELATORIO_MENSAL({
+          idImovel,
+          tipo,
+          consumoMes: result.consumoMes,
+          mediaMes: result.mediaMes,
+        }));
+        await atualizarUltimoRelatorio(inscricao.uid, 'mensal', hoje);
+      } catch (erro: any) {
+        logger.warn('GastosManager', `Erro ao enviar relatório mensal para ${idImovel}: ${erro?.message || erro}`);
+      }
+    }
   }
 
   /**
@@ -208,13 +287,14 @@ export class GastosManager {
         dias: result.dias,
         consumo: result.consumo,
         media: result.media,
-        consumoSemana: result.consumoSemana,
-        mediaSemana: result.mediaSemana,
-        consumoMes: result.consumoMes,
-        mediaMes: result.mediaMes,
       });
       
       await this.client.sendMessage(de, reply);
+
+      const inscricao = inscricoes.find(i => i.idImovel === pending.idImovel);
+      if (inscricao) {
+        await this.enviarRelatoriosPeriodicos(de, pending.idImovel, pending.tipo, result, inscricao);
+      }
     } else {
       await this.client.sendMessage(de, MESSAGES.ERRO_LEITURA_REGISTRO(result.erro));
     }
@@ -344,13 +424,14 @@ export class GastosManager {
         dias: result.dias,
         consumo: result.consumo,
         media: result.media,
-        consumoSemana: result.consumoSemana,
-        mediaSemana: result.mediaSemana,
-        consumoMes: result.consumoMes,
-        mediaMes: result.mediaMes,
       });
       
       await this.client.sendMessage(de, reply);
+
+      const inscricao = inscricoes.find(i => i.idImovel === idImovel);
+      if (inscricao) {
+        await this.enviarRelatoriosPeriodicos(de, idImovel, leituraTipo, result, inscricao);
+      }
     } else {
       await this.client.sendMessage(de, MESSAGES.ERRO_LEITURA_REGISTRO(result.erro));
     }
