@@ -92,7 +92,10 @@ Você pode enviar de várias formas:
     dias?: number;
     consumo?: string;
     media?: string;
-    observacao?: string;
+    consumoSemana?: string;
+    mediaSemana?: string;
+    consumoMes?: string;
+    mediaMes?: string;
   }) => {
     let msg = `✅ *Leitura registrada!*
 
@@ -116,8 +119,20 @@ Você pode enviar de várias formas:
       msg += `\n📊 Média/Dia: ${params.media} m³/dia`;
     }
 
-    if (params.observacao) {
-      msg += `\n📝 Observação: ${params.observacao}`;
+    if (params.consumoSemana) {
+      msg += `\n📅 Consumo semana: ${params.consumoSemana} m³`;
+    }
+
+    if (params.mediaSemana) {
+      msg += `\n📊 Média semana: ${params.mediaSemana} m³/dia`;
+    }
+
+    if (params.consumoMes) {
+      msg += `\n🗓️ Consumo mês: ${params.consumoMes} m³`;
+    }
+
+    if (params.mediaMes) {
+      msg += `\n📊 Média mês: ${params.mediaMes} m³/dia`;
     }
 
     return msg;

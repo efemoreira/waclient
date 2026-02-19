@@ -208,7 +208,10 @@ export class GastosManager {
         dias: result.dias,
         consumo: result.consumo,
         media: result.media,
-        observacao: result.observacao,
+        consumoSemana: result.consumoSemana,
+        mediaSemana: result.mediaSemana,
+        consumoMes: result.consumoMes,
+        mediaMes: result.mediaMes,
       });
       
       await this.client.sendMessage(de, reply);
@@ -341,7 +344,10 @@ export class GastosManager {
         dias: result.dias,
         consumo: result.consumo,
         media: result.media,
-        observacao: result.observacao,
+        consumoSemana: result.consumoSemana,
+        mediaSemana: result.mediaSemana,
+        consumoMes: result.consumoMes,
+        mediaMes: result.mediaMes,
       });
       
       await this.client.sendMessage(de, reply);

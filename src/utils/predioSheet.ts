@@ -85,7 +85,10 @@ export async function appendPredioEntry(params: {
   data?: string;
   dias?: number; 
   media?: string;
-  observacao?: string;
+  consumoSemana?: string;
+  mediaSemana?: string;
+  consumoMes?: string;
+  mediaMes?: string;
   row?: number; 
   erro?: string 
 }> {
@@ -133,11 +136,11 @@ export async function appendPredioEntry(params: {
   await new Promise(resolve => setTimeout(resolve, 1000));
 
   // Ler todos os dados calculados da linha inserida
-  // Colunas: A=Data, B=Id, C=Tipo, D=Leitura Atual, E=Leitura Anterior, F=Consumo, G=Dias, H=Média_Dia, I=Observação
+  // Colunas: A=Data, B=Id, C=Tipo, D=Leitura_Atual, E=Leitura_Anterior, F=Consumo, G=Dias, H=Média_Dia, I=Consumo_Semana, J=Media_Semana, K=Consumo_Mes, L=Media_Mes
   try {
     const rowDataRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: `${SHEET_NAME}!A${targetRow}:I${targetRow}`,
+      range: `${SHEET_NAME}!A${targetRow}:L${targetRow}`,
       valueRenderOption: 'FORMATTED_VALUE',
     });
     const rowData = rowDataRes.data?.values?.[0] || [];
@@ -147,7 +150,10 @@ export async function appendPredioEntry(params: {
     const consumo = rowData[5] || ''; // Coluna F
     const diasStr = rowData[6] || ''; // Coluna G
     const media = rowData[7] || ''; // Coluna H
-    const observacao = rowData[8] || ''; // Coluna I
+    const consumoSemana = rowData[8] || ''; // Coluna I
+    const mediaSemana = rowData[9] || ''; // Coluna J
+    const consumoMes = rowData[10] || ''; // Coluna K
+    const mediaMes = rowData[11] || ''; // Coluna L
     
     const dias = diasStr ? parseInt(String(diasStr), 10) : 0;
     
@@ -158,7 +164,10 @@ export async function appendPredioEntry(params: {
       data: dataAtual,
       dias: dias || 0,
       media: String(media),
-      observacao: String(observacao),
+      consumoSemana: String(consumoSemana),
+      mediaSemana: String(mediaSemana),
+      consumoMes: String(consumoMes),
+      mediaMes: String(mediaMes),
       row: targetRow 
     };
   } catch (erro: any) {
