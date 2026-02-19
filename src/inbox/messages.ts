@@ -99,7 +99,7 @@ Você pode enviar de várias formas:
   }) => {
     let msg = `✅ *Leitura registrada!*
 
-📅 Data: ${params.data || new Date().toLocaleDateString('pt-BR')}
+📅 Data: ${params.data || new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
 📍 Imóvel: ${params.idImovel}
 💧 Tipo: ${params.tipo}
 📊 Leitura atual: ${params.leituraAtual} m³`;

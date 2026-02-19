@@ -167,10 +167,8 @@ export async function adicionarInscrito(params: {
     // Gerar UID e ID_Imovel
     const uid = randomUUID();
     const idImovel = `IMV${Date.now()}`;
-    const datainscricao = new Date().toLocaleDateString('pt-BR');
-    const dataProximoPagamento = new Date();
-    dataProximoPagamento.setDate(dataProximoPagamento.getDate() + 30);
-    const proximoPagamento = dataProximoPagamento.toLocaleDateString('pt-BR');
+    const datainscricao = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const proximoPagamento = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     const celularFormatado = params.celular.replace(/\D/g, '');
 
     logger.info('Inscritos', `Adicionando novo inscrito: ${params.nome} (${celularFormatado})`);
