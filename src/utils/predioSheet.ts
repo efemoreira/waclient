@@ -2,21 +2,43 @@ import { google } from 'googleapis';
 import { logger } from './logger';
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID || '1gWmeKdve801yhFST_O0grBefYW_fDLyCr8nwND_98EQ';
-const SHEET_NAME = process.env.GOOGLE_SHEET_NAME || 'Base';
 const CLIENT_EMAIL = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || '';
 const PRIVATE_KEY = process.env.GOOGLE_SHEETS_PRIVATE_KEY || '';
 
-// Colunas da planilha (LOG apenas, sem fórmulas):
-// A=Data, B=Id, C=Tipo, D=Leitura_Atual, E=Leitura_Anterior, F=Consumo,
-// G=Dias, H=Media_Dia, I=Semana_Ano, J=Mes, K=Ano
+// Sheet names – each configurable via environment variables
+// GOOGLE_SHEET_NAME kept as fallback for the leituras sheet (backward compat with old 'Base')
+const LEITURAS_SHEET = process.env.GOOGLE_LEITURAS_SHEET_NAME || process.env.GOOGLE_SHEET_NAME || 'leituras';
+const ACUMULADO_SEMANA_SHEET = process.env.GOOGLE_ACUMULADO_SEMANA_SHEET_NAME || 'acumulado_semana';
+const ACUMULADO_MES_SHEET = process.env.GOOGLE_ACUMULADO_MES_SHEET_NAME || 'acumulado_mes';
+const HISTORICO_RESUMO_SHEET = process.env.GOOGLE_HISTORICO_RESUMO_SHEET_NAME || 'historico_resumo';
+
+const RETENCAO_DIAS = 90;
+
+// leituras columns:        A=Data  B=Id  C=Tipo  D=Leitura_Atual  E=Leitura_Anterior  F=Consumo  G=Dias  H=Media_Dia
+// acumulado_semana columns: A=Id   B=Tipo  C=Data_Inicio_Semana  D=Ultima_Leitura  E=Consumo_Acumulado  F=Dias_Acumulados  G=Media_Dia_Semana
+// acumulado_mes columns:    A=Id   B=Tipo  C=Data_Inicio_Mes     D=Ultima_Leitura  E=Consumo_Acumulado  F=Dias_Acumulados  G=Media_Dia_Mes
+// historico_resumo columns: A=Id   B=Tipo  C=Periodo  D=Data_Inicio  E=Data_Fim  F=Consumo_Total  G=Dias_Total  H=Media_Dia
 
 interface LeituraRow {
+  rowIndex: number;
   data: Date;
   dataStr: string;
   id: string;
   tipo: string;
   leituraAtual: number;
 }
+
+interface AcumuladoRow {
+  rowIndex: number;
+  id: string;
+  tipo: string;
+  dataInicio: string;
+  ultimaLeitura: number;
+  consumoAcumulado: number;
+  diasAcumulados: number;
+  mediaDia: number;
+}
+
 
 function normalizarPrivateKey(raw: string): string {
   let key = raw.trim();
@@ -34,7 +56,6 @@ function getAuth() {
   if (!CLIENT_EMAIL || !PRIVATE_KEY) {
     return null;
   }
-
   const key = normalizarPrivateKey(PRIVATE_KEY);
   return new google.auth.JWT({
     email: CLIENT_EMAIL,
@@ -44,7 +65,7 @@ function getAuth() {
 }
 
 /**
- * Parsear data no formato brasileiro dd/mm/yyyy para Date (meia-noite local BRT)
+ * Parsear data no formato brasileiro dd/mm/yyyy para Date
  */
 function parseDateBR(dateStr: string): Date | null {
   if (!dateStr) return null;
@@ -55,47 +76,64 @@ function parseDateBR(dateStr: string): Date | null {
 }
 
 /**
- * Calcular o número da semana do ano (semana começa no domingo, semana 1 = semana do 1º domingo do ano)
+ * Formatar número: inteiros sem decimal, outros com 4 casas (trailing zeros removidos)
+ */
+function fmt(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(4).replace(/\.?0+$/, '');
+}
+
+/**
+ * Formatar Date para dd/mm/yyyy sem conversão de timezone
+ */
+function formatDateBR(d: Date): string {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+/**
+ * Calcular o número da semana do ano (semana começa no domingo)
  */
 export function getWeekOfYear(date: Date): number {
   const start = new Date(date.getFullYear(), 0, 1);
-  const startDay = start.getDay(); // dia da semana do 1º de janeiro
+  const startDay = start.getDay();
   const dayOfYear = Math.floor((date.getTime() - start.getTime()) / 86400000);
   return Math.floor((dayOfYear + startDay) / 7) + 1;
 }
 
 /**
- * Obter o domingo que inicia a semana atual (00:00)
+ * Detectar início da semana atual: domingo (00:00)
  */
-export function domingoAtual(agora: Date): Date {
+export function detectarInicioSemana(agora: Date): Date {
   const d = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
-  d.setDate(d.getDate() - d.getDay()); // retroceder até o domingo
+  d.setDate(d.getDate() - d.getDay());
   return d;
 }
 
+/** Backward-compat alias */
+export const domingoAtual = detectarInicioSemana;
+
 /**
- * Obter o primeiro dia do mês atual (00:00)
+ * Detectar início do mês atual: primeiro dia (00:00)
  */
-export function primeiroDiaMes(agora: Date): Date {
+export function detectarInicioMes(agora: Date): Date {
   return new Date(agora.getFullYear(), agora.getMonth(), 1);
 }
 
-/**
- * Detectar se hoje é início de nova semana (domingo)
- */
+/** Backward-compat alias */
+export const primeiroDiaMes = detectarInicioMes;
+
 export function detectarViradaSemana(agora: Date): boolean {
   return agora.getDay() === 0;
 }
 
-/**
- * Detectar se hoje é início de novo mês
- */
 export function detectarViradaMes(agora: Date): boolean {
   return agora.getDate() === 1;
 }
 
 /**
- * Buscar a última leitura de um Id+Tipo a partir dos dados lidos da planilha
+ * Buscar a última leitura de um Id+Tipo
  */
 export function buscarUltimaLeitura(
   dados: LeituraRow[],
@@ -133,9 +171,7 @@ export function calcularMedia(consumo: number, dias: number): number {
 }
 
 /**
- * Calcular consumo e média da semana atual
- * consumo_semana = última leitura da semana - primeira leitura da semana
- * media_semana = consumo_semana / dias_passados_na_semana
+ * Calcular consumo e média da semana a partir de leituras em memória (backward compat)
  */
 export function calcularPeriodoSemana(
   dados: LeituraRow[],
@@ -143,32 +179,22 @@ export function calcularPeriodoSemana(
   tipo: string,
   agora: Date
 ): { consumoSemana: number; mediaSemana: number } {
-  const inicio = domingoAtual(agora);
-  const registrosSemana = dados
+  const inicio = detectarInicioSemana(agora);
+  const registros = dados
     .filter(r => r.id === id && r.tipo.toLowerCase() === tipo.toLowerCase() && r.data >= inicio)
     .sort((a, b) => a.data.getTime() - b.data.getTime());
-
-  if (registrosSemana.length < 2) {
-    return { consumoSemana: 0, mediaSemana: 0 };
-  }
-
+  if (registros.length < 2) return { consumoSemana: 0, mediaSemana: 0 };
   const consumoSemana = calcularConsumoIndividual(
-    registrosSemana[registrosSemana.length - 1].leituraAtual,
-    registrosSemana[0].leituraAtual
+    registros[registros.length - 1].leituraAtual,
+    registros[0].leituraAtual
   );
-
-  // dias passados na semana = diferença entre hoje e o domingo
   const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
   const diasSemana = calcularDias(hoje, inicio) || 1;
-  const mediaSemana = calcularMedia(consumoSemana, diasSemana);
-
-  return { consumoSemana, mediaSemana };
+  return { consumoSemana, mediaSemana: calcularMedia(consumoSemana, diasSemana) };
 }
 
 /**
- * Calcular consumo e média do mês atual
- * consumo_mes = última leitura do mês - primeira leitura do mês
- * media_mes = consumo_mes / dias_passados_no_mes
+ * Calcular consumo e média do mês a partir de leituras em memória (backward compat)
  */
 export function calcularPeriodoMes(
   dados: LeituraRow[],
@@ -176,34 +202,45 @@ export function calcularPeriodoMes(
   tipo: string,
   agora: Date
 ): { consumoMes: number; mediaMes: number } {
-  const inicio = primeiroDiaMes(agora);
-  const registrosMes = dados
+  const inicio = detectarInicioMes(agora);
+  const registros = dados
     .filter(r => r.id === id && r.tipo.toLowerCase() === tipo.toLowerCase() && r.data >= inicio)
     .sort((a, b) => a.data.getTime() - b.data.getTime());
-
-  if (registrosMes.length < 2) {
-    return { consumoMes: 0, mediaMes: 0 };
-  }
-
+  if (registros.length < 2) return { consumoMes: 0, mediaMes: 0 };
   const consumoMes = calcularConsumoIndividual(
-    registrosMes[registrosMes.length - 1].leituraAtual,
-    registrosMes[0].leituraAtual
+    registros[registros.length - 1].leituraAtual,
+    registros[0].leituraAtual
   );
-
-  // dias passados no mês = dia atual (1-based)
-  const diasMes = agora.getDate();
-  const mediaMes = calcularMedia(consumoMes, diasMes);
-
-  return { consumoMes, mediaMes };
+  return { consumoMes, mediaMes: calcularMedia(consumoMes, agora.getDate()) };
 }
 
 /**
- * Ler todos os registros da planilha Base, retornando apenas as colunas relevantes
+ * Verificar se a data de início pertence à semana atual
  */
-async function lerTodosOsDados(sheets: ReturnType<typeof google.sheets>): Promise<{ rows: LeituraRow[]; totalLinhas: number }> {
+function isCurrentWeek(dataInicioStr: string, domingo: Date): boolean {
+  const d = parseDateBR(dataInicioStr);
+  if (!d) return false;
+  return d.getTime() === domingo.getTime();
+}
+
+/**
+ * Verificar se a data de início pertence ao mês atual
+ */
+function isCurrentMonth(dataInicioStr: string, primeiroDia: Date): boolean {
+  const d = parseDateBR(dataInicioStr);
+  if (!d) return false;
+  return d.getFullYear() === primeiroDia.getFullYear() && d.getMonth() === primeiroDia.getMonth();
+}
+
+/**
+ * Ler todos os dados da aba leituras (A:D)
+ */
+async function lerLeituras(
+  sheets: ReturnType<typeof google.sheets>
+): Promise<{ rows: LeituraRow[]; totalLinhas: number }> {
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_NAME}!A:D`,
+    range: `${LEITURAS_SHEET}!A:D`,
     majorDimension: 'ROWS',
     valueRenderOption: 'FORMATTED_VALUE',
   });
@@ -211,25 +248,332 @@ async function lerTodosOsDados(sheets: ReturnType<typeof google.sheets>): Promis
   const rawRows = res.data?.values || [];
   const rows: LeituraRow[] = [];
 
-  // Linha 0 é cabeçalho; começa do 1
   for (let i = 1; i < rawRows.length; i++) {
     const row = rawRows[i] || [];
     const dataStr = String(row[0] || '').trim();
     const id = String(row[1] || '').trim();
     const tipo = String(row[2] || '').trim();
     const leituraAtual = parseFloat(String(row[3] || '0').replace(',', '.')) || 0;
-
     if (!dataStr || !id) continue;
-
     const data = parseDateBR(dataStr);
     if (!data) continue;
-
-    rows.push({ data, dataStr, id, tipo, leituraAtual });
+    rows.push({ rowIndex: i + 1, data, dataStr, id, tipo, leituraAtual });
   }
 
   return { rows, totalLinhas: rawRows.length };
 }
 
+/**
+ * Ler todos os dados de uma aba de acumulado (A:G)
+ */
+async function lerAcumulado(
+  sheets: ReturnType<typeof google.sheets>,
+  sheetName: string
+): Promise<AcumuladoRow[]> {
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${sheetName}!A:G`,
+    majorDimension: 'ROWS',
+    valueRenderOption: 'FORMATTED_VALUE',
+  });
+
+  const rawRows = res.data?.values || [];
+  const rows: AcumuladoRow[] = [];
+
+  for (let i = 1; i < rawRows.length; i++) {
+    const row = rawRows[i] || [];
+    const id = String(row[0] || '').trim();
+    const tipo = String(row[1] || '').trim();
+    if (!id || !tipo) continue;
+    rows.push({
+      rowIndex: i + 1,
+      id,
+      tipo,
+      dataInicio: String(row[2] || '').trim(),
+      ultimaLeitura: parseFloat(String(row[3] || '0').replace(',', '.')) || 0,
+      consumoAcumulado: parseFloat(String(row[4] || '0').replace(',', '.')) || 0,
+      diasAcumulados: parseInt(String(row[5] || '0'), 10) || 0,
+      mediaDia: parseFloat(String(row[6] || '0').replace(',', '.')) || 0,
+    });
+  }
+
+  return rows;
+}
+
+/**
+ * Salvar resumo consolidado no historico_resumo (nunca apagar)
+ */
+export async function salvarResumoHistorico(
+  sheets: ReturnType<typeof google.sheets>,
+  params: {
+    id: string;
+    tipo: string;
+    periodo: 'SEMANA' | 'MES';
+    dataInicio: string;
+    dataFim: string;
+    consumoTotal: number;
+    diasTotal: number;
+    mediaDia: number;
+  }
+): Promise<void> {
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID,
+    range: `${HISTORICO_RESUMO_SHEET}!A:H`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: {
+      values: [[
+        params.id,
+        params.tipo,
+        params.periodo,
+        params.dataInicio,
+        params.dataFim,
+        fmt(params.consumoTotal),
+        params.diasTotal,
+        fmt(params.mediaDia),
+      ]],
+    },
+  });
+}
+
+/**
+ * Atualizar ou criar registro de acumulado_semana por Id + Tipo
+ * Reset individual: só reseta quando a semana mudar para aquele Id+Tipo
+ */
+export async function atualizarAcumuladoSemana(
+  sheets: ReturnType<typeof google.sheets>,
+  acumulados: AcumuladoRow[],
+  params: {
+    id: string;
+    tipo: string;
+    leituraAtual: number;
+    consumo: number;
+    dias: number;
+    dataAtualStr: string;
+    agora: Date;
+  }
+): Promise<{ consumoAcumulado: number; mediaDia: number }> {
+  const { id, tipo, leituraAtual, consumo, dias, dataAtualStr, agora } = params;
+  const domingo = detectarInicioSemana(agora);
+  const domingoStr = formatDateBR(domingo);
+
+  const existente = acumulados.find(
+    r => r.id === id && r.tipo.toLowerCase() === tipo.toLowerCase()
+  );
+
+  if (!existente) {
+    const novaMedia = calcularMedia(consumo, dias);
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: `${ACUMULADO_SEMANA_SHEET}!A:G`,
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [[id, tipo, domingoStr, leituraAtual, fmt(consumo), dias, fmt(novaMedia)]],
+      },
+    });
+    return { consumoAcumulado: consumo, mediaDia: novaMedia };
+  }
+
+  if (!isCurrentWeek(existente.dataInicio, domingo)) {
+    // Semana mudou: salvar histórico e iniciar nova semana
+    await salvarResumoHistorico(sheets, {
+      id,
+      tipo,
+      periodo: 'SEMANA',
+      dataInicio: existente.dataInicio,
+      dataFim: dataAtualStr,
+      consumoTotal: existente.consumoAcumulado,
+      diasTotal: existente.diasAcumulados,
+      mediaDia: existente.mediaDia,
+    });
+    const novaMedia = calcularMedia(consumo, dias);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${ACUMULADO_SEMANA_SHEET}!A${existente.rowIndex}:G${existente.rowIndex}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[id, tipo, domingoStr, leituraAtual, fmt(consumo), dias, fmt(novaMedia)]],
+      },
+    });
+    return { consumoAcumulado: consumo, mediaDia: novaMedia };
+  }
+
+  // Semana atual: acumular
+  const novoConsumo = existente.consumoAcumulado + consumo;
+  const novosDias = existente.diasAcumulados + dias;
+  const novaMedia = calcularMedia(novoConsumo, novosDias);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `${ACUMULADO_SEMANA_SHEET}!A${existente.rowIndex}:G${existente.rowIndex}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[id, tipo, existente.dataInicio, leituraAtual, fmt(novoConsumo), novosDias, fmt(novaMedia)]],
+    },
+  });
+  return { consumoAcumulado: novoConsumo, mediaDia: novaMedia };
+}
+
+/**
+ * Atualizar ou criar registro de acumulado_mes por Id + Tipo
+ * Reset individual: só reseta quando o mês mudar para aquele Id+Tipo
+ */
+export async function atualizarAcumuladoMes(
+  sheets: ReturnType<typeof google.sheets>,
+  acumulados: AcumuladoRow[],
+  params: {
+    id: string;
+    tipo: string;
+    leituraAtual: number;
+    consumo: number;
+    dias: number;
+    dataAtualStr: string;
+    agora: Date;
+  }
+): Promise<{ consumoAcumulado: number; mediaDia: number }> {
+  const { id, tipo, leituraAtual, consumo, dias, dataAtualStr, agora } = params;
+  const primeiroDia = detectarInicioMes(agora);
+  const primeiroDiaStr = formatDateBR(primeiroDia);
+
+  const existente = acumulados.find(
+    r => r.id === id && r.tipo.toLowerCase() === tipo.toLowerCase()
+  );
+
+  if (!existente) {
+    const novaMedia = calcularMedia(consumo, dias);
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: `${ACUMULADO_MES_SHEET}!A:G`,
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [[id, tipo, primeiroDiaStr, leituraAtual, fmt(consumo), dias, fmt(novaMedia)]],
+      },
+    });
+    return { consumoAcumulado: consumo, mediaDia: novaMedia };
+  }
+
+  if (!isCurrentMonth(existente.dataInicio, primeiroDia)) {
+    // Mês mudou: salvar histórico e iniciar novo mês
+    await salvarResumoHistorico(sheets, {
+      id,
+      tipo,
+      periodo: 'MES',
+      dataInicio: existente.dataInicio,
+      dataFim: dataAtualStr,
+      consumoTotal: existente.consumoAcumulado,
+      diasTotal: existente.diasAcumulados,
+      mediaDia: existente.mediaDia,
+    });
+    const novaMedia = calcularMedia(consumo, dias);
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `${ACUMULADO_MES_SHEET}!A${existente.rowIndex}:G${existente.rowIndex}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[id, tipo, primeiroDiaStr, leituraAtual, fmt(consumo), dias, fmt(novaMedia)]],
+      },
+    });
+    return { consumoAcumulado: consumo, mediaDia: novaMedia };
+  }
+
+  // Mês atual: acumular
+  const novoConsumo = existente.consumoAcumulado + consumo;
+  const novosDias = existente.diasAcumulados + dias;
+  const novaMedia = calcularMedia(novoConsumo, novosDias);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `${ACUMULADO_MES_SHEET}!A${existente.rowIndex}:G${existente.rowIndex}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[id, tipo, existente.dataInicio, leituraAtual, fmt(novoConsumo), novosDias, fmt(novaMedia)]],
+    },
+  });
+  return { consumoAcumulado: novoConsumo, mediaDia: novaMedia };
+}
+
+/**
+ * Agrupar índices de linha consecutivos em intervalos para deleção em batch
+ */
+function agruparLinhasConsecutivas(indices: number[]): Array<{ start: number; end: number }> {
+  if (!indices.length) return [];
+  const sorted = [...indices].sort((a, b) => a - b);
+  const grupos: Array<{ start: number; end: number }> = [];
+  let start = sorted[0];
+  let end = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === end + 1) {
+      end = sorted[i];
+    } else {
+      grupos.push({ start, end });
+      start = sorted[i];
+      end = sorted[i];
+    }
+  }
+  grupos.push({ start, end });
+  return grupos;
+}
+
+/**
+ * Limpar registros antigos da aba leituras (manter apenas últimos 90 dias)
+ */
+export async function limparDadosAntigos(
+  sheets: ReturnType<typeof google.sheets>,
+  rows: LeituraRow[],
+  agora: Date
+): Promise<void> {
+  const limite = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  limite.setDate(limite.getDate() - RETENCAO_DIAS);
+
+  const linhasParaApagar = rows
+    .filter(r => r.data < limite)
+    .map(r => r.rowIndex);
+
+  if (!linhasParaApagar.length) return;
+
+  logger.info('predioSheet', `Removendo ${linhasParaApagar.length} registros antigos (>${RETENCAO_DIAS} dias) da aba ${LEITURAS_SHEET}`);
+
+  const spreadsheet = await sheets.spreadsheets.get({
+    spreadsheetId: SHEET_ID,
+    fields: 'sheets.properties',
+  });
+
+  const sheetProps = spreadsheet.data.sheets?.find(
+    s => s.properties?.title === LEITURAS_SHEET
+  )?.properties;
+
+  if (!sheetProps || (sheetProps.sheetId == null)) {
+    logger.warn('predioSheet', `Aba ${LEITURAS_SHEET} não encontrada para remoção de dados antigos`);
+    return;
+  }
+
+  const sheetId = sheetProps.sheetId;
+
+  // Agrupar linhas consecutivas e ordenar descrescente (apaga de baixo para cima)
+  const grupos = agruparLinhasConsecutivas(linhasParaApagar).sort((a, b) => b.start - a.start);
+
+  const requests = grupos.map(({ start, end }) => ({
+    deleteDimension: {
+      range: {
+        sheetId,
+        dimension: 'ROWS',
+        startIndex: start - 1, // 0-based
+        endIndex: end,          // exclusive
+      },
+    },
+  }));
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: { requests },
+  });
+
+  logger.info('predioSheet', `✅ ${linhasParaApagar.length} registros antigos removidos`);
+}
+
+/**
+ * Obter a última leitura de um imóvel (qualquer tipo)
+ */
 export async function obterUltimaLeitura(idImovel: string): Promise<{ leitura?: string; data?: string; consumo?: string }> {
   const auth = getAuth();
   if (!auth) {
@@ -239,7 +583,7 @@ export async function obterUltimaLeitura(idImovel: string): Promise<{ leitura?: 
 
   try {
     const sheets = google.sheets({ version: 'v4', auth });
-    const { rows } = await lerTodosOsDados(sheets);
+    const { rows } = await lerLeituras(sheets);
 
     const filtrados = rows
       .filter(r => r.id === idImovel)
@@ -248,7 +592,6 @@ export async function obterUltimaLeitura(idImovel: string): Promise<{ leitura?: 
     if (!filtrados.length) return {};
 
     const ultima = filtrados[0];
-    // Calcular consumo em relação à leitura imediatamente anterior (qualquer tipo)
     const anterior = filtrados[1];
     const consumo = anterior
       ? String(calcularConsumoIndividual(ultima.leituraAtual, anterior.leituraAtual))
@@ -265,24 +608,35 @@ export async function obterUltimaLeitura(idImovel: string): Promise<{ leitura?: 
   }
 }
 
+/**
+ * Registrar nova leitura e atualizar acumulados de semana e mês
+ *
+ * Fluxo:
+ *  1) Ler leituras + acumulado_semana + acumulado_mes em paralelo (1 leitura por aba)
+ *  2) Calcular consumo individual (leitura atual − anterior do mesmo Id+Tipo)
+ *  3) Salvar nova linha na aba leituras
+ *  4) Atualizar acumulado_semana por Id+Tipo (reset individual se semana mudou)
+ *  5) Atualizar acumulado_mes por Id+Tipo (reset individual se mês mudou)
+ *  6) Retenção automática: apagar leituras com mais de 90 dias
+ */
 export async function appendPredioEntry(params: {
   predio: string;
   numero: string;
   tipo?: string;
   data?: string;
-}): Promise<{ 
-  ok: boolean; 
-  consumo?: string; 
-  anterior?: string; 
+}): Promise<{
+  ok: boolean;
+  consumo?: string;
+  anterior?: string;
   data?: string;
-  dias?: number; 
+  dias?: number;
   media?: string;
   consumoSemana?: string;
   mediaSemana?: string;
   consumoMes?: string;
   mediaMes?: string;
-  row?: number; 
-  erro?: string 
+  row?: number;
+  erro?: string;
 }> {
   const auth = getAuth();
   if (!auth) {
@@ -297,78 +651,84 @@ export async function appendPredioEntry(params: {
 
   const sheets = google.sheets({ version: 'v4', auth });
 
-  // Ler todos os dados da planilha uma única vez
-  const { rows, totalLinhas } = await lerTodosOsDados(sheets);
+  try {
+    // 1) Ler cada aba apenas uma vez, em paralelo
+    const [{ rows: leituras, totalLinhas }, acumuladosSemana, acumuladosMes] = await Promise.all([
+      lerLeituras(sheets),
+      lerAcumulado(sheets, ACUMULADO_SEMANA_SHEET),
+      lerAcumulado(sheets, ACUMULADO_MES_SHEET),
+    ]);
 
-  // Determinar linha alvo (próxima linha vazia após o cabeçalho)
-  const targetRow = totalLinhas + 1;
+    // 2) Calcular valores individuais
+    const ultimaAnterior = buscarUltimaLeitura(leituras, params.predio, tipo);
+    const leituraAnterior = ultimaAnterior ? ultimaAnterior.leituraAtual : 0;
+    const dataAtual = parseDateBR(dataStr) || agora;
+    const dias = ultimaAnterior ? calcularDias(dataAtual, ultimaAnterior.data) : 0;
+    const consumo = ultimaAnterior ? calcularConsumoIndividual(leituraAtual, leituraAnterior) : 0;
+    const media = calcularMedia(consumo, dias);
 
-  // --- Cálculos em memória ---
+    const targetRow = totalLinhas + 1;
 
-  // 1) Buscar última leitura anterior (mesmo Id + Tipo)
-  const ultimaAnterior = buscarUltimaLeitura(rows, params.predio, tipo);
+    logger.info('predioSheet', `Gravando linha ${targetRow} [${params.predio}/${tipo}] leitura=${leituraAtual} consumo=${consumo} dias=${dias}`);
 
-  // 2) Leitura anterior e dias
-  const leituraAnterior = ultimaAnterior ? ultimaAnterior.leituraAtual : 0;
-  const dataAtual = parseDateBR(dataStr) || agora;
-  const dias = ultimaAnterior ? calcularDias(dataAtual, ultimaAnterior.data) : 0;
+    // 3) Salvar nova linha em leituras (8 colunas, sem fórmulas)
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: {
+        valueInputOption: 'USER_ENTERED',
+        data: [
+          { range: `${LEITURAS_SHEET}!A${targetRow}`, values: [[dataStr]] },
+          { range: `${LEITURAS_SHEET}!B${targetRow}`, values: [[params.predio]] },
+          { range: `${LEITURAS_SHEET}!C${targetRow}`, values: [[tipo]] },
+          { range: `${LEITURAS_SHEET}!D${targetRow}`, values: [[leituraAtual]] },
+          { range: `${LEITURAS_SHEET}!E${targetRow}`, values: [[leituraAnterior]] },
+          { range: `${LEITURAS_SHEET}!F${targetRow}`, values: [[consumo]] },
+          { range: `${LEITURAS_SHEET}!G${targetRow}`, values: [[dias]] },
+          { range: `${LEITURAS_SHEET}!H${targetRow}`, values: [[fmt(media)]] },
+        ],
+      },
+    });
 
-  // 3) Consumo individual
-  const consumo = ultimaAnterior ? calcularConsumoIndividual(leituraAtual, leituraAnterior) : 0;
+    // 4) Atualizar acumulado_semana (reset individual por Id+Tipo se semana mudou)
+    const semanaResult = await atualizarAcumuladoSemana(sheets, acumuladosSemana, {
+      id: params.predio,
+      tipo,
+      leituraAtual,
+      consumo,
+      dias,
+      dataAtualStr: dataStr,
+      agora,
+    });
 
-  // 4) Média por dia
-  const media = calcularMedia(consumo, dias);
+    // 5) Atualizar acumulado_mes (reset individual por Id+Tipo se mês mudou)
+    const mesResult = await atualizarAcumuladoMes(sheets, acumuladosMes, {
+      id: params.predio,
+      tipo,
+      leituraAtual,
+      consumo,
+      dias,
+      dataAtualStr: dataStr,
+      agora,
+    });
 
-  // 5) Semana / Mês / Ano
-  const semanaAno = getWeekOfYear(dataAtual);
-  const mes = dataAtual.getMonth() + 1;
-  const ano = dataAtual.getFullYear();
+    // 6) Retenção automática: apagar leituras com mais de 90 dias
+    await limparDadosAntigos(sheets, leituras, agora);
 
-  // 6) Consumo e média da semana (inclui a leitura atual simulada)
-  const rowsComAtual: LeituraRow[] = [
-    ...rows,
-    { data: dataAtual, dataStr, id: params.predio, tipo, leituraAtual },
-  ];
-  const { consumoSemana, mediaSemana } = calcularPeriodoSemana(rowsComAtual, params.predio, tipo, agora);
-  const { consumoMes, mediaMes } = calcularPeriodoMes(rowsComAtual, params.predio, tipo, agora);
-
-  // --- Formatar valores para escrita ---
-  const fmt = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(4).replace(/\.?0+$/, '');
-
-  logger.info('Inbox', `Planilha: gravando linha ${targetRow} [${params.predio} / ${tipo}] leitura=${leituraAtual} consumo=${consumo} dias=${dias}`);
-
-  // Gravar todos os 11 campos calculados de uma só vez
-  await sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId: SHEET_ID,
-    requestBody: {
-      valueInputOption: 'USER_ENTERED',
-      data: [
-        { range: `${SHEET_NAME}!A${targetRow}`, values: [[dataStr]] },
-        { range: `${SHEET_NAME}!B${targetRow}`, values: [[params.predio]] },
-        { range: `${SHEET_NAME}!C${targetRow}`, values: [[tipo]] },
-        { range: `${SHEET_NAME}!D${targetRow}`, values: [[leituraAtual]] },
-        { range: `${SHEET_NAME}!E${targetRow}`, values: [[leituraAnterior]] },
-        { range: `${SHEET_NAME}!F${targetRow}`, values: [[consumo]] },
-        { range: `${SHEET_NAME}!G${targetRow}`, values: [[dias]] },
-        { range: `${SHEET_NAME}!H${targetRow}`, values: [[fmt(media)]] },
-        { range: `${SHEET_NAME}!I${targetRow}`, values: [[semanaAno]] },
-        { range: `${SHEET_NAME}!J${targetRow}`, values: [[mes]] },
-        { range: `${SHEET_NAME}!K${targetRow}`, values: [[ano]] },
-      ],
-    },
-  });
-
-  return {
-    ok: true,
-    consumo: fmt(consumo),
-    anterior: leituraAnterior > 0 || ultimaAnterior ? String(leituraAnterior) : '',
-    data: dataStr,
-    dias,
-    media: fmt(media),
-    consumoSemana: fmt(consumoSemana),
-    mediaSemana: fmt(mediaSemana),
-    consumoMes: fmt(consumoMes),
-    mediaMes: fmt(mediaMes),
-    row: targetRow,
-  };
+    return {
+      ok: true,
+      consumo: fmt(consumo),
+      anterior: leituraAnterior > 0 || ultimaAnterior ? String(leituraAnterior) : '',
+      data: dataStr,
+      dias,
+      media: fmt(media),
+      consumoSemana: fmt(semanaResult.consumoAcumulado),
+      mediaSemana: fmt(semanaResult.mediaDia),
+      consumoMes: fmt(mesResult.consumoAcumulado),
+      mediaMes: fmt(mesResult.mediaDia),
+      row: targetRow,
+    };
+  } catch (erro: any) {
+    logger.warn('predioSheet', `Erro ao registrar leitura: ${erro?.message || erro}`);
+    return { ok: false, erro: erro?.message };
+  }
 }
