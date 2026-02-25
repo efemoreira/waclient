@@ -7,6 +7,11 @@ const SHEET_NAME = process.env.GOOGLE_INSCRITOS_SHEET_NAME || 'Inscritos';
 const CLIENT_EMAIL = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || '';
 const PRIVATE_KEY = process.env.GOOGLE_SHEETS_PRIVATE_KEY || '';
 
+/**
+ * Normaliza a chave privada da conta de serviço Google.
+ * Aceita chave em texto plano (com `\n` escapados), entre aspas ou codificada em base64.
+ * @param raw - Valor bruto da variável de ambiente GOOGLE_SHEETS_PRIVATE_KEY
+ */
 function normalizarPrivateKey(raw: string): string {
   let key = raw.trim();
   if (key.startsWith('"') && key.endsWith('"')) {
@@ -19,6 +24,10 @@ function normalizarPrivateKey(raw: string): string {
   return key.replace(/\\n/g, '\n');
 }
 
+/**
+ * Cria e retorna a instância de autenticação JWT para a API do Google Sheets.
+ * Retorna null se as credenciais não estiverem configuradas nas variáveis de ambiente.
+ */
 function getAuth() {
   if (!CLIENT_EMAIL || !PRIVATE_KEY) {
     return null;
@@ -77,6 +86,11 @@ export type InscricaoInfo = {
   ultimoRelatorioMensal?: string;
 };
 
+/**
+ * Lista todas as inscrições (imóveis) associadas a um número de celular.
+ * Busca na planilha Google Sheets e retorna um array com os dados de cada inscrição.
+ * @param celular - Número de celular do usuário (com ou sem formatação)
+ */
 export async function listarInscricoesPorCelular(celular: string): Promise<InscricaoInfo[]> {
   const auth = getAuth();
   if (!auth) {

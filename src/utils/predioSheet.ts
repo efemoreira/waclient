@@ -40,6 +40,11 @@ interface AcumuladoRow {
 }
 
 
+/**
+ * Normaliza a chave privada da conta de serviço Google.
+ * Aceita chave em texto plano (com `\n` escapados), entre aspas ou codificada em base64.
+ * @param raw - Valor bruto da variável de ambiente GOOGLE_SHEETS_PRIVATE_KEY
+ */
 function normalizarPrivateKey(raw: string): string {
   let key = raw.trim();
   if (key.startsWith('"') && key.endsWith('"')) {
@@ -52,6 +57,10 @@ function normalizarPrivateKey(raw: string): string {
   return key.replace(/\\n/g, '\n');
 }
 
+/**
+ * Cria e retorna a instância de autenticação JWT para a API do Google Sheets.
+ * Retorna null se as credenciais não estiverem configuradas nas variáveis de ambiente.
+ */
 function getAuth() {
   if (!CLIENT_EMAIL || !PRIVATE_KEY) {
     return null;
@@ -76,14 +85,17 @@ function parseDateBR(dateStr: string): Date | null {
 }
 
 /**
- * Formatar número: inteiros sem decimal, outros com 4 casas (trailing zeros removidos)
+ * Formata um número para string: inteiros sem casas decimais, outros com até 4 casas (zeros à direita removidos).
+ * @param n - Número a formatar
  */
 function fmt(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(4).replace(/\.?0+$/, '');
 }
 
 /**
- * Formatar Date para dd/mm/yyyy sem conversão de timezone
+ * Formata um objeto Date para string no padrão brasileiro dd/mm/yyyy,
+ * sem conversão de fuso horário (usa os valores do objeto Date diretamente).
+ * @param d - Data a formatar
  */
 function formatDateBR(d: Date): string {
   const dd = String(d.getDate()).padStart(2, '0');

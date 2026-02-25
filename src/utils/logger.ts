@@ -1,11 +1,21 @@
 type LogLevel = 'info' | 'warn' | 'error' | 'debug';
 
+/**
+ * Formata o prefixo da linha de log: [Scope] LEVEL
+ * @param level - Nível de severidade do log
+ * @param scope - Módulo ou contexto de onde o log é emitido (ex: 'Webhook', 'Inbox')
+ */
 function formatPrefix(level: LogLevel, scope?: string): string {
   const tag = scope ? `[${scope}]` : '[App]';
   const lvl = level.toUpperCase();
   return `${tag} ${lvl}`;
 }
 
+/**
+ * Serializa um valor para JSON de forma segura.
+ * Retorna '[unserializable]' se o valor contiver referências circulares ou não serializáveis.
+ * @param value - Valor a ser serializado
+ */
 function safeStringify(value: unknown): string {
   try {
     return JSON.stringify(value);
