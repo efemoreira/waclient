@@ -528,17 +528,19 @@ function agruparLinhasConsecutivas(indices: number[]): Array<{ start: number; en
 
 /**
  * Limpar registros antigos da aba leituras (manter apenas últimos 90 dias)
+ * Quando `id` é fornecido, remove apenas os registros daquele imóvel específico.
  */
 export async function limparDadosAntigos(
   sheets: ReturnType<typeof google.sheets>,
   rows: LeituraRow[],
-  agora: Date
+  agora: Date,
+  id?: string
 ): Promise<void> {
   const limite = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
   limite.setDate(limite.getDate() - RETENCAO_DIAS);
 
   const linhasParaApagar = rows
-    .filter(r => r.data < limite)
+    .filter(r => r.data < limite && (!id || r.id === id))
     .map(r => r.rowIndex);
 
   if (!linhasParaApagar.length) return;
@@ -723,8 +725,8 @@ export async function appendPredioEntry(params: {
       agora,
     });
 
-    // 6) Retenção automática: apagar leituras com mais de 90 dias
-    await limparDadosAntigos(sheets, leituras, agora);
+    // 6) Retenção automática: apagar leituras com mais de 90 dias (apenas deste imóvel)
+    await limparDadosAntigos(sheets, leituras, agora, params.predio);
 
     return {
       ok: true,
