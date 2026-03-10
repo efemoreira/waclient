@@ -10,6 +10,7 @@ import { lerConversas, salvarConversas, lerMeta, salvarMeta } from '../utils/con
 import { MESSAGES } from './messages';
 import { CommandHandler } from './CommandHandler';
 import { PropertyManager, type ConversaNovoImovel } from './PropertyManager';
+import { ollamaChat, type OllamaMessage } from '../utils/ollama-client';
 
 /**
  * Representa uma mensagem individual
@@ -642,7 +643,16 @@ export class ConversationManager {
               }
             }
 
-            // Comando não reconhecido - mostrar menu
+            // Comando não reconhecido — tentar responder via Ollama (LLM local)
+            if (config.ollama.baseUrl) {
+              const ollamaResponse = await this.responderComOllama(de, texto, conversa);
+              if (ollamaResponse) {
+                await this.enviarMensagem(de, ollamaResponse);
+                continue;
+              }
+            }
+
+            // Fallback: mostrar menu de ajuda
             await this.enviarMensagem(de, MESSAGES.COMANDO_NAO_RECONHECIDO);
           }
         }
@@ -671,6 +681,54 @@ export class ConversationManager {
     }
 
     this.log('✅ WEBHOOK PROCESSADO');
+  }
+
+  /**
+   * Usar Ollama para responder em linguagem natural quando nenhum comando for reconhecido.
+   *
+   * Monta o histórico recente da conversa como contexto para o modelo.
+   * Retorna null se o Ollama não estiver disponível ou ocorrer erro.
+   */
+  private async responderComOllama(
+    celular: string,
+    textoAtual: string,
+    conversa: Conversation
+  ): Promise<string | null> {
+    const { baseUrl, model, systemPrompt, temperature, maxTokens, timeoutMs } = config.ollama;
+
+    // Montar histórico recente (até 10 trocas = 20 mensagens) como contexto
+    const historyLimit = 20;
+    const mensagensRecentes = conversa.messages.slice(-historyLimit);
+
+    const messages: OllamaMessage[] = mensagensRecentes
+      .filter((m) => {
+        if (!m.text) return false;
+        // Mensagens de mídia/tipos não-texto são armazenadas como "[type]" por extrairTexto()
+        if (m.text.startsWith('[') && m.text.endsWith(']')) return false;
+        // Excluir respostas longas do bot (menus e templates pré-definidos),
+        // que confundem o modelo — manter apenas trocas conversacionais curtas
+        if (m.direction === 'out' && m.text.length > 400) return false;
+        return true;
+      })
+      .map((m) => ({
+        role: m.direction === 'in' ? ('user' as const) : ('assistant' as const),
+        content: m.text,
+      }));
+
+    // Garantir que a mensagem atual está incluída (pode ainda não estar no histórico)
+    const jaIncluida =
+      messages.length > 0 &&
+      messages[messages.length - 1].role === 'user' &&
+      messages[messages.length - 1].content === textoAtual;
+
+    if (!jaIncluida) {
+      messages.push({ role: 'user', content: textoAtual });
+    }
+
+    return ollamaChat(
+      { baseUrl, model, systemPrompt, temperature, maxTokens, timeoutMs },
+      messages
+    );
   }
 
   /**
