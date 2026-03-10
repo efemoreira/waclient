@@ -10,6 +10,7 @@ Este documento explica detalhadamente o que o código faz, como os módulos se r
 
 - 📥 **Recepção de mensagens** via webhook do WhatsApp
 - 🤖 **Bot de conversas** automáticas com comandos extensíveis
+- 🧠 **Respostas em linguagem natural** via integração opcional com [Ollama](https://ollama.com) (LLM local)
 - 📊 **Monitoramento de consumo** de água, energia e gás por imóvel
 - 🏠 **Gestão de imóveis** (cadastro e consulta de propriedades)
 - 📤 **Envio em massa** de mensagens a partir de arquivos CSV
@@ -68,6 +69,7 @@ src/
     ├── phone-normalizer.ts     → Normalização de números de telefone brasileiros
     ├── whatsapp-validator.ts   → Validação de números no WhatsApp Business API
     ├── text-normalizer.ts      → Normalização de texto (remove acentos, minúsculas)
+    ├── ollama-client.ts        → Cliente HTTP para a API do Ollama (LLM local)
     └── validar-numeros.ts      → Re-exporta validarTelefone (backward-compat)
 ```
 
@@ -113,7 +115,11 @@ api/webhook.ts
         │           └─ GastosManager.processarLeitura()
         │                └─ predioSheet.appendPredioEntry()
         │
-        └─ 7. Comando não reconhecido → COMANDO_NAO_RECONHECIDO
+        └─ 7. Comando não reconhecido
+                 ├─ OLLAMA_BASE_URL configurado → ollamaChat() [LLM local]
+                 │    ├─ Resposta obtida → enviar resposta em linguagem natural
+                 │    └─ Erro/timeout → fallback para COMANDO_NAO_RECONHECIDO
+                 └─ OLLAMA_BASE_URL não configurado → COMANDO_NAO_RECONHECIDO
 ```
 
 ---
@@ -369,6 +375,58 @@ Engine de envio em massa com:
 | `phone-normalizer.ts` | Normaliza números para o formato `55DDNNNNNNNNN` |
 | `whatsapp-validator.ts` | Valida números via endpoint `/contacts` da WhatsApp API |
 | `text-normalizer.ts` | Remove acentos e converte para minúsculas |
+| `ollama-client.ts` | Cliente HTTP para a API do Ollama — envia histórico e retorna resposta |
+
+---
+
+## Integração com Ollama (LLM Local)
+
+O sistema suporta opcionalmente um modelo de linguagem local via [Ollama](https://ollama.com) para responder mensagens em linguagem natural quando nenhum comando é reconhecido.
+
+### Como funciona
+
+1. O usuário envia uma mensagem que não corresponde a nenhum comando nem a uma leitura de consumo.
+2. Se `OLLAMA_BASE_URL` estiver configurado, `ConversationManager` chama `responderComOllama()`.
+3. O método monta o histórico recente da conversa (até 20 mensagens) e envia ao Ollama via `ollamaChat()`.
+4. A resposta do modelo é enviada ao usuário via WhatsApp.
+5. Em caso de erro ou timeout, o bot exibe a mensagem padrão `COMANDO_NAO_RECONHECIDO`.
+
+### Configuração
+
+```bash
+# Instalar o Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Baixar um modelo (ex: llama3, mistral, phi3)
+ollama pull llama3
+
+# Configurar no .env.local
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
+```
+
+> **Nota:** O Ollama é executado localmente na máquina. Em produção na Vercel (ambiente serverless), é necessário expor o servidor Ollama publicamente (ex: via tunnel ou VPS) e apontar `OLLAMA_BASE_URL` para o endereço externo.
+
+### Variáveis de Ambiente do Ollama
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `OLLAMA_BASE_URL` | *(vazio = desabilitado)* | URL do servidor Ollama |
+| `OLLAMA_MODEL` | `llama3` | Modelo a utilizar |
+| `OLLAMA_TEMPERATURE` | `0.7` | Temperatura de geração (0–1) |
+| `OLLAMA_MAX_TOKENS` | `512` | Tokens máximos na resposta |
+| `OLLAMA_TIMEOUT_MS` | `30000` | Timeout em ms |
+| `OLLAMA_SYSTEM_PROMPT` | *(prompt padrão)* | Prompt de sistema customizado |
+
+### Contexto enviado ao modelo
+
+```
+[system]  Você é um assistente virtual simpático de um sistema de monitoramento...
+[user]    <mensagem anterior do usuário>
+[assistant] <resposta anterior do bot>
+...
+[user]    <mensagem atual>
+```
 
 ---
 
@@ -394,6 +452,12 @@ Copie `.env.example` para `.env.local` e preencha os valores:
 | `UPSTASH_REDIS_REST_URL` | ❌ | URL do Upstash Redis (persistência em produção) |
 | `UPSTASH_REDIS_REST_TOKEN` | ❌ | Token do Upstash Redis |
 | `APP_PASSWORD` | ❌ | Senha para proteger endpoints de conversas e mensagens |
+| `OLLAMA_BASE_URL` | ❌ | URL do servidor Ollama (desabilitado se vazio) |
+| `OLLAMA_MODEL` | ❌ | Modelo Ollama a usar (padrão: `llama3`) |
+| `OLLAMA_TEMPERATURE` | ❌ | Temperatura de geração 0–1 (padrão: `0.7`) |
+| `OLLAMA_MAX_TOKENS` | ❌ | Tokens máximos na resposta (padrão: `512`) |
+| `OLLAMA_TIMEOUT_MS` | ❌ | Timeout em ms (padrão: `30000`) |
+| `OLLAMA_SYSTEM_PROMPT` | ❌ | Prompt de sistema customizado para o modelo |
 
 > ✅* Obrigatório para a funcionalidade do bot de conversas e registro de leituras.
 

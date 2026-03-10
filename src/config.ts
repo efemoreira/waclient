@@ -21,6 +21,28 @@ export const config = {
     defaultTemplateLanguage: 'en_US',
     defaultMissionName: 'Missão',
   },
+
+  // Ollama — LLM local para respostas em linguagem natural
+  ollama: {
+    /** URL base do servidor Ollama. Ex: http://localhost:11434 */
+    baseUrl: process.env.OLLAMA_BASE_URL || '',
+    /** Modelo a utilizar. Ex: llama3, mistral, phi3 */
+    model: process.env.OLLAMA_MODEL || 'llama3',
+    /** Temperatura de geração (0–1). Menor = mais determinístico. */
+    temperature: parseFloat(process.env.OLLAMA_TEMPERATURE || '0.7'),
+    /** Número máximo de tokens na resposta. */
+    maxTokens: parseInt(process.env.OLLAMA_MAX_TOKENS || '512', 10),
+    /** Timeout em ms para aguardar resposta do Ollama. */
+    timeoutMs: parseInt(process.env.OLLAMA_TIMEOUT_MS || '30000', 10),
+    /** Prompt de sistema que contextualiza o modelo sobre o bot. */
+    systemPrompt:
+      process.env.OLLAMA_SYSTEM_PROMPT ||
+      'Você é um assistente virtual simpático de um sistema de monitoramento de consumo' +
+      ' (água, energia e gás) via WhatsApp. Responda de forma concisa e amigável em português' +
+      ' brasileiro. Quando o usuário perguntar sobre comandos disponíveis, mencione: ajuda,' +
+      ' meu uid, minhas casas, status, como enviar, adicionar casa. Nunca invente dados de' +
+      ' leituras ou imóveis — indique ao usuário para usar os comandos corretos.',
+  },
 };
 
 /**
