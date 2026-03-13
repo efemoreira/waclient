@@ -87,21 +87,30 @@ async function getRows(sheetName: string, range: string): Promise<string[][]> {
   return (result.data?.values || []) as string[][];
 }
 
-// ---- Militantes tab (columns: data, nome, telefone, bairro, nivel, pontos, data_ultima_interacao) ----
+// ---- Militantes tab (columns: data, nome, telefone, bairro, nivel, pontos, data_ultima_interacao, cidade) ----
 
 export type MilitanteInfo = {
   dataInscricao: string;
   nome: string;
   celular: string;
   bairro: string;
+  cidade: string;
   nivel: number;
   pontos: number;
   dataUltimaInteracao: string;
 };
 
+/**
+ * Returns true when the militant has all minimum required fields filled:
+ * nome, bairro and cidade.
+ */
+export function isCadastroCompleto(militante: MilitanteInfo): boolean {
+  return !!(militante.nome?.trim() && militante.bairro?.trim() && militante.cidade?.trim());
+}
+
 export async function buscarMilitante(celular: string): Promise<MilitanteInfo | null> {
   try {
-    const rows = await getRows(SHEET_MILITANTES, 'A:G');
+    const rows = await getRows(SHEET_MILITANTES, 'A:H');
     const cel = celular.replace(/\D/g, '');
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i] || [];
@@ -115,6 +124,7 @@ export async function buscarMilitante(celular: string): Promise<MilitanteInfo | 
           nivel: Number(row[4] || 1),
           pontos: Number(row[5] || 0),
           dataUltimaInteracao: String(row[6] || ''),
+          cidade: String(row[7] || ''),
         };
       }
     }
@@ -125,9 +135,23 @@ export async function buscarMilitante(celular: string): Promise<MilitanteInfo | 
   }
 }
 
-export async function registrarMilitante(nome: string, celular: string, bairro: string): Promise<boolean> {
+export async function registrarMilitante(
+  nome: string,
+  celular: string,
+  bairro: string,
+  cidade: string
+): Promise<boolean> {
   try {
-    await appendRow(SHEET_MILITANTES, [dataAtual(), nome, celular.replace(/\D/g, ''), bairro, 1, 0, dataAtual()]);
+    await appendRow(SHEET_MILITANTES, [
+      dataAtual(),
+      nome,
+      celular.replace(/\D/g, ''),
+      bairro,
+      1,
+      0,
+      dataAtual(),
+      cidade,
+    ]);
     logger.info('MilitanciaSheet', `✅ Militante registrado: ${nome} (${celular})`);
     return true;
   } catch (err: any) {
@@ -411,5 +435,101 @@ export async function obterRankingBairros(): Promise<RankingBairro[]> {
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao obter ranking: ${err?.message}`);
     return [];
+  }
+}
+
+// ---- Latest content and nearest event for non-registered users ----
+
+export type ConteudoInfo = {
+  titulo: string;
+  link?: string;
+  tipo?: string;
+};
+
+/**
+ * Returns the most recently published content from the Conteúdos sheet.
+ * The sheet has two kinds of rows:
+ *   - Catalog rows (added by admins): column B (telefone) is empty.
+ *     Format: [data, '', titulo, link?, tipo?]
+ *   - Access-log rows (appended when a user views content): column B is a phone number.
+ *     Format: [data, telefone, conteudo_acessado, tipo]
+ * Catalog rows take priority; the function searches from the bottom for the most recent one.
+ * Falls back to access-log rows if no catalog entries exist.
+ */
+export async function obterUltimoConteudo(): Promise<ConteudoInfo | null> {
+  try {
+    const rows = await getRows(SHEET_CONTEUDOS, 'A:E');
+    // Search from the bottom for a catalog entry (row with empty telefone and non-empty conteudo)
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const row = rows[i] || [];
+      const telefone = String(row[1] || '').trim();
+      const conteudo = String(row[2] || '').trim();
+      if (!telefone && conteudo) {
+        return {
+          titulo: conteudo,
+          link: String(row[3] || '').trim() || undefined,
+          tipo: String(row[4] || '').trim() || undefined,
+        };
+      }
+    }
+    // Fall back to last access-log row with non-empty conteudo
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const row = rows[i] || [];
+      const conteudo = String(row[2] || '').trim();
+      if (conteudo) {
+        return { titulo: conteudo };
+      }
+    }
+    return null;
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao obter último conteúdo: ${err?.message}`);
+    return null;
+  }
+}
+
+export type EventoInfo = {
+  nome: string;
+  local?: string;
+  data?: string;
+};
+
+/**
+ * Returns the nearest upcoming event from the Eventos sheet.
+ * The sheet has two kinds of rows:
+ *   - Catalog rows (added by admins): column B (telefone) is empty.
+ *     Format: [data_publicacao, '', nome_evento, local, data_evento]
+ *   - Confirmation-log rows (appended when a user confirms attendance): column B is a phone number.
+ *     Format: [data, telefone, evento, confirmacao]
+ * Catalog rows take priority; the function searches from the bottom for the most recent one.
+ * Falls back to last confirmation-log row if no catalog entries exist.
+ */
+export async function obterProximoEvento(): Promise<EventoInfo | null> {
+  try {
+    const rows = await getRows(SHEET_EVENTOS, 'A:E');
+    // Search from the bottom for a catalog entry (empty telefone)
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const row = rows[i] || [];
+      const telefone = String(row[1] || '').trim();
+      const nome = String(row[2] || '').trim();
+      if (!telefone && nome) {
+        return {
+          nome,
+          local: String(row[3] || '').trim() || undefined,
+          data: String(row[4] || '').trim() || undefined,
+        };
+      }
+    }
+    // Fall back to last access-log row
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const row = rows[i] || [];
+      const evento = String(row[2] || '').trim();
+      if (evento) {
+        return { nome: evento };
+      }
+    }
+    return null;
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao obter próximo evento: ${err?.message}`);
+    return null;
   }
 }

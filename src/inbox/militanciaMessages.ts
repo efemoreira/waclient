@@ -3,7 +3,53 @@
  * Central de Mobilização da Militância
  */
 
+import type { ConteudoInfo, EventoInfo } from '../utils/militanciaSheet';
+
 export const MESSAGES_MILITANCIA = {
+  // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
+  WELCOME_FIRST_CONTACT: `👋 Olá! Seja bem-vindo.
+
+Este é o assistente do movimento.
+
+Você pode:
+
+1️⃣ Fazer um cadastro rápido para participar da militância
+2️⃣ Apenas acompanhar o que está acontecendo`,
+
+  // ---- Segundo contato (retornou, ainda não cadastrado) ----
+  WELCOME_SECOND_CONTACT: `👋 Que bom ver você novamente!
+
+Percebi que você ainda não fez seu cadastro na base da militância.
+
+Se quiser participar mais ativamente, recomendo fazer o cadastro.
+
+Se tiver alguma dúvida, pode falar diretamente com:
+
+Felipe
+📞 85 99722-3863
+
+1️⃣ Fazer cadastro
+2️⃣ Ver novidades / conteúdos`,
+
+  // ---- Mostrar conteúdo ou evento para não-cadastrados ----
+  MOSTRAR_CONTEUDO: (conteudo: ConteudoInfo) => {
+    let msg = `📢 Último conteúdo publicado:\n\n${conteudo.titulo}`;
+    if (conteudo.link) msg += `\n${conteudo.link}`;
+    if (conteudo.tipo) msg += `\n\n_Tipo: ${conteudo.tipo}_`;
+    return msg;
+  },
+
+  MOSTRAR_EVENTO: (evento: EventoInfo) => {
+    let msg = `📅 Próximo evento:\n\n${evento.nome}`;
+    if (evento.local) msg += `\n📍 ${evento.local}`;
+    if (evento.data) msg += `\n🗓 ${evento.data}`;
+    return msg;
+  },
+
+  MOSTRAR_NOVIDADES_FALLBACK: `📢 Fique de olho nas nossas redes para as últimas novidades!
+
+Quando quiser se cadastrar e participar mais ativamente, é só mandar uma mensagem! 💪`,
+
   // Cadastro de novo militante
   WELCOME_NEW_USER: `👋 Bem-vindo à *Central da Militância*!
 
@@ -13,17 +59,35 @@ Para começar, por favor me envie seu *nome completo*.`,
 
 Agora me diga qual é o seu *bairro*.`,
 
+  PEDIR_CIDADE: `📍 Perfeito!
+
+E qual é a sua *cidade*?`,
+
   CADASTRO_SUCESSO: (nome: string) => `🎉 *Cadastro realizado com sucesso!*
 
 Bem-vindo(a), *${nome}*! Você agora faz parte da nossa militância! 💪
 
-${MESSAGES_MILITANCIA.MENU}`,
+${MESSAGES_MILITANCIA.MENU_PERSONALIZADO(nome)}`,
 
   ERRO_CADASTRO: `❌ Ocorreu um erro ao realizar seu cadastro.
 
 Por favor, tente novamente respondendo com seu *nome completo*.`,
 
-  // Menu principal
+  // Menu principal (personalizado para usuário cadastrado)
+  MENU_PERSONALIZADO: (nome: string) => `👋 Olá, *${nome}*!
+
+Bem-vindo de volta à Central da Militância.
+
+Escolha uma opção:
+
+1️⃣ Missão de hoje
+2️⃣ Próximos eventos
+3️⃣ Novo conteúdo
+4️⃣ Quero assumir mais responsabilidade
+5️⃣ Painel do meu bairro
+6️⃣ Enviar denúncia`,
+
+  // Menu principal (sem nome, para compatibilidade e casos de uso genérico)
   MENU: `👋 *Central da Militância*
 
 Escolha uma opção:
