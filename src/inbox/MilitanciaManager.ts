@@ -62,7 +62,7 @@ export class MilitanciaManager {
     if (!militante) {
       conversa.militanciaStage = 'cadastro_nome';
       conversa.militanciaData = {};
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW);
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
       return true;
     }
 

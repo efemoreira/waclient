@@ -5,7 +5,7 @@
 
 export const MESSAGES_MILITANCIA = {
   // Cadastro de novo militante
-  WELCOME_NEW: `👋 Bem-vindo à *Central da Militância*!
+  WELCOME_NEW_USER: `👋 Bem-vindo à *Central da Militância*!
 
 Para começar, por favor me envie seu *nome completo*.`,
 

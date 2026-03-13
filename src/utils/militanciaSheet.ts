@@ -5,6 +5,15 @@
 
 import { google } from 'googleapis';
 import { logger } from './logger';
+import { normalizarTexto } from './text-normalizer';
+
+/**
+ * Normalize status strings for comparison.
+ * Strips diacritics so 'concluído' and 'concluido' both match 'concluido'.
+ */
+function isConcluido(status: string): boolean {
+  return normalizarTexto(status).trim() === 'concluido';
+}
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID || '';
 const CLIENT_EMAIL = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || '';
@@ -347,8 +356,8 @@ export async function obterPainelBairro(bairro: string): Promise<PainelBairro> {
 
     for (let i = 1; i < missoes.length; i++) {
       const row = missoes[i] || [];
-      const status = String(row[3] || '').toLowerCase();
-      if (status === 'concluído' || status === 'concluido') {
+      const status = String(row[3] || '');
+      if (isConcluido(status)) {
         const celMissao = String(row[1] || '').replace(/\D/g, '');
         if (celsBairro.has(celMissao)) {
           missoesConcluidasSemana++;
@@ -385,8 +394,8 @@ export async function obterRankingBairros(): Promise<RankingBairro[]> {
     const bairroMissoes = new Map<string, number>();
     for (let i = 1; i < missoes.length; i++) {
       const row = missoes[i] || [];
-      const status = String(row[3] || '').toLowerCase();
-      if (status === 'concluído' || status === 'concluido') {
+      const status = String(row[3] || '');
+      if (isConcluido(status)) {
         const cel = String(row[1] || '').replace(/\D/g, '');
         const b = celBairroMap.get(cel);
         if (b) {
