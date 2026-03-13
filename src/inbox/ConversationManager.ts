@@ -30,8 +30,11 @@ export interface Conversation {
   isHuman: boolean;
   messages: MessageRecord[];
   militanciaStage?:
+    | 'welcome_opcao'
+    | 'segundo_contato_opcao'
     | 'cadastro_nome'
     | 'cadastro_bairro'
+    | 'cadastro_cidade'
     | 'missao_resposta'
     | 'evento_confirmacao'
     | 'lideranca_area'
@@ -43,6 +46,7 @@ export interface Conversation {
   militanciaData?: {
     nome?: string;
     bairro?: string;
+    cidade?: string;
     area?: string;
     descricao?: string;
   };

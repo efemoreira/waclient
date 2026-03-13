@@ -18,6 +18,7 @@ import { logger } from '../utils/logger';
 import { config } from '../config';
 import {
   buscarMilitante,
+  isCadastroCompleto,
   registrarMilitante,
   atualizarUltimaInteracao,
   registrarRespostaMissao,
@@ -27,6 +28,8 @@ import {
   registrarDenuncia,
   obterPainelBairro,
   obterRankingBairros,
+  obterUltimoConteudo,
+  obterProximoEvento,
   nomeDoNivel,
   type MilitanteInfo,
 } from '../utils/militanciaSheet';
@@ -59,18 +62,32 @@ export class MilitanciaManager {
 
     // Check if user is registered
     const militante = await buscarMilitante(celular);
-    if (!militante) {
-      conversa.militanciaStage = 'cadastro_nome';
-      conversa.militanciaData = {};
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
-      return true;
+
+    // Case 1: Registered user with complete profile (nome + bairro + cidade)
+    if (militante && isCadastroCompleto(militante)) {
+      // Update last interaction (fire-and-forget)
+      atualizarUltimaInteracao(celular).catch(() => {});
+      return await this.processarMenuOuComando(celular, texto, textoNorm, conversa, militante);
     }
 
-    // Update last interaction (fire-and-forget)
-    atualizarUltimaInteracao(celular).catch(() => {});
+    // Cases 2 & 3: phone not in sheet, OR in sheet but with incomplete profile.
+    // Both cases are treated identically: non-registered flow based on contact history.
+    // Distinguish first vs returning contact by checking conversation history.
+    const isFirstContact = conversa.messages.length <= 1;
 
-    // Process menu selection or show menu
-    return await this.processarMenuOuComando(celular, texto, textoNorm, conversa, militante);
+    if (isFirstContact) {
+      // First ever interaction — offer registration or follow
+      conversa.militanciaStage = 'welcome_opcao';
+      conversa.militanciaData = {};
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
+      return true;
+    } else {
+      // Returning user that has not yet completed registration
+      conversa.militanciaStage = 'segundo_contato_opcao';
+      conversa.militanciaData = {};
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_SECOND_CONTACT);
+      return true;
+    }
   }
 
   /**
@@ -85,6 +102,32 @@ export class MilitanciaManager {
     conversa.militanciaData = conversa.militanciaData || {};
 
     switch (conversa.militanciaStage) {
+      // ---- First contact: user chooses register (1) or follow (2) ----
+      case 'welcome_opcao': {
+        if (['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm)) {
+          conversa.militanciaStage = 'cadastro_nome';
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
+          return true;
+        }
+        // Default to showing news (option 2 or any other response)
+        conversa.militanciaStage = undefined;
+        await this.enviarNovidades(celular);
+        return true;
+      }
+
+      // ---- Second contact: user chooses register (1) or see news (2) ----
+      case 'segundo_contato_opcao': {
+        if (['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm)) {
+          conversa.militanciaStage = 'cadastro_nome';
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
+          return true;
+        }
+        // Default to showing news (option 2 or any other response)
+        conversa.militanciaStage = undefined;
+        await this.enviarNovidades(celular);
+        return true;
+      }
+
       // ---- Registration flow ----
       case 'cadastro_nome': {
         conversa.militanciaData.nome = texto.trim();
@@ -94,9 +137,17 @@ export class MilitanciaManager {
       }
 
       case 'cadastro_bairro': {
+        conversa.militanciaData.bairro = texto.trim();
+        conversa.militanciaStage = 'cadastro_cidade';
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_CIDADE);
+        return true;
+      }
+
+      case 'cadastro_cidade': {
         const nome = conversa.militanciaData.nome || '';
-        const bairro = texto.trim();
-        const ok = await registrarMilitante(nome, celular, bairro);
+        const bairro = conversa.militanciaData.bairro || '';
+        const cidade = texto.trim();
+        const ok = await registrarMilitante(nome, celular, bairro, cidade);
         conversa.militanciaStage = undefined;
         conversa.militanciaData = {};
         if (ok) {
@@ -220,7 +271,7 @@ export class MilitanciaManager {
   ): Promise<boolean> {
     // Global commands
     if (['menu', 'ajuda', 'help', 'inicio', 'início', 'voltar'].includes(textoNorm)) {
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU);
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
       return false;
     }
 
@@ -310,9 +361,9 @@ export class MilitanciaManager {
       return true;
     }
 
-    // Unrecognized - show menu
+    // Unrecognized - show personalized menu
     this.log(`⚠️ Comando não reconhecido: "${texto.substring(0, 50)}"`);
-    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.COMANDO_NAO_RECONHECIDO);
+    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
     return false;
   }
 
@@ -331,6 +382,44 @@ export class MilitanciaManager {
     } catch (err: any) {
       this.log(`❌ Erro ao obter painel: ${err?.message}`);
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PAINEL_ERRO);
+    }
+  }
+
+  /**
+   * Fetch and send latest content or nearest event to non-registered users
+   */
+  private async enviarNovidades(celular: string): Promise<void> {
+    try {
+      const [conteudo, evento] = await Promise.all([
+        obterUltimoConteudo(),
+        obterProximoEvento(),
+      ]);
+
+      if (conteudo) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO(conteudo));
+      } else if (evento) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(evento));
+      } else {
+        // Fall back to env-var content
+        const conteudoTexto = config.militancia.novoConteudo;
+        const eventosTexto = config.militancia.proximosEventos;
+        if (conteudoTexto) {
+          await this.client.sendMessage(
+            celular,
+            MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO({ titulo: conteudoTexto })
+          );
+        } else if (eventosTexto) {
+          await this.client.sendMessage(
+            celular,
+            MESSAGES_MILITANCIA.MOSTRAR_EVENTO({ nome: eventosTexto })
+          );
+        } else {
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_NOVIDADES_FALLBACK);
+        }
+      }
+    } catch (err: any) {
+      this.log(`❌ Erro ao enviar novidades: ${err?.message}`);
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_NOVIDADES_FALLBACK);
     }
   }
 
