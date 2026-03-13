@@ -21,6 +21,17 @@ export const config = {
     defaultTemplateLanguage: 'en_US',
     defaultMissionName: 'Missão',
   },
+
+  // Militancy bot content (update via env vars without redeployment)
+  militancia: {
+    missaoDia: process.env.MISSAO_DO_DIA ||
+      'Hoje publicamos um novo vídeo no YouTube.\n\nPassos:\n1️⃣ Assistir até o final\n2️⃣ Curtir o vídeo\n3️⃣ Fazer um comentário\n4️⃣ Compartilhar com 3 pessoas',
+    proximosEventos: process.env.PROXIMOS_EVENTOS ||
+      'Em breve novos eventos serão anunciados. Fique ligado!',
+    novoConteudo: process.env.NOVO_CONTEUDO ||
+      'Nenhum conteúdo novo no momento. Volte em breve!',
+    novoConteudoTipo: process.env.NOVO_CONTEUDO_TIPO || 'post',
+  },
 };
 
 /**
