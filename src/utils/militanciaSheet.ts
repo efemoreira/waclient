@@ -15,7 +15,7 @@ function isConcluido(status: string): boolean {
   return normalizarTexto(status).trim() === 'concluido';
 }
 
-const SHEET_ID = process.env.GOOGLE_SHEET_ID || '';
+const SHEET_ID = process.env.GOOGLE_SHEET_ID || '1gWmeKdve801yhFST_O0grBefYW_fDLyCr8nwND_98EQ';
 const CLIENT_EMAIL = process.env.GOOGLE_SHEETS_CLIENT_EMAIL || '';
 const PRIVATE_KEY = process.env.GOOGLE_SHEETS_PRIVATE_KEY || '';
 
