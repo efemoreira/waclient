@@ -2,14 +2,9 @@ import { WhatsApp } from '../wabapi';
 import type { WebhookPayload, WhatsAppMessage } from '../wabapi/types';
 import { config } from '../config';
 import { logger } from '../utils/logger';
-import { appendPredioEntry } from '../utils/predioSheet';
-import { verificarInscrito, adicionarInscrito, listarInscricoesPorCelular } from '../utils/inscritosSheet';
-import { GastosManager } from './GastosManager';
-import { normalizarTexto, normalizarWaId } from '../utils/text-normalizer';
+import { normalizarWaId } from '../utils/text-normalizer';
 import { lerConversas, salvarConversas, lerMeta, salvarMeta } from '../utils/conversation-storage';
-import { MESSAGES } from './messages';
-import { CommandHandler } from './CommandHandler';
-import { PropertyManager, type ConversaNovoImovel } from './PropertyManager';
+import { MilitanciaManager } from './MilitanciaManager';
 
 /**
  * Representa uma mensagem individual
@@ -34,39 +29,33 @@ export interface Conversation {
   unreadCount: number;
   isHuman: boolean;
   messages: MessageRecord[];
-  inscricaoStage?:
-    | 'nome'
-    | 'bairro'
-    | 'cep'
-    | 'tipo_imovel'
-    | 'pessoas'
-    | 'uid_indicador';
-  inscricaoData?: {
+  militanciaStage?:
+    | 'cadastro_nome'
+    | 'cadastro_bairro'
+    | 'missao_resposta'
+    | 'evento_confirmacao'
+    | 'lideranca_area'
+    | 'lideranca_disponibilidade'
+    | 'denuncia_bairro'
+    | 'denuncia_descricao'
+    | 'denuncia_foto'
+    | 'painel_bairro';
+  militanciaData?: {
     nome?: string;
     bairro?: string;
-    cep?: string;
-    tipo_imovel?: string;
-    pessoas?: string;
-    uid_indicador?: string;
+    area?: string;
+    descricao?: string;
   };
-  pendingLeitura?: {
-    valor?: string;
-    tipo?: 'agua' | 'energia' | 'gas';
-    idImovel?: string;
-  };
-  novoImovel?: ConversaNovoImovel;
 }
 
 /**
  * Gerenciador de conversas e mensagens
- * Orquestra fluxos de acompanhamento de gastos (água, energia, gás)
+ * Orquestra o bot de mobilização política
  */
 export class ConversationManager {
   private client: WhatsApp;
   private conversations: Map<string, Conversation> = new Map();
-  private gastosManager: GastosManager;
-  private commandHandler: CommandHandler;
-  private propertyManager: PropertyManager;
+  private militanciaManager: MilitanciaManager;
   private lastLoadTime: number = 0;
   private loadTimeout: number = 1000; // Recarregar no máximo a cada 1 segundo
   private resetAt: number = 0;
@@ -138,44 +127,10 @@ export class ConversationManager {
       numberId: config.whatsapp.numberId,
       version: apiVersion,
     });
-    this.gastosManager = new GastosManager(this.client);
-    this.propertyManager = new PropertyManager(this.client);
-    this.commandHandler = new CommandHandler(this.client);
-    
-    // Registrar comando de adicionar casa
-    this.registerPropertyCommands();
-    
+    this.militanciaManager = new MilitanciaManager(this.client);
+
     // Carregar conversas do armazenamento
     this.carregarConversas().catch(console.error);
-  }
-
-  /**
-   * Registrar comandos relacionados a propriedades
-   */
-  private registerPropertyCommands(): void {
-    this.commandHandler.register({
-      names: ['adicionar casa', 'nova casa'],
-      description: 'Adicionar um novo imóvel ao seu cadastro',
-      aliases: ['add casa', 'adicionar imovel', 'novo imovel', 'cadastrar casa'],
-      handler: async (ctx) => {
-        const verificacao = await this.propertyManager.podeAdicionarImovel(ctx.celular);
-        
-        if (!verificacao.pode) {
-          await this.client.sendMessage(ctx.celular, `❌ ${verificacao.erro}`);
-          return { handled: true };
-        }
-
-        // Iniciar fluxo de adição de imóvel
-        const conversa = this.obterOuCriarConversa(ctx.celular);
-        conversa.novoImovel = await this.propertyManager.iniciarAdicaoImovel(
-          ctx.celular,
-          verificacao.nome!
-        );
-        await this.persistirConversas();
-
-        return { handled: true };
-      },
-    });
   }
 
   /**
@@ -468,182 +423,23 @@ export class ConversationManager {
             await this.adicionarMensagem(de, 'in', texto, msg.id, timestamp);
             this.log(`✅ De ${de}: "${texto.substring(0, 50)}..."`);
 
-            // Obter conversa - pode ser reatribuída durante o processamento
-            let conversa = this.obterOuCriarConversa(de);
-            
-            // Verificar fluxo de novo imóvel primeiro
-            if (conversa.novoImovel) {
-              const resultado = await this.propertyManager.processarProximoPasso(
-                conversa.novoImovel,
-                texto
-              );
+            // Obter conversa
+            const conversa = this.obterOuCriarConversa(de);
 
-              if (resultado.concluido) {
-                conversa.novoImovel = undefined;
-                await this.persistirConversas();
-              } else if (resultado.proximoStage) {
-                conversa.novoImovel = resultado.proximoStage;
+            // Skip if a human agent has taken over
+            if (conversa.isHuman) {
+              continue;
+            }
+
+            // Delegate all message handling to MilitanciaManager
+            try {
+              const precisaPersistir = await this.militanciaManager.processar(de, texto, conversa);
+              if (precisaPersistir) {
                 await this.persistirConversas();
               }
-              continue;
+            } catch (erro: any) {
+              this.log(`❌ Erro ao processar mensagem: ${erro?.message}`);
             }
-
-            // Verificar inscrição
-            if (conversa.inscricaoStage) {
-              conversa.inscricaoData = conversa.inscricaoData || {};
-              const stage = conversa.inscricaoStage;
-
-              // Mapeamento de salvamento de dados por estágio
-              const handlers: Record<string, () => void> = {
-                'nome': () => { conversa.inscricaoData!.nome = texto; },
-                'bairro': () => { conversa.inscricaoData!.bairro = texto; },
-                'cep': () => { conversa.inscricaoData!.cep = texto; },
-                'tipo_imovel': () => { conversa.inscricaoData!.tipo_imovel = texto; },
-                'pessoas': () => { conversa.inscricaoData!.pessoas = texto; },
-                'uid_indicador': () => { conversa.inscricaoData!.uid_indicador = texto; },
-              };
-
-              if (handlers[stage]) handlers[stage]();
-
-              const avancar = async (proximo: Conversation['inscricaoStage'], pergunta: string) => {
-                conversa.inscricaoStage = proximo;
-                await this.persistirConversas(); // Salva o progresso no storage
-                await this.enviarMensagem(de, pergunta);
-              };
-
-              try {
-                switch (stage) {
-                  case 'nome':
-                    await avancar('bairro', MESSAGES.INSCRICAO_BAIRRO);
-                    break;
-                  case 'bairro':
-                    await avancar('cep', MESSAGES.INSCRICAO_CEP);
-                    break;
-                  case 'cep':
-                    await avancar('tipo_imovel', MESSAGES.INSCRICAO_TIPO_IMOVEL);
-                    break;
-                  case 'tipo_imovel':
-                    await avancar('pessoas', MESSAGES.INSCRICAO_PESSOAS);
-                    break;
-                  case 'pessoas':
-                    await avancar('uid_indicador', MESSAGES.INSCRICAO_UID_INDICADOR);
-                    break;
-                  case 'uid_indicador':
-                    const dados = conversa.inscricaoData;
-                    const resultado = await adicionarInscrito({
-                      nome: dados?.nome || '',
-                      celular: de,
-                      bairro: dados?.bairro || '',
-                      cep: dados?.cep || '', // Enviando CEP
-                      tipo_imovel: dados?.tipo_imovel || '',
-                      pessoas: dados?.pessoas || '',
-                      uid_indicador: dados?.uid_indicador || '',
-                    });
-
-                    if (resultado.ok) {
-                      conversa.inscricaoStage = undefined;
-                      conversa.inscricaoData = undefined;
-                      await this.persistirConversas();
-                      const reply = MESSAGES.INSCRICAO_SUCESSO(
-                        dados?.nome || '',
-                        resultado.uid || '',
-                        resultado.idImovel || ''
-                      );
-                      await this.enviarMensagem(de, reply);
-                    } else {
-                      await this.enviarMensagem(de, MESSAGES.INSCRICAO_ERRO(resultado.erro));
-                    }
-                    break;
-                }
-              } catch (erro: any) {
-                this.log(`❌ Erro no onboarding: ${erro?.message}`);
-                await this.enviarMensagem(de, MESSAGES.INSCRICAO_ERRO(erro?.message));
-              }
-              continue;
-            }
-
-            // Verificar se já é inscrito
-            const verificacao = await verificarInscrito(de);
-            if (!verificacao.inscrito) {
-              // Não está inscrito - pedir inscrição
-              conversa.inscricaoStage = 'nome';
-              conversa.inscricaoData = {};
-              await this.persistirConversas();
-              const reply = MESSAGES.WELCOME_NEW_USER;
-              try {
-                await this.enviarMensagem(de, reply);
-              } catch (erro: any) {
-                this.log(`❌ Falha ao enviar solicitação de inscrição: ${erro?.message || erro}`);
-              }
-              continue;
-            }
-
-            // Usuário é inscrito - continuar com fluxo normal
-            this.log(`✅ Usuário inscrito: ${verificacao.nome} (${verificacao.uid})`);
-
-            const textoNormalizado = normalizarTexto(texto).trim();
-            const inscricoes = await listarInscricoesPorCelular(de);
-
-            // Tentar processar como comando primeiro
-            const commandResult = await this.commandHandler.process({
-              celular: de,
-              texto,
-              textoNormalizado,
-              inscricoes,
-              gastosManager: this.gastosManager,
-              client: this.client,
-            });
-
-            if (commandResult.handled) {
-              continue;
-            }
-
-            // Fluxo de leitura pendente
-            if (conversa.pendingLeitura) {
-              const { processado } = await this.gastosManager.processarPendingLeitura(
-                de,
-                texto,
-                textoNormalizado,
-                conversa.pendingLeitura,
-                inscricoes
-              );
-              if (processado) {
-                conversa.pendingLeitura = undefined;
-                await this.persistirConversas();
-                continue;
-              }
-            }
-
-            // Interpretar envio de leitura usando GastosManager
-            const { leituraValor, leituraTipo, leituraId } = this.gastosManager.parseArLeitura(textoNormalizado);
-
-            if (leituraValor) {
-              const { processado, pendingLeitura, erro } = await this.gastosManager.processarLeitura(
-                de,
-                texto,
-                leituraValor,
-                leituraTipo,
-                leituraId,
-                inscricoes
-              );
-
-              if (processado) {
-                if (pendingLeitura) {
-                  conversa.pendingLeitura = pendingLeitura;
-                  await this.persistirConversas();
-                  if (erro === 'NEED_ID') {
-                    const lista = await this.gastosManager.formatarCasas(inscricoes);
-                    await this.enviarMensagem(de, MESSAGES.AGUARDANDO_ID_IMOVEL(lista));
-                  } else if (erro === 'NEED_TYPE') {
-                    await this.enviarMensagem(de, MESSAGES.AGUARDANDO_TIPO);
-                  }
-                }
-                continue;
-              }
-            }
-
-            // Comando não reconhecido - mostrar menu
-            await this.enviarMensagem(de, MESSAGES.COMANDO_NAO_RECONHECIDO);
           }
         }
 
