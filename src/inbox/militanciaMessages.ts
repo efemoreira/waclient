@@ -38,14 +38,10 @@ export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
   WELCOME_FIRST_CONTACT: `👋 Olá! Seja bem-vindo ao assistente do movimento.
 
-Para participar ativamente, vou fazer um cadastro rápido com você.`,
+Escolha uma opção:
 
-  // ---- Primeiro contato: boas-vindas + início do cadastro (mensagem única) ----
-  WELCOME_FIRST_CONTACT_CADASTRO: `👋 Olá! Seja bem-vindo ao assistente do movimento.
-
-Para participar ativamente, vou fazer um cadastro rápido com você.
-
-Por favor me envie seu *nome completo*:`,
+1️⃣ Fazer meu cadastro para participar ativamente
+2️⃣ Ver último conteúdo e próximo evento`,
 
   // ---- Segundo contato (retornou, ainda não cadastrado) ----
   WELCOME_SECOND_CONTACT: `👋 Que bom ver você novamente!
