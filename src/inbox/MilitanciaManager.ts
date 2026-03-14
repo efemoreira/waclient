@@ -160,6 +160,20 @@ export class MilitanciaManager {
   }
 
   /**
+   * Common greeting words (normalized, no diacritics) that should restart
+   * the conversation instead of being treated as registration input.
+   */
+  private static readonly SAUDACOES = [
+    'ola', 'oi', 'hello', 'hi', 'hey',
+    'bom dia', 'boa tarde', 'boa noite',
+    'inicio', 'iniciar', 'comecar', 'recomecar', 'reiniciar', 'voltar',
+  ];
+
+  private static isSaudacao(textoNorm: string): boolean {
+    return MilitanciaManager.SAUDACOES.includes(textoNorm);
+  }
+
+  /**
    * Handle messages when a multi-step flow is active
    */
   private async processarStage(
@@ -182,6 +196,13 @@ export class MilitanciaManager {
           await this.enviarConteudoEEvento(celular);
           return true;
         }
+        // Greetings reset the flow to the welcome menu
+        if (MilitanciaManager.isSaudacao(textoNorm)) {
+          conversa.militanciaStage = undefined;
+          conversa.militanciaData = {};
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
+          return true;
+        }
         const nome = texto.trim();
         const okNome = await atualizarCamposMilitante(celular, { nome });
         if (okNome) {
@@ -197,6 +218,13 @@ export class MilitanciaManager {
 
       // ---- Registration: collecting bairro ----
       case 'cadastro_bairro': {
+        // Greetings reset the flow to the welcome menu
+        if (MilitanciaManager.isSaudacao(textoNorm)) {
+          conversa.militanciaStage = undefined;
+          conversa.militanciaData = {};
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
+          return true;
+        }
         const bairro = texto.trim();
         const okBairro = await atualizarCamposMilitante(celular, { bairro });
         if (okBairro) {
@@ -211,6 +239,13 @@ export class MilitanciaManager {
 
       // ---- Registration: collecting cidade ----
       case 'cadastro_cidade': {
+        // Greetings reset the flow to the welcome menu
+        if (MilitanciaManager.isSaudacao(textoNorm)) {
+          conversa.militanciaStage = undefined;
+          conversa.militanciaData = {};
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
+          return true;
+        }
         const cidade = texto.trim();
         const ok = await atualizarCamposMilitante(celular, { cidade });
         if (ok) {
