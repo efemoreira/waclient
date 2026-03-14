@@ -14,25 +14,24 @@ function ordinal(n: number): string {
 }
 
 /**
- * Calculates the next level name and remaining points.
+ * Calculates the next level name and remaining missions.
  * Returns null if the militant is already at maximum level.
  */
 function proximoNivel(
   nivelAtual: number,
-  pontosAtuais: number
-): { nome: string; pontosRestantes: number; missoesRestantes: number } | null {
-  const thresholds: Record<number, { pontos: number; nome: string }> = {
-    1: { pontos: 20, nome: 'Militante' },
-    2: { pontos: 50, nome: 'Militante Ativo' },
-    3: { pontos: 100, nome: 'Mobilizador' },
-    4: { pontos: 200, nome: 'Líder de Bairro' },
-    5: { pontos: 500, nome: 'Coordenador Regional' },
+  missoesAtuais: number
+): { nome: string; missoesRestantes: number } | null {
+  const thresholds: Record<number, { missoes: number; nome: string }> = {
+    1: { missoes: 5, nome: 'Militante' },
+    2: { missoes: 15, nome: 'Militante Ativo' },
+    3: { missoes: 40, nome: 'Mobilizador' },
+    4: { missoes: 80, nome: 'Líder de Bairro' },
+    5: { missoes: 150, nome: 'Coordenador' },
   };
   const prox = thresholds[nivelAtual];
   if (!prox) return null;
-  const pontosRestantes = Math.max(0, prox.pontos - pontosAtuais);
-  const missoesRestantes = Math.ceil(pontosRestantes / 10);
-  return { nome: prox.nome, pontosRestantes, missoesRestantes };
+  const missoesRestantes = Math.max(0, prox.missoes - missoesAtuais);
+  return { nome: prox.nome, missoesRestantes };
 }
 
 export const MESSAGES_MILITANCIA = {
@@ -140,13 +139,31 @@ Depois responda:
 ✅ Já fiz
 ⏳ Vou fazer agora`,
 
-  MISSAO_CONCLUIDA: `🏆 *Parabéns!* Missão registrada com sucesso!
+  MISSAO_CONCLUIDA: (streakAtual: number) => {
+    let msg = `🏆 *Parabéns!* Missão registrada com sucesso!\n\nVocê ganhou *10 pontos* por concluir a missão de hoje! 🎯`;
+    if (streakAtual > 1) {
+      msg += `\n\n🔥 Sequência atual: *${streakAtual} dias!*`;
+    } else {
+      msg += `\n\n🔥 Sequência iniciada! Volte amanhã para continuar.`;
+    }
+    msg += `\n\nContinue engajado e acumule mais pontos!\n\nDigite *menu* para ver outras opções.`;
+    return msg;
+  },
 
-Você ganhou *10 pontos* por concluir a missão de hoje! 🎯
+  NIVEL_SUBIU: (nomeNivel: string) => `🎉 *Parabéns!*
 
-Continue engajado e acumule mais pontos!
+Você subiu de nível.
 
-Digite *menu* para ver outras opções.`,
+Novo nível: *${nomeNivel}* 🚀
+
+Continue assim!`,
+
+  CONQUISTA_DESBLOQUEADA: (nomeConquista: string, missoesTotal: number) =>
+    `🏅 *Nova conquista desbloqueada!*
+
+*${nomeConquista}*
+
+Você completou ${missoesTotal} missões! Continue mobilizado! 💪`,
 
   MISSAO_PENDENTE: `⏳ Missão registrada! Assim que concluir, envie *✅ Já fiz*.
 
@@ -242,24 +259,26 @@ Digite *menu* para ver outras opções.`,
     militantesNoBairro: number;
     posicaoNoBairro: number;
     posicaoGeral: number;
+    streakAtual: number;
+    bairro: string;
   }) => {
-    const prox = proximoNivel(params.nivel, params.pontos);
-    let msg = `📊 *Seu Dashboard*
+    const prox = proximoNivel(params.nivel, params.missoesConcluidasTotal);
+    let msg = `📊 *Seu progresso*
 
 👤 ${params.nome}
 
-🎯 Missões concluídas: ${params.missoesConcluidasTotal}
+🎖️ Nível: *${params.nomeNivel}*
+🎯 Missões concluídas: *${params.missoesConcluidasTotal}*
+
+🏘 Seu bairro: *${params.bairro}*
 👥 Pessoas no seu bairro: ${params.militantesNoBairro}
-📍 Sua posição no bairro: ${ordinal(params.posicaoNoBairro)}
+📍 Sua posição no bairro: *${ordinal(params.posicaoNoBairro)}*
 🌐 Posição geral: ${ordinal(params.posicaoGeral)}
 
-🎖️ Nível atual: ${params.nomeNivel}`;
+🔥 Sequência atual: *${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}*`;
 
-    if (prox && prox.pontosRestantes > 0) {
-      msg += `\n⬆️ Próximo nível: ${prox.nome}`;
-      if (prox.missoesRestantes > 0) {
-        msg += `\n🔢 Faltam ${prox.missoesRestantes} missões.`;
-      }
+    if (prox && prox.missoesRestantes > 0) {
+      msg += `\n\n⬆️ Próximo nível: *${prox.nome}*\n🔢 Faltam ${prox.missoesRestantes} missões`;
     }
 
     msg += `\n\nDigite *menu* para voltar.`;
@@ -279,7 +298,12 @@ Digite *menu* para ver outras opções.`,
     missoesConcluidasSemana: number;
     nivelMedio: number;
     lider?: string;
+    nivelBairro: number;
+    missoesTotais: number;
   }) => `📍 *PAINEL DO BAIRRO – ${params.bairro.toUpperCase()}*
+
+🏘 Nível do bairro: *${params.nivelBairro}*
+🎯 Missões totais: *${params.missoesTotais}*
 
 👥 Militantes ativos: ${params.militantesAtivos}
 🎯 Missões concluídas essa semana: ${params.missoesConcluidasSemana}
@@ -309,19 +333,37 @@ Digite *menu* para ver outras opções.`,
     nivel: number;
     nomeNivel: string;
     pontos: number;
-  }) => `⭐ *Seu Perfil*
+    missoesConcluidasTotal: number;
+    streakAtual: number;
+    titulos: string;
+  }) => {
+    const prox = proximoNivel(params.nivel, params.missoesConcluidasTotal);
+    let msg = `⭐ *Seu Perfil*
 
 👤 Nome: ${params.nome}
 📍 Bairro: ${params.bairro}
 🎖️ Nível: ${params.nivel} – ${params.nomeNivel}
-🏅 Pontos: ${params.pontos}
+🎯 Missões concluídas: ${params.missoesConcluidasTotal}
+🔥 Sequência atual: ${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}`;
 
-*Pontuação para subir de nível:*
-• Nível 2 (Militante): 20 pts
-• Nível 3 (Militante Ativo): 50 pts
-• Nível 4 (Mobilizador): 100 pts
-• Nível 5 (Líder de Bairro): 200 pts
-• Nível 6 (Coordenador Regional): 500 pts`,
+    if (params.titulos) {
+      msg += `\n🏅 Conquistas: ${params.titulos}`;
+    }
+
+    if (prox && prox.missoesRestantes > 0) {
+      msg += `\n\n⬆️ Próximo nível: *${prox.nome}*\nFaltam ${prox.missoesRestantes} missões`;
+    }
+
+    msg += `\n\n*Níveis:*
+• Nível 1 – Simpatizante: 0 missões
+• Nível 2 – Militante: 5 missões
+• Nível 3 – Militante Ativo: 15 missões
+• Nível 4 – Mobilizador: 40 missões
+• Nível 5 – Líder de Bairro: 80 missões
+• Nível 6 – Coordenador: 150 missões`;
+
+    return msg;
+  },
 
   // Fallback
   COMANDO_NAO_RECONHECIDO: `🤔 Não entendi essa mensagem.

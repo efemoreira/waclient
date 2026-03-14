@@ -33,6 +33,7 @@ import {
   obterDashboardPessoal,
   nomeDoNivel,
   type MilitanteInfo,
+  type MissaoResultado,
 } from '../utils/militanciaSheet';
 import { MESSAGES_MILITANCIA } from './militanciaMessages';
 import type { Conversation } from './ConversationManager';
@@ -163,13 +164,32 @@ export class MilitanciaManager {
       case 'missao_resposta': {
         const missaoDia = config.militancia.missaoDia;
         const status = this.detectarRespostaMissao(textoNorm);
-        await registrarRespostaMissao(celular, missaoDia, status);
+        const resultado: MissaoResultado = await registrarRespostaMissao(celular, missaoDia, status);
         conversa.militanciaStage = undefined;
-        const resposta =
-          status === 'concluído'
-            ? MESSAGES_MILITANCIA.MISSAO_CONCLUIDA
-            : MESSAGES_MILITANCIA.MISSAO_PENDENTE;
-        await this.client.sendMessage(celular, resposta);
+
+        if (status === 'concluído') {
+          // Base confirmation with streak
+          await this.client.sendMessage(
+            celular,
+            MESSAGES_MILITANCIA.MISSAO_CONCLUIDA(resultado.streakAtual)
+          );
+          // Level-up notification
+          if (resultado.levelUp) {
+            await this.client.sendMessage(
+              celular,
+              MESSAGES_MILITANCIA.NIVEL_SUBIU(nomeDoNivel(resultado.novoNivel))
+            );
+          }
+          // Achievement notifications
+          for (const conquista of resultado.novasConquistas) {
+            await this.client.sendMessage(
+              celular,
+              MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, resultado.missoesConcluidasTotal)
+            );
+          }
+        } else {
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MISSAO_PENDENTE);
+        }
         return true;
       }
 
@@ -294,6 +314,9 @@ export class MilitanciaManager {
           nivel: militante.nivel,
           nomeNivel: nomeDoNivel(militante.nivel),
           pontos: militante.pontos,
+          missoesConcluidasTotal: militante.missoesConcluidasTotal,
+          streakAtual: militante.streakAtual,
+          titulos: militante.titulos,
         })
       );
       return false;
@@ -383,10 +406,12 @@ export class MilitanciaManager {
         nivel: militante.nivel,
         nomeNivel: nomeDoNivel(militante.nivel),
         pontos: militante.pontos,
-        missoesConcluidasTotal: dashboard.missoesConcluidasTotal,
+        missoesConcluidasTotal: militante.missoesConcluidasTotal,
         militantesNoBairro: dashboard.militantesNoBairro,
         posicaoNoBairro: dashboard.posicaoNoBairro,
         posicaoGeral: dashboard.posicaoGeral,
+        streakAtual: militante.streakAtual,
+        bairro: militante.bairro,
       });
       await this.client.sendMessage(celular, msg);
     } catch (err: any) {
