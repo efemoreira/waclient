@@ -86,6 +86,7 @@ export class MilitanciaManager {
       if (!militante.nome?.trim()) {
         // Waiting for name — any text that is not a recognized option is the name
         if (['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm)) {
+          conversa.militanciaStage = 'cadastro_nome';
           await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
           return true;
         }
@@ -94,6 +95,11 @@ export class MilitanciaManager {
           return true;
         }
         const okNome = await atualizarCamposMilitante(celular, { nome: texto.trim() });
+        if (okNome) {
+          conversa.militanciaData = conversa.militanciaData || {};
+          conversa.militanciaData.nome = texto.trim();
+          conversa.militanciaStage = 'cadastro_bairro';
+        }
         await this.client.sendMessage(
           celular,
           okNome ? MESSAGES_MILITANCIA.PEDIR_BAIRRO : MESSAGES_MILITANCIA.ERRO_CADASTRO
@@ -103,6 +109,9 @@ export class MilitanciaManager {
 
       if (!militante.bairro?.trim()) {
         const okBairro = await atualizarCamposMilitante(celular, { bairro: texto.trim() });
+        if (okBairro) {
+          conversa.militanciaStage = 'cadastro_cidade';
+        }
         await this.client.sendMessage(
           celular,
           okBairro ? MESSAGES_MILITANCIA.PEDIR_CIDADE : MESSAGES_MILITANCIA.ERRO_CADASTRO
@@ -131,6 +140,9 @@ export class MilitanciaManager {
         this.log(`⚠️ Erro ao registrar contato: ${err?.message}`)
         return false;
       });
+      if (contatoOk) {
+        conversa.militanciaStage = 'cadastro_nome';
+      }
       await this.client.sendMessage(
         celular,
         contatoOk ? MESSAGES_MILITANCIA.WELCOME_NEW_USER : MESSAGES_MILITANCIA.ERRO_CADASTRO
@@ -159,6 +171,66 @@ export class MilitanciaManager {
     conversa.militanciaData = conversa.militanciaData || {};
 
     switch (conversa.militanciaStage) {
+      // ---- Registration: collecting nome ----
+      case 'cadastro_nome': {
+        // Allow user to restart or view news without breaking the flow
+        if (['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm)) {
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
+          return true;
+        }
+        if (['2', 'novidades', 'acompanhar'].includes(textoNorm)) {
+          await this.enviarConteudoEEvento(celular);
+          return true;
+        }
+        const nome = texto.trim();
+        const okNome = await atualizarCamposMilitante(celular, { nome });
+        if (okNome) {
+          conversa.militanciaData.nome = nome;
+          conversa.militanciaStage = 'cadastro_bairro';
+        }
+        await this.client.sendMessage(
+          celular,
+          okNome ? MESSAGES_MILITANCIA.PEDIR_BAIRRO : MESSAGES_MILITANCIA.ERRO_CADASTRO
+        );
+        return true;
+      }
+
+      // ---- Registration: collecting bairro ----
+      case 'cadastro_bairro': {
+        const bairro = texto.trim();
+        const okBairro = await atualizarCamposMilitante(celular, { bairro });
+        if (okBairro) {
+          conversa.militanciaStage = 'cadastro_cidade';
+        }
+        await this.client.sendMessage(
+          celular,
+          okBairro ? MESSAGES_MILITANCIA.PEDIR_CIDADE : MESSAGES_MILITANCIA.ERRO_CADASTRO
+        );
+        return true;
+      }
+
+      // ---- Registration: collecting cidade ----
+      case 'cadastro_cidade': {
+        const cidade = texto.trim();
+        const ok = await atualizarCamposMilitante(celular, { cidade });
+        if (ok) {
+          let nomeSalvo = conversa.militanciaData.nome;
+          if (!nomeSalvo) {
+            this.log('⚠️ Nome ausente em militanciaData no stage cadastro_cidade — buscando da planilha');
+            nomeSalvo = (await buscarMilitante(celular))?.nome || '';
+          }
+          conversa.militanciaStage = undefined;
+          conversa.militanciaData = {};
+          await this.client.sendMessage(
+            celular,
+            MESSAGES_MILITANCIA.CADASTRO_SUCESSO(nomeSalvo)
+          );
+        } else {
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.ERRO_CADASTRO);
+        }
+        return true;
+      }
+
       // ---- Mission response ----
       case 'missao_resposta': {
         const missaoDia = config.militancia.missaoDia;
