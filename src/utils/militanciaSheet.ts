@@ -228,6 +228,53 @@ export async function registrarContato(celular: string): Promise<boolean> {
   }
 }
 
+/**
+ * Updates registration fields (nome, bairro, cidade) for an existing row
+ * in the Militantes sheet. Used to increment registration step-by-step
+ * without creating a second row.
+ *
+ * Column mapping:
+ *  B (1) – nome
+ *  D (3) – bairro
+ *  H (7) – cidade
+ */
+export async function atualizarCamposMilitante(
+  celular: string,
+  campos: Partial<{ nome: string; bairro: string; cidade: string }>
+): Promise<boolean> {
+  const auth = getAuth();
+  if (!auth) return false;
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+    const cel = celular.replace(/\D/g, '');
+    const rows = await getRows(SHEET_MILITANTES, 'A:O');
+
+    for (let i = 1; i < rows.length; i++) {
+      const rowCel = String((rows[i] || [])[2] || '').replace(/\D/g, '');
+      if (rowCel !== cel) continue;
+
+      const rowNum = i + 1; // sheet rows are 1-based (+1 for header)
+      const data: Array<{ range: string; values: string[][] }> = [];
+      if (campos.nome  !== undefined) data.push({ range: `${SHEET_MILITANTES}!B${rowNum}`, values: [[campos.nome]]  });
+      if (campos.bairro !== undefined) data.push({ range: `${SHEET_MILITANTES}!D${rowNum}`, values: [[campos.bairro]] });
+      if (campos.cidade !== undefined) data.push({ range: `${SHEET_MILITANTES}!H${rowNum}`, values: [[campos.cidade]] });
+
+      if (data.length > 0) {
+        await sheets.spreadsheets.values.batchUpdate({
+          spreadsheetId: SHEET_ID,
+          requestBody: { valueInputOption: 'USER_ENTERED', data },
+        });
+      }
+      logger.info('MilitanciaSheet', `✅ Campos atualizados: ${celular}`);
+      return true;
+    }
+    return false;
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao atualizar campos do militante: ${err?.message}`);
+    return false;
+  }
+}
+
 export function calcularNivel(missoesConcluidasTotal: number): number {
   if (missoesConcluidasTotal >= 150) return 6;
   if (missoesConcluidasTotal >= 80) return 5;
