@@ -30,6 +30,7 @@ import {
   obterRankingBairros,
   obterUltimoConteudo,
   obterProximoEvento,
+  obterDashboardPessoal,
   nomeDoNivel,
   type MilitanteInfo,
 } from '../utils/militanciaSheet';
@@ -186,21 +187,30 @@ export class MilitanciaManager {
         return true;
       }
 
-      // ---- Leadership flow ----
+      // ---- Leadership / responsibility flow ----
       case 'lideranca_area': {
         const areas: Record<string, string> = {
-          '1': 'Liderar meu bairro',
-          '2': 'Organizar reuniões',
-          '3': 'Ajudar na comunicação',
-          '4': 'Ajudar nos eventos',
-          '5': 'Ajudar online',
+          '1': 'Fazer uma doação',
+          '2': 'Organizar reuniões no meu bairro',
+          '3': 'Ajudar com minha experiência profissional',
+          '4': 'Participar de pesquisas e estratégias',
         };
-        conversa.militanciaData.area = areas[textoNorm] || texto.trim();
-        conversa.militanciaStage = 'lideranca_disponibilidade';
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_DISPONIBILIDADE);
+        const area = areas[textoNorm] || texto.trim();
+        const militante = await buscarMilitante(celular);
+        await registrarInteresseLideranca(
+          militante?.nome || '',
+          celular,
+          militante?.bairro || '',
+          area,
+          '' // availability is no longer collected in the new flow
+        );
+        conversa.militanciaStage = undefined;
+        conversa.militanciaData = {};
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.LIDERANCA_REGISTRADA);
         return true;
       }
 
+      // Backward-compat: availability stage from old flow
       case 'lideranca_disponibilidade': {
         const militante = await buscarMilitante(celular);
         await registrarInteresseLideranca(
@@ -309,7 +319,7 @@ export class MilitanciaManager {
 
     // Option 3 - Content
     if (
-      ['3', 'conteudo', 'conteúdo', 'novo conteudo', 'novo conteúdo'].includes(textoNorm)
+      ['3', 'conteudo', 'conteúdo', 'conteudos', 'conteúdos', 'novo conteudo', 'novo conteúdo'].includes(textoNorm)
     ) {
       const conteudoTexto = config.militancia.novoConteudo;
       const conteudoTipo = config.militancia.novoConteudoTipo;
@@ -319,41 +329,9 @@ export class MilitanciaManager {
       return false;
     }
 
-    // Option 4 - Leadership
+    // Option 4 - Complaint
     if (
-      [
-        '4',
-        'lideranca',
-        'liderança',
-        'responsabilidade',
-        'quero liderar',
-        'quero ajudar',
-      ].includes(textoNorm)
-    ) {
-      conversa.militanciaStage = 'lideranca_area';
-      conversa.militanciaData = {};
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.LIDERANCA_MENU);
-      return true;
-    }
-
-    // Option 5 - Neighborhood panel
-    if (
-      ['5', 'painel', 'bairro', 'painel do meu bairro', 'meu bairro'].includes(textoNorm)
-    ) {
-      if (militante.bairro) {
-        await this.enviarPainelBairro(celular, militante.bairro);
-        return false;
-      }
-      // Ask for neighborhood if not registered
-      conversa.militanciaStage = 'painel_bairro';
-      conversa.militanciaData = {};
-      await this.client.sendMessage(celular, '📍 Qual é o seu *bairro*?');
-      return true;
-    }
-
-    // Option 6 - Complaint
-    if (
-      ['6', 'denuncia', 'denúncia', 'enviar denuncia', 'enviar denúncia'].includes(textoNorm)
+      ['4', 'denuncia', 'denúncia', 'enviar denuncia', 'enviar denúncia'].includes(textoNorm)
     ) {
       conversa.militanciaStage = 'denuncia_bairro';
       conversa.militanciaData = {};
@@ -361,10 +339,60 @@ export class MilitanciaManager {
       return true;
     }
 
+    // Option 5 - Leadership / responsibility
+    if (
+      [
+        '5',
+        'lideranca',
+        'liderança',
+        'responsabilidade',
+        'quero liderar',
+        'quero ajudar',
+        'assumir responsabilidade',
+      ].includes(textoNorm)
+    ) {
+      conversa.militanciaStage = 'lideranca_area';
+      conversa.militanciaData = {};
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.LIDERANCA_AGRADECIMENTO);
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.LIDERANCA_OPCOES);
+      return true;
+    }
+
+    // Option 6 - Dashboard
+    if (
+      ['6', 'dashboard', 'painel', 'painel do meu bairro', 'meu bairro'].includes(textoNorm)
+    ) {
+      await this.enviarDashboard(celular, militante);
+      return false;
+    }
+
     // Unrecognized - show personalized menu
     this.log(`⚠️ Comando não reconhecido: "${texto.substring(0, 50)}"`);
     await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
     return false;
+  }
+
+  /**
+   * Fetch and send personal dashboard data
+   */
+  private async enviarDashboard(celular: string, militante: MilitanteInfo): Promise<void> {
+    try {
+      const dashboard = await obterDashboardPessoal(celular, militante.bairro);
+      const msg = MESSAGES_MILITANCIA.DASHBOARD({
+        nome: militante.nome,
+        nivel: militante.nivel,
+        nomeNivel: nomeDoNivel(militante.nivel),
+        pontos: militante.pontos,
+        missoesConcluidasTotal: dashboard.missoesConcluidasTotal,
+        militantesNoBairro: dashboard.militantesNoBairro,
+        posicaoNoBairro: dashboard.posicaoNoBairro,
+        posicaoGeral: dashboard.posicaoGeral,
+      });
+      await this.client.sendMessage(celular, msg);
+    } catch (err: any) {
+      this.log(`❌ Erro ao obter dashboard: ${err?.message}`);
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.DASHBOARD_ERRO);
+    }
   }
 
   /**
