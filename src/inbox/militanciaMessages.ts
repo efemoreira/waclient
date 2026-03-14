@@ -5,6 +5,36 @@
 
 import type { ConteudoInfo, EventoInfo } from '../utils/militanciaSheet';
 
+/**
+ * Returns an ordinal suffix string for a rank number (Portuguese style).
+ * e.g. 1 → "1º", 2 → "2º"
+ */
+function ordinal(n: number): string {
+  return `${n}º`;
+}
+
+/**
+ * Calculates the next level name and remaining points.
+ * Returns null if the militant is already at maximum level.
+ */
+function proximoNivel(
+  nivelAtual: number,
+  pontosAtuais: number
+): { nome: string; pontosRestantes: number; missoesRestantes: number } | null {
+  const thresholds: Record<number, { pontos: number; nome: string }> = {
+    1: { pontos: 20, nome: 'Militante' },
+    2: { pontos: 50, nome: 'Militante Ativo' },
+    3: { pontos: 100, nome: 'Mobilizador' },
+    4: { pontos: 200, nome: 'Líder de Bairro' },
+    5: { pontos: 500, nome: 'Coordenador Regional' },
+  };
+  const prox = thresholds[nivelAtual];
+  if (!prox) return null;
+  const pontosRestantes = Math.max(0, prox.pontos - pontosAtuais);
+  const missoesRestantes = Math.ceil(pontosRestantes / 10);
+  return { nome: prox.nome, pontosRestantes, missoesRestantes };
+}
+
 export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
   WELCOME_FIRST_CONTACT: `👋 Olá! Seja bem-vindo.
@@ -13,7 +43,7 @@ Este é o assistente do movimento.
 
 Você pode:
 
-1️⃣ Fazer um cadastro rápido para participar da militância
+1️⃣ Fazer um cadastro rápido para participar mais ativamente
 2️⃣ Apenas acompanhar o que está acontecendo`,
 
   // ---- Segundo contato (retornou, ainda não cadastrado) ----
@@ -76,28 +106,28 @@ Por favor, tente novamente respondendo com seu *nome completo*.`,
   // Menu principal (personalizado para usuário cadastrado)
   MENU_PERSONALIZADO: (nome: string) => `👋 Olá, *${nome}*!
 
-Bem-vindo de volta à Central da Militância.
+Bem-vindo à Central da Militância.
 
 Escolha uma opção:
 
-1️⃣ Missão de hoje
-2️⃣ Próximos eventos
-3️⃣ Novo conteúdo
-4️⃣ Quero assumir mais responsabilidade
-5️⃣ Painel do meu bairro
-6️⃣ Enviar denúncia`,
+1️⃣ Missão
+2️⃣ Eventos
+3️⃣ Conteúdos
+4️⃣ Enviar denúncia
+5️⃣ Quero assumir mais responsabilidade
+6️⃣ Dashboard`,
 
   // Menu principal (sem nome, para compatibilidade e casos de uso genérico)
   MENU: `👋 *Central da Militância*
 
 Escolha uma opção:
 
-1️⃣ Missão de hoje
-2️⃣ Próximos eventos
-3️⃣ Novo conteúdo
-4️⃣ Quero assumir mais responsabilidade
-5️⃣ Painel do meu bairro
-6️⃣ Enviar denúncia`,
+1️⃣ Missão
+2️⃣ Eventos
+3️⃣ Conteúdos
+4️⃣ Enviar denúncia
+5️⃣ Quero assumir mais responsabilidade
+6️⃣ Dashboard`,
 
   // 1 - Missão do dia
   MISSAO: (missaoTexto: string) => `🚀 *MISSÃO DE HOJE*
@@ -151,16 +181,44 @@ Gostou? Compartilhe com mais pessoas! 🔥
 
 Digite *menu* para ver outras opções.`,
 
-  // 4 - Liderança
-  LIDERANCA_MENU: `💪 *Quero assumir mais responsabilidade*
+  // 4 - Denúncia
+  DENUNCIA_INICIO: `📢 *Enviar Denúncia*
 
-Em qual área você gostaria de ajudar?
+Vamos registrar sua denúncia.
 
-1️⃣ Liderar meu bairro
-2️⃣ Organizar reuniões
-3️⃣ Ajudar na comunicação
-4️⃣ Ajudar nos eventos
-5️⃣ Ajudar online`,
+Qual é o seu *bairro*?`,
+
+  PEDIR_DESCRICAO_DENUNCIA: `📝 Descreva o *problema* que você quer reportar:`,
+
+  PEDIR_FOTO_DENUNCIA: `📷 Você tem alguma *foto ou link de mídia* para enviar?
+
+Se sim, envie agora.
+Se não, responda *não*.`,
+
+  DENUNCIA_REGISTRADA: `✅ *Denúncia registrada com sucesso!*
+
+Sua denúncia foi recebida e será analisada pela equipe.
+
+Obrigado por contribuir com a melhoria da sua comunidade! 🌟
+
+Digite *menu* para ver outras opções.`,
+
+  // 5 - Quero assumir mais responsabilidade
+  LIDERANCA_AGRADECIMENTO: `🙏 Obrigado por ajudar!
+
+Curtir, comentar e compartilhar conteúdos já faz muita diferença para o movimento.`,
+
+  LIDERANCA_OPCOES: `Como você gostaria de ajudar mais?
+
+1️⃣ Fazer uma doação
+2️⃣ Organizar reuniões no meu bairro
+3️⃣ Ajudar com minha experiência profissional
+4️⃣ Participar de pesquisas e estratégias`,
+
+  // Keep for backward compatibility (existing code that imports LIDERANCA_MENU will still compile)
+  LIDERANCA_MENU: `🙏 Obrigado por ajudar!
+
+Curtir, comentar e compartilhar conteúdos já faz muita diferença para o movimento.`,
 
   PEDIR_DISPONIBILIDADE: `⏰ Qual é a sua *disponibilidade*?
 
@@ -170,11 +228,51 @@ Em qual área você gostaria de ajudar?
 
 Entraremos em contato em breve para orientá-lo(a) sobre os próximos passos.
 
-Obrigado pela disposição em liderar! 💪
+Obrigado pela disposição em ajudar! 💪
 
 Digite *menu* para ver outras opções.`,
 
-  // 5 - Painel do bairro
+  // 6 - Dashboard
+  DASHBOARD: (params: {
+    nome: string;
+    nivel: number;
+    nomeNivel: string;
+    pontos: number;
+    missoesConcluidasTotal: number;
+    militantesNoBairro: number;
+    posicaoNoBairro: number;
+    posicaoGeral: number;
+  }) => {
+    const prox = proximoNivel(params.nivel, params.pontos);
+    let msg = `📊 *Seu Dashboard*
+
+👤 ${params.nome}
+
+🎯 Missões concluídas: ${params.missoesConcluidasTotal}
+👥 Pessoas no seu bairro: ${params.militantesNoBairro}
+📍 Sua posição no bairro: ${ordinal(params.posicaoNoBairro)}
+🌐 Posição geral: ${ordinal(params.posicaoGeral)}
+
+🎖️ Nível atual: ${params.nomeNivel}`;
+
+    if (prox && prox.pontosRestantes > 0) {
+      msg += `\n⬆️ Próximo nível: ${prox.nome}`;
+      if (prox.missoesRestantes > 0) {
+        msg += `\n🔢 Faltam ${prox.missoesRestantes} missões.`;
+      }
+    }
+
+    msg += `\n\nDigite *menu* para voltar.`;
+    return msg;
+  },
+
+  DASHBOARD_ERRO: `⚠️ Não foi possível carregar o dashboard no momento.
+
+Tente novamente mais tarde.
+
+Digite *menu* para ver outras opções.`,
+
+  // Painel do bairro
   PAINEL_BAIRRO: (params: {
     bairro: string;
     militantesAtivos: number;
@@ -204,28 +302,6 @@ Tente novamente mais tarde.
 
 Digite *menu* para ver outras opções.`,
 
-  // 6 - Denúncia
-  DENUNCIA_INICIO: `📢 *Enviar Denúncia*
-
-Vamos registrar sua denúncia.
-
-Qual é o seu *bairro*?`,
-
-  PEDIR_DESCRICAO_DENUNCIA: `📝 Descreva o *problema* que você quer reportar:`,
-
-  PEDIR_FOTO_DENUNCIA: `📷 Você tem alguma *foto ou link de mídia* para enviar?
-
-Se sim, envie agora.
-Se não, responda *não*.`,
-
-  DENUNCIA_REGISTRADA: `✅ *Denúncia registrada com sucesso!*
-
-Sua denúncia foi recebida e será analisada pela equipe.
-
-Obrigado por contribuir com a melhoria da sua comunidade! 🌟
-
-Digite *menu* para ver outras opções.`,
-
   // Perfil do militante
   PERFIL: (params: {
     nome: string;
@@ -252,3 +328,4 @@ Digite *menu* para ver outras opções.`,
 
 Digite *menu* para ver todas as opções disponíveis.`,
 };
+

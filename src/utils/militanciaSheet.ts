@@ -390,7 +390,9 @@ export async function obterPainelBairro(bairro: string): Promise<PainelBairro> {
     }
 
     const nivelMedio = militantesAtivos > 0 ? Math.round(somaNiveis / militantesAtivos) : 0;
-    return { bairro, militantesAtivos, missoesConcluidasSemana, nivelMedio, lider };
+    // Gamification rule: show at least 3 militants to avoid early demotivation
+    const militantesDisplay = militantesAtivos <= 2 ? 3 : militantesAtivos;
+    return { bairro, militantesAtivos: militantesDisplay, missoesConcluidasSemana, nivelMedio, lider };
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao obter painel: ${err?.message}`);
     return { bairro, militantesAtivos: 0, missoesConcluidasSemana: 0, nivelMedio: 0 };
@@ -435,6 +437,81 @@ export async function obterRankingBairros(): Promise<RankingBairro[]> {
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao obter ranking: ${err?.message}`);
     return [];
+  }
+}
+
+// ---- Personal dashboard ----
+
+export type DashboardPessoal = {
+  missoesConcluidasTotal: number;
+  militantesNoBairro: number;
+  posicaoNoBairro: number;
+  posicaoGeral: number;
+};
+
+/**
+ * Returns personal engagement dashboard data for a militant.
+ * Applies the gamification rule: if neighborhood count is 1 or 2, display 3 instead.
+ */
+export async function obterDashboardPessoal(
+  celular: string,
+  bairro: string
+): Promise<DashboardPessoal> {
+  try {
+    const cel = celular.replace(/\D/g, '');
+    const bairroNorm = bairro.toLowerCase().trim();
+
+    const [militantes, missoes] = await Promise.all([
+      getRows(SHEET_MILITANTES, 'A:H'),
+      getRows(SHEET_MISSOES, 'A:E'),
+    ]);
+
+    // Build cel -> bairro map and collect militants in the user's bairro
+    const celBairroMap = new Map<string, string>();
+    const celsBairro = new Set<string>();
+    for (let i = 1; i < militantes.length; i++) {
+      const row = militantes[i] || [];
+      const rowCel = String(row[2] || '').replace(/\D/g, '');
+      const rowBairro = String(row[3] || '').toLowerCase().trim();
+      if (rowCel) celBairroMap.set(rowCel, rowBairro);
+      if (rowBairro === bairroNorm) celsBairro.add(rowCel);
+    }
+
+    // Gamification rule: show at least 3 militants in the neighborhood
+    const militantesNoBairro = celsBairro.size <= 2 ? 3 : celsBairro.size;
+
+    // Count completed missions per militant
+    const missoesPorCel = new Map<string, number>();
+    for (let i = 1; i < missoes.length; i++) {
+      const row = missoes[i] || [];
+      const status = String(row[3] || '');
+      if (isConcluido(status)) {
+        const rowCel = String(row[1] || '').replace(/\D/g, '');
+        missoesPorCel.set(rowCel, (missoesPorCel.get(rowCel) || 0) + 1);
+      }
+    }
+
+    const missoesConcluidasTotal = missoesPorCel.get(cel) || 0;
+
+    // Rank user within their neighborhood
+    const bairroRanking = Array.from(celsBairro)
+      .map((c) => ({ cel: c, missoes: missoesPorCel.get(c) || 0 }))
+      .sort((a, b) => b.missoes - a.missoes);
+    const idxBairro = bairroRanking.findIndex((m) => m.cel === cel);
+    const posicaoNoBairro = idxBairro >= 0 ? idxBairro + 1 : bairroRanking.length + 1;
+
+    // Global ranking
+    const globalRanking = Array.from(celBairroMap.keys())
+      .map((c) => ({ cel: c, missoes: missoesPorCel.get(c) || 0 }))
+      .sort((a, b) => b.missoes - a.missoes);
+    const idxGeral = globalRanking.findIndex((m) => m.cel === cel);
+    const posicaoGeral = idxGeral >= 0 ? idxGeral + 1 : globalRanking.length + 1;
+
+    return { missoesConcluidasTotal, militantesNoBairro, posicaoNoBairro, posicaoGeral };
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao obter dashboard: ${err?.message}`);
+    // Return safe defaults; militantesNoBairro defaults to 3 per the gamification display rule
+    return { missoesConcluidasTotal: 0, militantesNoBairro: 3, posicaoNoBairro: 1, posicaoGeral: 1 };
   }
 }
 
