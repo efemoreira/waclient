@@ -104,6 +104,22 @@ export class ConversationManager {
         ? messages[messages.length - 1].timestamp
         : existing.lastTimestamp;
 
+      // Preserve militanciaStage/militanciaData from storage when the current
+      // conversation was freshly created (property absent) to avoid race conditions
+      // on cold starts (e.g. Vercel serverless).
+      //
+      // The `in` operator distinguishes two cases:
+      //   - Property ABSENT on conv (freshly created conversation, stage not yet set):
+      //     use existing stage from storage to avoid losing saved state.
+      //   - Property PRESENT on conv (even if undefined, meaning processar cleared it):
+      //     use conv's value so intentional stage updates / clears are respected.
+      const militanciaStage = 'militanciaStage' in conv
+        ? conv.militanciaStage
+        : existing.militanciaStage;
+      const militanciaData = 'militanciaData' in conv
+        ? conv.militanciaData
+        : existing.militanciaData;
+
       merged[id] = {
         ...existing,
         ...conv,
@@ -114,6 +130,8 @@ export class ConversationManager {
         messages,
         lastMessage,
         lastTimestamp,
+        militanciaStage,
+        militanciaData,
       };
     });
 

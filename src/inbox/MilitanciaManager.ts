@@ -78,7 +78,7 @@ export class MilitanciaManager {
     const isFirstContact = conversa.messages.length <= 1;
 
     if (isFirstContact) {
-      // First ever interaction — offer registration or follow
+      // First ever interaction — show options and wait for 1 or 2
       conversa.militanciaStage = 'welcome_opcao';
       conversa.militanciaData = {};
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
@@ -104,16 +104,20 @@ export class MilitanciaManager {
     conversa.militanciaData = conversa.militanciaData || {};
 
     switch (conversa.militanciaStage) {
-      // ---- First contact: user chooses register (1) or follow (2) ----
+      // ---- First contact: user must choose 1 (register) or 2 (content+event) ----
       case 'welcome_opcao': {
         if (['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm)) {
           conversa.militanciaStage = 'cadastro_nome';
           await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
           return true;
         }
-        // Default to showing news (option 2 or any other response)
-        conversa.militanciaStage = undefined;
-        await this.enviarNovidades(celular);
+        if (['2'].includes(textoNorm)) {
+          conversa.militanciaStage = undefined;
+          await this.enviarConteudoEEvento(celular);
+          return true;
+        }
+        // Unrecognized input — re-show the welcome options
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
         return true;
       }
 
@@ -124,9 +128,13 @@ export class MilitanciaManager {
           await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
           return true;
         }
-        // Default to showing news (option 2 or any other response)
-        conversa.militanciaStage = undefined;
-        await this.enviarNovidades(celular);
+        if (['2', 'novidades', 'acompanhar'].includes(textoNorm)) {
+          conversa.militanciaStage = undefined;
+          await this.enviarNovidades(celular);
+          return true;
+        }
+        // Unrecognized input — re-show the second-contact options
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_SECOND_CONTACT);
         return true;
       }
 
@@ -435,6 +443,38 @@ export class MilitanciaManager {
     } catch (err: any) {
       this.log(`❌ Erro ao obter painel: ${err?.message}`);
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PAINEL_ERRO);
+    }
+  }
+
+  /**
+   * Fetch and send BOTH latest content AND nearest event to non-registered users (option 2)
+   */
+  private async enviarConteudoEEvento(celular: string): Promise<void> {
+    try {
+      const [conteudo, evento] = await Promise.all([
+        obterUltimoConteudo(),
+        obterProximoEvento(),
+      ]);
+
+      // Fallback values from env vars
+      const conteudoTexto = config.militancia.novoConteudo;
+      const eventosTexto = config.militancia.proximosEventos;
+
+      const conteudoFinal = conteudo || (conteudoTexto ? { titulo: conteudoTexto } : null);
+      const eventoFinal = evento || (eventosTexto ? { nome: eventosTexto } : null);
+
+      if (conteudoFinal) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO(conteudoFinal));
+      }
+      if (eventoFinal) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(eventoFinal));
+      }
+      if (!conteudoFinal && !eventoFinal) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_NOVIDADES_FALLBACK);
+      }
+    } catch (err: any) {
+      this.log(`❌ Erro ao enviar conteúdo e evento: ${err?.message}`);
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_NOVIDADES_FALLBACK);
     }
   }
 
