@@ -67,10 +67,18 @@ export class MilitanciaManager {
    */
   async processar(celular: string, texto: string, conversa: Conversation): Promise<boolean> {
     const textoNorm = normalizarTexto(texto).trim();
+    const isOpcao1 = ['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm);
+    const isOpcao2 = ['2', 'novidades', 'acompanhar'].includes(textoNorm);
 
-    // Continue flows that still require stage tracking (missao, evento, lideranca, denuncia, painel)
+    // Continue flows that still require stage tracking (mission/event/leadership/complaint/panel).
+    // Registration stages are intentionally ignored: registration must be sheet-driven.
     if (conversa.militanciaStage) {
-      return await this.processarStage(celular, texto, textoNorm, conversa);
+      if (['cadastro_nome', 'cadastro_bairro', 'cadastro_cidade'].includes(conversa.militanciaStage)) {
+        conversa.militanciaStage = undefined;
+        conversa.militanciaData = {};
+      } else {
+        return await this.processarStage(celular, texto, textoNorm, conversa);
+      }
     }
 
     const militante = await buscarMilitante(celular);
@@ -84,22 +92,16 @@ export class MilitanciaManager {
     // Case 2: registration in progress — derive step from sheet data
     if (militante) {
       if (!militante.nome?.trim()) {
-        // Waiting for name — any text that is not a recognized option is the name
-        if (['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm)) {
-          conversa.militanciaStage = 'cadastro_nome';
+        // If user greets or repeats option 1, re-prompt for name.
+        if (isOpcao1 || MilitanciaManager.isSaudacao(textoNorm)) {
           await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
           return true;
         }
-        if (['2', 'novidades', 'acompanhar'].includes(textoNorm)) {
+        if (isOpcao2) {
           await this.enviarConteudoEEvento(celular);
           return true;
         }
         const okNome = await atualizarCamposMilitante(celular, { nome: texto.trim() });
-        if (okNome) {
-          conversa.militanciaData = conversa.militanciaData || {};
-          conversa.militanciaData.nome = texto.trim();
-          conversa.militanciaStage = 'cadastro_bairro';
-        }
         await this.client.sendMessage(
           celular,
           okNome ? MESSAGES_MILITANCIA.PEDIR_BAIRRO : MESSAGES_MILITANCIA.ERRO_CADASTRO
@@ -108,10 +110,15 @@ export class MilitanciaManager {
       }
 
       if (!militante.bairro?.trim()) {
-        const okBairro = await atualizarCamposMilitante(celular, { bairro: texto.trim() });
-        if (okBairro) {
-          conversa.militanciaStage = 'cadastro_cidade';
+        if (MilitanciaManager.isSaudacao(textoNorm) || isOpcao1) {
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_BAIRRO);
+          return true;
         }
+        if (isOpcao2) {
+          await this.enviarConteudoEEvento(celular);
+          return true;
+        }
+        const okBairro = await atualizarCamposMilitante(celular, { bairro: texto.trim() });
         await this.client.sendMessage(
           celular,
           okBairro ? MESSAGES_MILITANCIA.PEDIR_CIDADE : MESSAGES_MILITANCIA.ERRO_CADASTRO
@@ -120,6 +127,14 @@ export class MilitanciaManager {
       }
 
       // nome + bairro filled → collecting cidade
+      if (!militante.cidade?.trim() && (MilitanciaManager.isSaudacao(textoNorm) || isOpcao1)) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_CIDADE);
+        return true;
+      }
+      if (!militante.cidade?.trim() && isOpcao2) {
+        await this.enviarConteudoEEvento(celular);
+        return true;
+      }
       const ok = await atualizarCamposMilitante(celular, { cidade: texto.trim() });
       await this.client.sendMessage(
         celular,
@@ -131,18 +146,12 @@ export class MilitanciaManager {
     }
 
     // Case 3: phone not in sheet → welcome menu
-    const isOpcao1 = ['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm);
-    const isOpcao2 = ['2', 'novidades', 'acompanhar'].includes(textoNorm);
-
     if (isOpcao1) {
       // Register contact then immediately start collecting name
       const contatoOk = await registrarContato(celular).catch((err) => {
         this.log(`⚠️ Erro ao registrar contato: ${err?.message}`)
         return false;
       });
-      if (contatoOk) {
-        conversa.militanciaStage = 'cadastro_nome';
-      }
       await this.client.sendMessage(
         celular,
         contatoOk ? MESSAGES_MILITANCIA.WELCOME_NEW_USER : MESSAGES_MILITANCIA.ERRO_CADASTRO
@@ -185,87 +194,6 @@ export class MilitanciaManager {
     conversa.militanciaData = conversa.militanciaData || {};
 
     switch (conversa.militanciaStage) {
-      // ---- Registration: collecting nome ----
-      case 'cadastro_nome': {
-        // Allow user to restart or view news without breaking the flow
-        if (['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm)) {
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
-          return true;
-        }
-        if (['2', 'novidades', 'acompanhar'].includes(textoNorm)) {
-          await this.enviarConteudoEEvento(celular);
-          return true;
-        }
-        // Greetings reset the flow to the welcome menu
-        if (MilitanciaManager.isSaudacao(textoNorm)) {
-          conversa.militanciaStage = undefined;
-          conversa.militanciaData = {};
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
-          return true;
-        }
-        const nome = texto.trim();
-        const okNome = await atualizarCamposMilitante(celular, { nome });
-        if (okNome) {
-          conversa.militanciaData.nome = nome;
-          conversa.militanciaStage = 'cadastro_bairro';
-        }
-        await this.client.sendMessage(
-          celular,
-          okNome ? MESSAGES_MILITANCIA.PEDIR_BAIRRO : MESSAGES_MILITANCIA.ERRO_CADASTRO
-        );
-        return true;
-      }
-
-      // ---- Registration: collecting bairro ----
-      case 'cadastro_bairro': {
-        // Greetings reset the flow to the welcome menu
-        if (MilitanciaManager.isSaudacao(textoNorm)) {
-          conversa.militanciaStage = undefined;
-          conversa.militanciaData = {};
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
-          return true;
-        }
-        const bairro = texto.trim();
-        const okBairro = await atualizarCamposMilitante(celular, { bairro });
-        if (okBairro) {
-          conversa.militanciaStage = 'cadastro_cidade';
-        }
-        await this.client.sendMessage(
-          celular,
-          okBairro ? MESSAGES_MILITANCIA.PEDIR_CIDADE : MESSAGES_MILITANCIA.ERRO_CADASTRO
-        );
-        return true;
-      }
-
-      // ---- Registration: collecting cidade ----
-      case 'cadastro_cidade': {
-        // Greetings reset the flow to the welcome menu
-        if (MilitanciaManager.isSaudacao(textoNorm)) {
-          conversa.militanciaStage = undefined;
-          conversa.militanciaData = {};
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
-          return true;
-        }
-        const cidade = texto.trim();
-        const ok = await atualizarCamposMilitante(celular, { cidade });
-        if (ok) {
-          let nomeSalvo = conversa.militanciaData.nome;
-          if (!nomeSalvo) {
-            this.log('⚠️ Nome ausente em militanciaData no stage cadastro_cidade — buscando da planilha');
-            nomeSalvo = (await buscarMilitante(celular))?.nome || '';
-          }
-          conversa.militanciaStage = undefined;
-          conversa.militanciaData = {};
-          await this.client.sendMessage(
-            celular,
-            MESSAGES_MILITANCIA.CADASTRO_SUCESSO(nomeSalvo)
-          );
-        } else {
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.ERRO_CADASTRO);
-        }
-        return true;
-      }
-
       // ---- Mission response ----
       case 'missao_resposta': {
         const missaoDia = config.militancia.missaoDia;
