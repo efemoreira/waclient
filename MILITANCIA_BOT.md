@@ -34,9 +34,9 @@ ConversationManager.processarWebhook()
        ↓
 MilitanciaManager.processar()
        ↓
- [stage ativo?] → processarStage()
+ [stage ativo?] → processarStage() (somente missão/evento/liderança/denúncia)
  [usuário cadastrado] → processarMenuOuComando()
- [primeiro contato] → fluxo de boas-vindas
+ [cadastro] → estado derivado da planilha (nome/bairro/cidade)
        ↓
 Google Sheets (militanciaSheet.ts)
 ```
@@ -135,12 +135,12 @@ Classe principal que implementa o método `processar(celular, texto, conversa)`:
 
 | Método | Responsabilidade |
 |--------|-----------------|
-| `processar()` | Ponto de entrada — detecta stage ativo ou busca cadastro |
+| `processar()` | Ponto de entrada — detecta stage ativo e deriva estado de cadastro pela planilha |
 | `processarStage()` | Switch para cada etapa do fluxo multi-passo |
 | `processarMenuOuComando()` | Interpreta comandos de usuário cadastrado |
 | `enviarDashboard()` | Monta e envia o dashboard pessoal de progresso |
 | `enviarPainelBairro()` | Monta e envia painel coletivo do bairro + ranking |
-| `enviarNovidades()` | Envia conteúdo ou evento recente para não-cadastrados |
+| `enviarConteudoEEvento()` | Envia conteúdo e evento para não-cadastrados |
 | `detectarRespostaMissao()` | Detecta se a resposta significa "concluído" ou "pendente" |
 
 ### `militanciaMessages.ts`
@@ -171,7 +171,8 @@ Funções exportadas para operações na planilha:
 |--------|-----------|
 | `buscarMilitante(celular)` | Busca militante pelo telefone (retorna `MilitanteInfo` ou `null`) |
 | `isCadastroCompleto(militante)` | Verifica se nome, bairro e cidade estão preenchidos |
-| `registrarMilitante(...)` | Adiciona nova linha na aba Militantes |
+| `registrarContato(celular)` | Registra telefone na aba Militantes sem duplicar telefone já existente |
+| `atualizarCamposMilitante(celular, campos)` | Atualiza nome/bairro/cidade em linha existente do telefone |
 | `atualizarUltimaInteracao(celular)` | Atualiza coluna G com a data de hoje |
 | `atualizarPontosENivel(celular, pontos)` | Incrementa pontos na coluna F |
 | `registrarRespostaMissao(celular, missao, status)` | Registra missão e atualiza gamificação |
@@ -363,11 +364,6 @@ interface Conversation {
 
 ```typescript
 militanciaStage?:
-  | 'welcome_opcao'           // primeiro contato: cadastrar (1) ou acompanhar (2)
-  | 'segundo_contato_opcao'   // retorno sem cadastro: cadastrar (1) ou novidades (2)
-  | 'cadastro_nome'           // coleta nome completo
-  | 'cadastro_bairro'         // coleta bairro
-  | 'cadastro_cidade'         // coleta cidade → finaliza cadastro
   | 'missao_resposta'         // aguarda resposta da missão do dia
   | 'evento_confirmacao'      // aguarda confirmação de presença no evento
   | 'lideranca_area'          // aguarda escolha de área de liderança
@@ -388,45 +384,31 @@ militanciaStage?:
 Usuário envia qualquer mensagem
         ↓
 Bot → WELCOME_FIRST_CONTACT
-      "1️⃣ Fazer um cadastro rápido"
-      "2️⃣ Apenas acompanhar"
-        ↓ (stage: welcome_opcao)
-Usuário responde "1" / "cadastro"
+      "1️⃣ Fazer meu cadastro para participar ativamente"
+      "2️⃣ Ver último conteúdo e próximo evento"
         ↓
-Bot → WELCOME_NEW_USER ("me envie seu nome completo")
-        ↓ (stage: cadastro_nome)
-Usuário envia nome
-        ↓
-Bot → PEDIR_BAIRRO
-        ↓ (stage: cadastro_bairro)
-Usuário envia bairro
-        ↓
-Bot → PEDIR_CIDADE
-        ↓ (stage: cadastro_cidade)
-Usuário envia cidade
-        ↓
-registrarMilitante() → Google Sheets
-Bot → CADASTRO_SUCESSO + MENU_PERSONALIZADO
-        ↓ (stage: undefined)
+Se responder "1":
+  registrarContato() (idempotente por telefone)
+  Bot → WELCOME_NEW_USER (pedindo nome)
+
+Nas próximas mensagens, o bot busca o telefone na planilha e decide o próximo passo:
+  - nome vazio   → salva nome via atualizarCamposMilitante() e pede bairro
+  - bairro vazio → salva bairro e pede cidade
+  - cidade vazia → salva cidade e confirma cadastro
+
+Não há stage de cadastro; o progresso vem dos campos da planilha.
 ```
 
 Se o usuário responder "2" (ou qualquer outra coisa) no `welcome_opcao`, o bot busca o último conteúdo ou evento publicado e exibe como novidades.
 
 ---
 
-### Flow 2 — Segundo Contato (voltou, mas não se cadastrou)
+### Flow 2 — Retorno sem cadastro completo
 
 ```
 Usuário envia mensagem
-        ↓ (conversa.messages.length > 1, sem cadastro completo)
-Bot → WELCOME_SECOND_CONTACT
-      "1️⃣ Fazer cadastro"
-      "2️⃣ Ver novidades / conteúdos"
-        ↓ (stage: segundo_contato_opcao)
-Usuário responde "1"
-        ↓ → mesmo fluxo de cadastro acima
-Usuário responde "2"
-        ↓ → enviarNovidades()
+        ↓ (telefone já existe, mas sem nome/bairro/cidade completo)
+Bot continua o cadastro com base no campo faltante da planilha.
 ```
 
 ---

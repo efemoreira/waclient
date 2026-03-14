@@ -93,14 +93,20 @@ export class MilitanciaManager {
           await this.enviarConteudoEEvento(celular);
           return true;
         }
-        await atualizarCamposMilitante(celular, { nome: texto.trim() });
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_BAIRRO);
+        const okNome = await atualizarCamposMilitante(celular, { nome: texto.trim() });
+        await this.client.sendMessage(
+          celular,
+          okNome ? MESSAGES_MILITANCIA.PEDIR_BAIRRO : MESSAGES_MILITANCIA.ERRO_CADASTRO
+        );
         return true;
       }
 
       if (!militante.bairro?.trim()) {
-        await atualizarCamposMilitante(celular, { bairro: texto.trim() });
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_CIDADE);
+        const okBairro = await atualizarCamposMilitante(celular, { bairro: texto.trim() });
+        await this.client.sendMessage(
+          celular,
+          okBairro ? MESSAGES_MILITANCIA.PEDIR_CIDADE : MESSAGES_MILITANCIA.ERRO_CADASTRO
+        );
         return true;
       }
 
@@ -121,10 +127,14 @@ export class MilitanciaManager {
 
     if (isOpcao1) {
       // Register contact then immediately start collecting name
-      await registrarContato(celular).catch((err) =>
+      const contatoOk = await registrarContato(celular).catch((err) => {
         this.log(`⚠️ Erro ao registrar contato: ${err?.message}`)
+        return false;
+      });
+      await this.client.sendMessage(
+        celular,
+        contatoOk ? MESSAGES_MILITANCIA.WELCOME_NEW_USER : MESSAGES_MILITANCIA.ERRO_CADASTRO
       );
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
       return true;
     }
 

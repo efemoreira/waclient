@@ -122,6 +122,51 @@ export type MilitanteInfo = {
   militantesRecrutados: number;
 };
 
+function normalizarTelefone(celular: string): string {
+  return celular.replace(/\D/g, '');
+}
+
+function telefonesIguais(a: string, b: string): boolean {
+  const aa = normalizarTelefone(a);
+  const bb = normalizarTelefone(b);
+  if (!aa || !bb) return false;
+  if (aa === bb) return true;
+  // Accept both with and without country code 55
+  if (aa.startsWith('55') && aa.slice(2) === bb) return true;
+  if (bb.startsWith('55') && bb.slice(2) === aa) return true;
+  return false;
+}
+
+function parseMilitanteRow(row: string[]): MilitanteInfo {
+  return {
+    dataInscricao: String(row[0] || ''),
+    nome: String(row[1] || ''),
+    celular: String(row[2] || ''),
+    bairro: String(row[3] || ''),
+    nivel: Number(row[4] || 1),
+    pontos: Number(row[5] || 0),
+    dataUltimaInteracao: String(row[6] || ''),
+    cidade: String(row[7] || ''),
+    missoesConcluidasTotal: Number(row[8] || 0),
+    streakAtual: Number(row[9] || 0),
+    ultimaMissaoData: String(row[10] || ''),
+    titulos: String(row[11] || ''),
+    denunciasEnviadas: Number(row[12] || 0),
+    conteudosCompartilhados: Number(row[13] || 0),
+    militantesRecrutados: Number(row[14] || 0),
+  };
+}
+
+function scoreMilitante(row: string[]): number {
+  const militante = parseMilitanteRow(row);
+  let score = 0;
+  if (militante.nome.trim()) score += 10;
+  if (militante.bairro.trim()) score += 10;
+  if (militante.cidade.trim()) score += 10;
+  if (isCadastroCompleto(militante)) score += 100;
+  return score;
+}
+
 /**
  * Returns true when the militant has all minimum required fields filled:
  * nome, bairro and cidade.
@@ -133,31 +178,21 @@ export function isCadastroCompleto(militante: MilitanteInfo): boolean {
 export async function buscarMilitante(celular: string): Promise<MilitanteInfo | null> {
   try {
     const rows = await getRows(SHEET_MILITANTES, 'A:O');
-    const cel = celular.replace(/\D/g, '');
+    let bestRow: string[] | null = null;
+    let bestScore = -1;
+
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i] || [];
-      const rowCel = String(row[2] || '').replace(/\D/g, '');
-      if (rowCel === cel) {
-        return {
-          dataInscricao: String(row[0] || ''),
-          nome: String(row[1] || ''),
-          celular: String(row[2] || ''),
-          bairro: String(row[3] || ''),
-          nivel: Number(row[4] || 1),
-          pontos: Number(row[5] || 0),
-          dataUltimaInteracao: String(row[6] || ''),
-          cidade: String(row[7] || ''),
-          missoesConcluidasTotal: Number(row[8] || 0),
-          streakAtual: Number(row[9] || 0),
-          ultimaMissaoData: String(row[10] || ''),
-          titulos: String(row[11] || ''),
-          denunciasEnviadas: Number(row[12] || 0),
-          conteudosCompartilhados: Number(row[13] || 0),
-          militantesRecrutados: Number(row[14] || 0),
-        };
+      const rowCel = String(row[2] || '');
+      if (telefonesIguais(rowCel, celular)) {
+        const score = scoreMilitante(row);
+        if (score > bestScore) {
+          bestRow = row;
+          bestScore = score;
+        }
       }
     }
-    return null;
+    return bestRow ? parseMilitanteRow(bestRow) : null;
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao buscar militante: ${err?.message}`);
     return null;
@@ -203,10 +238,19 @@ export async function registrarMilitante(
  */
 export async function registrarContato(celular: string): Promise<boolean> {
   try {
+    const rows = await getRows(SHEET_MILITANTES, 'A:C');
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (telefonesIguais(String(row[2] || ''), celular)) {
+        logger.info('MilitanciaSheet', `ℹ️ Contato já existente: ${celular}`);
+        return true;
+      }
+    }
+
     await appendRow(SHEET_MILITANTES, [
       dataAtual(), // A: data_inscricao
       '',          // B: nome (empty – not yet registered)
-      celular.replace(/\D/g, ''), // C: telefone
+      normalizarTelefone(celular), // C: telefone
       '',          // D: bairro (empty)
       1,           // E: nivel
       0,           // F: pontos
@@ -246,29 +290,44 @@ export async function atualizarCamposMilitante(
   if (!auth) return false;
   try {
     const sheets = google.sheets({ version: 'v4', auth });
-    const cel = celular.replace(/\D/g, '');
     const rows = await getRows(SHEET_MILITANTES, 'A:O');
+    let rowIndexToUpdate = -1;
+    let fallbackIndex = -1;
 
     for (let i = 1; i < rows.length; i++) {
-      const rowCel = String((rows[i] || [])[2] || '').replace(/\D/g, '');
-      if (rowCel !== cel) continue;
+      const row = rows[i] || [];
+      const rowCel = String(row[2] || '');
+      if (!telefonesIguais(rowCel, celular)) continue;
 
-      const rowNum = i + 1; // sheet rows are 1-based (+1 for header)
-      const data: Array<{ range: string; values: string[][] }> = [];
-      if (campos.nome  !== undefined) data.push({ range: `${SHEET_MILITANTES}!B${rowNum}`, values: [[campos.nome]]  });
-      if (campos.bairro !== undefined) data.push({ range: `${SHEET_MILITANTES}!D${rowNum}`, values: [[campos.bairro]] });
-      if (campos.cidade !== undefined) data.push({ range: `${SHEET_MILITANTES}!H${rowNum}`, values: [[campos.cidade]] });
+      if (fallbackIndex === -1) fallbackIndex = i;
 
-      if (data.length > 0) {
-        await sheets.spreadsheets.values.batchUpdate({
-          spreadsheetId: SHEET_ID,
-          requestBody: { valueInputOption: 'USER_ENTERED', data },
-        });
+      // Prefer updating an incomplete row when duplicates exist.
+      const rowNome = String(row[1] || '').trim();
+      const rowBairro = String(row[3] || '').trim();
+      const rowCidade = String(row[7] || '').trim();
+      if (!rowNome || !rowBairro || !rowCidade) {
+        rowIndexToUpdate = i;
+        break;
       }
-      logger.info('MilitanciaSheet', `✅ Campos atualizados: ${celular}`);
-      return true;
     }
-    return false;
+
+    const chosen = rowIndexToUpdate !== -1 ? rowIndexToUpdate : fallbackIndex;
+    if (chosen === -1) return false;
+
+    const rowNum = chosen + 1; // sheet rows are 1-based (+1 for header)
+    const data: Array<{ range: string; values: string[][] }> = [];
+    if (campos.nome !== undefined) data.push({ range: `${SHEET_MILITANTES}!B${rowNum}`, values: [[campos.nome]] });
+    if (campos.bairro !== undefined) data.push({ range: `${SHEET_MILITANTES}!D${rowNum}`, values: [[campos.bairro]] });
+    if (campos.cidade !== undefined) data.push({ range: `${SHEET_MILITANTES}!H${rowNum}`, values: [[campos.cidade]] });
+
+    if (data.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: SHEET_ID,
+        requestBody: { valueInputOption: 'USER_ENTERED', data },
+      });
+    }
+    logger.info('MilitanciaSheet', `✅ Campos atualizados: ${celular}`);
+    return true;
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao atualizar campos do militante: ${err?.message}`);
     return false;
