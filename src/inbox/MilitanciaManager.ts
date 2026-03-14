@@ -21,6 +21,7 @@ import {
   isCadastroCompleto,
   registrarContato,
   atualizarCamposMilitante,
+  atualizarDataCadastro,
   atualizarUltimaInteracao,
   registrarRespostaMissao,
   registrarAcessoConteudo,
@@ -56,19 +57,17 @@ export class MilitanciaManager {
    * Returns true if the conversation state needs to be persisted.
    *
    * Registration state is derived entirely from the sheet:
-   *   - phone not in sheet              → welcome menu
+  *   - phone not in sheet              → save contact + welcome menu
    *   - phone in sheet, nome empty      → collecting name
    *   - nome filled, bairro empty       → collecting bairro
    *   - nome+bairro filled, cidade empty → collecting cidade
    *   - all filled                      → main menu
-   *
-   * `registrarContato` is called ONLY when the user explicitly picks option 1,
-   * so "phone in sheet with empty nome" is unambiguous: registration is in progress.
    */
   async processar(celular: string, texto: string, conversa: Conversation): Promise<boolean> {
     const textoNorm = normalizarTexto(texto).trim();
     const isOpcao1 = ['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm);
     const isOpcao2 = ['2', 'novidades', 'acompanhar'].includes(textoNorm);
+    conversa.militanciaData = conversa.militanciaData || {};
 
     // Continue flows that still require stage tracking (mission/event/leadership/complaint/panel).
     // Registration stages are intentionally ignored: registration must be sheet-driven.
@@ -91,6 +90,44 @@ export class MilitanciaManager {
 
     // Case 2: registration in progress — derive step from sheet data
     if (militante) {
+      const cadastroIniciado = conversa.militanciaData.cadastroIniciado === true;
+
+      // Step 2: ask for explicit decision before collecting registration fields
+      if (!cadastroIniciado) {
+        if (isOpcao2) {
+          await this.enviarConteudoEEvento(celular);
+          return true;
+        }
+        if (isOpcao1) {
+          conversa.militanciaData.cadastroIniciado = true;
+          if (!militante.nome?.trim()) {
+            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
+            return true;
+          }
+          if (!militante.bairro?.trim()) {
+            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_BAIRRO);
+            return true;
+          }
+          if (!militante.cidade?.trim()) {
+            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_CIDADE);
+            return true;
+          }
+          // Defensive fallback if profile became complete between reads
+          const atualizado = await buscarMilitante(celular);
+          if (atualizado && isCadastroCompleto(atualizado)) {
+            conversa.militanciaData = {};
+            await this.client.sendMessage(
+              celular,
+              MESSAGES_MILITANCIA.MENU_PERSONALIZADO(atualizado.nome)
+            );
+            return true;
+          }
+        }
+
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
+        return true;
+      }
+
       if (!militante.nome?.trim()) {
         // If user greets or repeats option 1, re-prompt for name.
         if (isOpcao1 || MilitanciaManager.isSaudacao(textoNorm)) {
@@ -136,6 +173,10 @@ export class MilitanciaManager {
         return true;
       }
       const ok = await atualizarCamposMilitante(celular, { cidade: texto.trim() });
+      if (ok) {
+        atualizarDataCadastro(celular).catch(() => {});
+        conversa.militanciaData = {};
+      }
       await this.client.sendMessage(
         celular,
         ok
@@ -145,26 +186,15 @@ export class MilitanciaManager {
       return true;
     }
 
-    // Case 3: phone not in sheet → welcome menu
-    if (isOpcao1) {
-      // Register contact then immediately start collecting name
-      const contatoOk = await registrarContato(celular).catch((err) => {
-        this.log(`⚠️ Erro ao registrar contato: ${err?.message}`)
-        return false;
-      });
-      await this.client.sendMessage(
-        celular,
-        contatoOk ? MESSAGES_MILITANCIA.WELCOME_NEW_USER : MESSAGES_MILITANCIA.ERRO_CADASTRO
-      );
-      return true;
-    }
-
-    if (isOpcao2) {
-      await this.enviarConteudoEEvento(celular);
-      return true;
-    }
-
-    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
+    // Case 3: phone not in sheet → save first contact and show welcome options
+    const contatoOk = await registrarContato(celular).catch((err) => {
+      this.log(`⚠️ Erro ao registrar contato no primeiro acesso: ${err?.message}`);
+      return false;
+    });
+    await this.client.sendMessage(
+      celular,
+      contatoOk ? MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT : MESSAGES_MILITANCIA.ERRO_CADASTRO
+    );
     return true;
   }
 

@@ -451,6 +451,38 @@ export async function atualizarUltimaInteracao(celular: string): Promise<void> {
   }
 }
 
+/**
+ * Persists registration completion date for a militant.
+ * Convention used here:
+ * - A (data_inscricao) stores first contact date.
+ * - P (data_cadastro) stores the date when nome+bairro+cidade were completed.
+ */
+export async function atualizarDataCadastro(celular: string): Promise<void> {
+  const auth = getAuth();
+  if (!auth) return;
+  try {
+    const rows = await getRows(SHEET_MILITANTES, 'A:P');
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const rowCel = String(row[2] || '');
+      if (!telefonesIguais(rowCel, celular)) continue;
+
+      const targetRow = i + 1;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SHEET_ID,
+        range: `${SHEET_MILITANTES}!P${targetRow}`,
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: [[dataAtual()]] },
+      });
+      return;
+    }
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao atualizar data de cadastro: ${err?.message}`);
+  }
+}
+
 // ---- Gamification: achievements, streak, mission-based level updates ----
 
 /**
