@@ -72,24 +72,19 @@ export class MilitanciaManager {
       return await this.processarMenuOuComando(celular, texto, textoNorm, conversa, militante);
     }
 
-    // Cases 2 & 3: phone not in sheet, OR in sheet but with incomplete profile.
-    // Both cases are treated identically: non-registered flow based on contact history.
-    // Distinguish first vs returning contact by checking conversation history.
-    const isFirstContact = conversa.messages.length <= 1;
-
-    if (isFirstContact) {
-      // First ever interaction — show options and wait for 1 or 2
+    // Case 2: phone not in sheet → always show first-contact welcome
+    if (!militante) {
       conversa.militanciaStage = 'welcome_opcao';
       conversa.militanciaData = {};
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
       return true;
-    } else {
-      // Returning user that has not yet completed registration
-      conversa.militanciaStage = 'segundo_contato_opcao';
-      conversa.militanciaData = {};
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_SECOND_CONTACT);
-      return true;
     }
+
+    // Case 3: phone in sheet but registration incomplete → second-contact flow
+    conversa.militanciaStage = 'segundo_contato_opcao';
+    conversa.militanciaData = {};
+    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_SECOND_CONTACT);
+    return true;
   }
 
   /**
