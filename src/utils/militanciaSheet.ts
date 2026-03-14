@@ -196,6 +196,38 @@ export async function registrarMilitante(
   }
 }
 
+/**
+ * Registers only the phone number on first contact.
+ * Leaves nome, bairro and cidade empty so isCadastroCompleto returns false.
+ * This ensures the contact is tracked even if the user never completes registration.
+ */
+export async function registrarContato(celular: string): Promise<boolean> {
+  try {
+    await appendRow(SHEET_MILITANTES, [
+      dataAtual(), // A: data_inscricao
+      '',          // B: nome (empty – not yet registered)
+      celular.replace(/\D/g, ''), // C: telefone
+      '',          // D: bairro (empty)
+      1,           // E: nivel
+      0,           // F: pontos
+      dataAtual(), // G: ultima_interacao
+      '',          // H: cidade (empty)
+      0,           // I: missoes_concluidas
+      0,           // J: streak_atual
+      '',          // K: ultima_missao_data
+      '',          // L: titulos
+      0,           // M: denuncias_enviadas
+      0,           // N: conteudos_compartilhados
+      0,           // O: militantes_recrutados
+    ]);
+    logger.info('MilitanciaSheet', `📞 Contato registrado: ${celular}`);
+    return true;
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao registrar contato: ${err?.message}`);
+    return false;
+  }
+}
+
 export function calcularNivel(missoesConcluidasTotal: number): number {
   if (missoesConcluidasTotal >= 150) return 6;
   if (missoesConcluidasTotal >= 80) return 5;
