@@ -36,14 +36,16 @@ function proximoNivel(
 
 export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
-  WELCOME_FIRST_CONTACT: `👋 Olá! Seja bem-vindo.
+  WELCOME_FIRST_CONTACT: `👋 Olá! Seja bem-vindo ao assistente do movimento.
 
-Este é o assistente do movimento.
+Para participar ativamente, vou fazer um cadastro rápido com você.`,
 
-Você pode:
+  // ---- Primeiro contato: boas-vindas + início do cadastro (mensagem única) ----
+  WELCOME_FIRST_CONTACT_CADASTRO: `👋 Olá! Seja bem-vindo ao assistente do movimento.
 
-1️⃣ Fazer um cadastro rápido para participar mais ativamente
-2️⃣ Apenas acompanhar o que está acontecendo`,
+Para participar ativamente, vou fazer um cadastro rápido com você.
+
+Por favor me envie seu *nome completo*:`,
 
   // ---- Segundo contato (retornou, ainda não cadastrado) ----
   WELCOME_SECOND_CONTACT: `👋 Que bom ver você novamente!

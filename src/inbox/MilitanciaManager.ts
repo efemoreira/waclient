@@ -78,10 +78,10 @@ export class MilitanciaManager {
     const isFirstContact = conversa.messages.length <= 1;
 
     if (isFirstContact) {
-      // First ever interaction — offer registration or follow
-      conversa.militanciaStage = 'welcome_opcao';
+      // First ever interaction — welcome and immediately start registration
+      conversa.militanciaStage = 'cadastro_nome';
       conversa.militanciaData = {};
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT_CADASTRO);
       return true;
     } else {
       // Returning user that has not yet completed registration
@@ -104,16 +104,12 @@ export class MilitanciaManager {
     conversa.militanciaData = conversa.militanciaData || {};
 
     switch (conversa.militanciaStage) {
-      // ---- First contact: user chooses register (1) or follow (2) ----
+      // ---- First contact: legacy stage — redirect to registration ----
       case 'welcome_opcao': {
-        if (['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm)) {
-          conversa.militanciaStage = 'cadastro_nome';
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
-          return true;
-        }
-        // Default to showing news (option 2 or any other response)
-        conversa.militanciaStage = undefined;
-        await this.enviarNovidades(celular);
+        // This stage is kept for backward compatibility with conversations already
+        // in storage. Always redirect to the registration flow.
+        conversa.militanciaStage = 'cadastro_nome';
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
         return true;
       }
 
@@ -124,9 +120,13 @@ export class MilitanciaManager {
           await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
           return true;
         }
-        // Default to showing news (option 2 or any other response)
-        conversa.militanciaStage = undefined;
-        await this.enviarNovidades(celular);
+        if (['2', 'novidades', 'acompanhar'].includes(textoNorm)) {
+          conversa.militanciaStage = undefined;
+          await this.enviarNovidades(celular);
+          return true;
+        }
+        // Unrecognized input — re-show the second-contact options
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_SECOND_CONTACT);
         return true;
       }
 
