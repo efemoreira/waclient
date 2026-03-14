@@ -58,8 +58,7 @@ function dataAtual(): string {
 async function appendRow(sheetName: string, values: (string | number)[]): Promise<void> {
   const auth = getAuth();
   if (!auth) {
-    logger.warn('MilitanciaSheet', 'Credenciais não configuradas');
-    return;
+    throw new Error('Credenciais não configuradas');
   }
   const sheets = google.sheets({ version: 'v4', auth });
   await sheets.spreadsheets.values.append({
