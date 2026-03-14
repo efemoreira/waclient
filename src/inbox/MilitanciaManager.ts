@@ -20,6 +20,7 @@ import {
   buscarMilitante,
   isCadastroCompleto,
   registrarMilitante,
+  registrarContato,
   atualizarUltimaInteracao,
   registrarRespostaMissao,
   registrarAcessoConteudo,
@@ -72,8 +73,11 @@ export class MilitanciaManager {
       return await this.processarMenuOuComando(celular, texto, textoNorm, conversa, militante);
     }
 
-    // Case 2: phone not in sheet → always show first-contact welcome
+    // Case 2: phone not in sheet → register the contact number and show first-contact welcome
     if (!militante) {
+      registrarContato(celular).catch((err) =>
+        this.log(`⚠️ Erro ao registrar contato no primeiro acesso: ${err?.message}`)
+      );
       conversa.militanciaStage = 'welcome_opcao';
       conversa.militanciaData = {};
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
