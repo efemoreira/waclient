@@ -99,12 +99,22 @@ async function authFetch(url, options = {}) {
     ...(options.headers || {}),
     'x-app-password': appPassword,
   };
+  
+  // Debug: verificar se header está sendo enviado
+  if (!appPassword || appPassword.trim() === '') {
+    console.warn('⚠️ [authFetch] appPassword está vazio!', { appPassword, isAuthed });
+    logger.add('⚠️ Aviso: Senha (appPassword) está vazia', 'warn', 'Auth');
+  } else {
+    console.debug('[authFetch] Enviando header x-app-password (length=' + appPassword.length + ')', { url });
+  }
+  
   return fetch(url, { ...options, headers });
 }
 
 async function tryAuth() {
   try {
     // Fazer teste sem proteção (isAuthed check)
+    console.log('[tryAuth] Testando autenticação com x-app-password length=' + (appPassword?.length || 0));
     const headers = {
       'x-app-password': appPassword,
     };
@@ -114,20 +124,26 @@ async function tryAuth() {
       authError.style.display = 'none';
       authModal.close();
       logger.add('✅ Autenticado com sucesso', 'info', 'Auth');
+      console.log('[tryAuth] ✅ Sucesso - isAuthed=true');
       return true;
+    } else {
+      console.warn('[tryAuth] ❌ GET /api/conversations retornou ' + res.status, res);
     }
   } catch (_err) {
-    // ignore
+    console.error('[tryAuth] Erro na requisição:', _err);
   }
   isAuthed = false;
   authError.style.display = 'block';
   logger.add('❌ Falha na autenticação - verifique a senha', 'error', 'Auth');
+  console.log('[tryAuth] ❌ Falha - isAuthed=false');
   return false;
 }
 
 authForm?.addEventListener('submit', async (e) => {
   e.preventDefault();
   appPassword = authPassword.value.trim();
+  console.log('[Auth] Senha digitada, length=' + appPassword.length);
+  logger.add(`[Auth] Tentando autenticar com senha de ${appPassword.length} caracteres`, 'info', 'Auth');
   sessionStorage.setItem('appPassword', appPassword);
   await tryAuth();
 });
@@ -413,10 +429,20 @@ messageForm.addEventListener('submit', async (e) => {
       const error = await res.json();
       let mensagem = error.erro || 'Desconhecido';
       
+      console.error('[POST /api/messages] ❌ Erro 401', {
+        status: res.status,
+        duration,
+        mensagem,
+        appPasswordLength: appPassword?.length,
+        isAuthed,
+        fullError: error,
+      });
+      
       logger.add(`❌ Erro (${res.status}) após ${duration}ms: ${mensagem}`, 'error');
       
       // Se for 401, mostrar modal de login novamente
       if (res.status === 401) {
+        console.warn('[POST /api/messages] 401 - Resetando autenticação');
         isAuthed = false;
         appPassword = '';
         sessionStorage.removeItem('appPassword');
