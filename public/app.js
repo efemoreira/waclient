@@ -101,11 +101,16 @@ async function authFetch(url, options = {}) {
   };
   
   // Debug: verificar se header está sendo enviado
+  const method = options.method || 'GET';
   if (!appPassword || appPassword.trim() === '') {
-    console.warn('⚠️ [authFetch] appPassword está vazio!', { appPassword, isAuthed });
-    logger.add('⚠️ Aviso: Senha (appPassword) está vazia', 'warn', 'Auth');
+    console.warn('⚠️ [authFetch] appPassword está vazio!', { method, url, appPassword, isAuthed });
+    logger.add(`⚠️ [authFetch ${method}] Senha vazia! url=${url}`, 'warn', 'Auth');
   } else {
-    console.debug('[authFetch] Enviando header x-app-password (length=' + appPassword.length + ')', { url });
+    console.debug(`[authFetch ${method}] ${url}`, { 
+      passwordLength: appPassword.length,
+      passwordStart: appPassword.substring(0, 3) + '***'
+    });
+    logger.add(`[authFetch ${method}] Enviando com senha (${appPassword.length} chars) para ${url}`, 'debug', 'Auth');
   }
   
   return fetch(url, { ...options, headers });
@@ -415,6 +420,15 @@ messageForm.addEventListener('submit', async (e) => {
   const payload = { to: state.selectedId, text };
   logger.add(`➡️ POST /api/messages payload: ${JSON.stringify(payload)}`);
   logger.add(`📤 Enviando para ${state.selectedId}: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+
+  // Debug: verificar estado ANTES de fazer POST
+  console.log('[POST submit] Estado ANTES de authFetch:', {
+    isAuthed,
+    appPasswordLength: appPassword?.length,
+    appPassword: appPassword?.substring(0, 3) + '***',
+    sessionStorageAppPassword: sessionStorage.getItem('appPassword')?.length,
+  });
+  logger.add(`[POST Debug] isAuthed=${isAuthed}, pwdLen=${appPassword?.length}`, 'debug', 'POST');
 
   try {
     const startTime = Date.now();
