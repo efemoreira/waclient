@@ -88,6 +88,13 @@ let appPassword = sessionStorage.getItem('appPassword') || '';
 let isAuthed = false;
 
 async function authFetch(url, options = {}) {
+  // Proteger: não fazer requisições sem autenticação
+  if (!isAuthed) {
+    const err = new Error('Não autenticado - abra o modal de autenticação');
+    err.name = 'AuthError';
+    throw err;
+  }
+  
   const headers = {
     ...(options.headers || {}),
     'x-app-password': appPassword,
@@ -97,11 +104,16 @@ async function authFetch(url, options = {}) {
 
 async function tryAuth() {
   try {
-    const res = await authFetch('/api/conversations');
+    // Fazer teste sem proteção (isAuthed check)
+    const headers = {
+      'x-app-password': appPassword,
+    };
+    const res = await fetch('/api/conversations', { headers });
     if (res.ok) {
       isAuthed = true;
       authError.style.display = 'none';
       authModal.close();
+      logger.add('✅ Autenticado com sucesso', 'info', 'Auth');
       return true;
     }
   } catch (_err) {
@@ -109,6 +121,7 @@ async function tryAuth() {
   }
   isAuthed = false;
   authError.style.display = 'block';
+  logger.add('❌ Falha na autenticação - verifique a senha', 'error', 'Auth');
   return false;
 }
 
@@ -204,6 +217,14 @@ newChatForm.addEventListener('submit', async (e) => {
 
     if (!res.ok) {
       const error = await res.json();
+      if (res.status === 401) {
+        isAuthed = false;
+        appPassword = '';
+        sessionStorage.removeItem('appPassword');
+        authModal.showModal();
+        alert('Sessão expirada - faça login novamente');
+        return;
+      }
       alert('Erro ao criar conversa: ' + (error.erro || 'Desconhecido'));
       return;
     }
@@ -215,6 +236,11 @@ newChatForm.addEventListener('submit', async (e) => {
     await fetchConversations();
     renderChatUI();
   } catch (err) {
+    if (err.name === 'AuthError') {
+      logger.add('❌ Não autenticado - faça login novamente', 'error', 'Auth');
+      authModal.showModal();
+      return;
+    }
     alert('Erro de conexão: ' + err.message);
   }
 });
@@ -237,6 +263,12 @@ async function fetchConversations() {
     const res = await authFetch('/api/conversations');
     if (!res.ok) {
       logger.add(`❌ Erro ao buscar conversas (${res.status})`, 'error');
+      if (res.status === 401) {
+        isAuthed = false;
+        appPassword = '';
+        sessionStorage.removeItem('appPassword');
+        authModal.showModal();
+      }
       console.error('Erro ao buscar conversas:', res.status, res.statusText);
       return;
     }
@@ -256,6 +288,11 @@ async function fetchConversations() {
       logger.add('ℹ️ Nenhuma conversa selecionada');
     }
   } catch (err) {
+    if (err.name === 'AuthError') {
+      logger.add('❌ Não autenticado - faça login novamente', 'error', 'Auth');
+      authModal.showModal();
+      return;
+    }
     logger.add('❌ Erro ao buscar conversas (exceção)', 'error');
     console.error('Erro ao buscar conversas:', err);
   }
@@ -267,6 +304,12 @@ async function fetchConversation(id) {
     const res = await authFetch(`/api/conversations?id=${id}`);
     if (!res.ok) {
       logger.add(`❌ Conversa não encontrada (${res.status})`, 'error');
+      if (res.status === 401) {
+        isAuthed = false;
+        appPassword = '';
+        sessionStorage.removeItem('appPassword');
+        authModal.showModal();
+      }
       console.error('Conversa não encontrada:', res.status);
       return;
     }
@@ -275,6 +318,11 @@ async function fetchConversation(id) {
     logger.add(`✅ Conversa carregada (${total} mensagens)`);
     renderConversation(conv);
   } catch (err) {
+    if (err.name === 'AuthError') {
+      logger.add('❌ Não autenticado - faça login novamente', 'error', 'Auth');
+      authModal.showModal();
+      return;
+    }
     logger.add('❌ Erro ao buscar conversa (exceção)', 'error');
     console.error('Erro ao buscar conversa:', err);
   }
@@ -367,6 +415,15 @@ messageForm.addEventListener('submit', async (e) => {
       
       logger.add(`❌ Erro (${res.status}) após ${duration}ms: ${mensagem}`, 'error');
       
+      // Se for 401, mostrar modal de login novamente
+      if (res.status === 401) {
+        isAuthed = false;
+        appPassword = '';
+        sessionStorage.removeItem('appPassword');
+        authModal.showModal();
+        mensagem = 'Sessão expirada ou senha incorreta. Digite a senha novamente.';
+      }
+      
       // Erro específico #133010
       if (error.codigoErro === 133010) {
         mensagem = `${mensagem}\n\n⚠️ Sua Business Account não está registrada para enviar mensagens.\n\nVeja ERROR_133010.md ou acesse /api/debug para mais informações.`;
@@ -381,7 +438,14 @@ messageForm.addEventListener('submit', async (e) => {
       await fetchConversations();
     }
   } catch (err) {
-    alert('Erro de conexão: ' + err.message);
+    if (err.name === 'AuthError') {
+      logger.add('❌ Não autenticado - faça login novamente', 'error', 'Auth');
+      authModal.showModal();
+      logger.add(`❌ Erro (401): Não autenticado`, 'error');
+      alert('Sessão expirada - faça login novamente');
+    } else {
+      alert('Erro de conexão: ' + err.message);
+    }
   } finally {
     messageInput.disabled = false;
     messageForm.querySelector('button').disabled = false;
@@ -396,5 +460,9 @@ searchInput.addEventListener('input', (e) => {
 // Polling desabilitado para reduzir carga; usar webhook + botão atualizar.
 tryAuth().then((ok) => {
   if (ok) fetchConversations();
+  else {
+    logger.add('⚠️ Autenticação necessária - abra o modal de login', 'warn', 'Init');
+    authModal.showModal();
+  }
 });
 
