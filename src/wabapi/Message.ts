@@ -107,7 +107,6 @@ export async function sendTextMessage(
     });
     throw error;
   }
-  });
 }
 
 /**
