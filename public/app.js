@@ -94,53 +94,30 @@ async function authFetch(url, options = {}) {
     err.name = 'AuthError';
     throw err;
   }
-  
   const headers = {
     ...(options.headers || {}),
     'x-app-password': appPassword,
   };
-  
-  // Debug: verificar se header está sendo enviado
-  const method = options.method || 'GET';
-  if (!appPassword || appPassword.trim() === '') {
-    console.warn('⚠️ [authFetch] appPassword está vazio!', { method, url, appPassword, isAuthed });
-    logger.add(`⚠️ [authFetch ${method}] Senha vazia! url=${url}`, 'warn', 'Auth');
-  } else {
-    console.debug(`[authFetch ${method}] ${url}`, { 
-      passwordLength: appPassword.length,
-      passwordStart: appPassword.substring(0, 3) + '***'
-    });
-    logger.add(`[authFetch ${method}] Enviando com senha (${appPassword.length} chars) para ${url}`, 'debug', 'Auth');
-  }
-  
-  return fetch(url, { ...options, headers });
+  return fetch(url, { ...options, headers, cache: 'no-store' });
 }
 
 async function tryAuth() {
   try {
-    // Fazer teste sem proteção (isAuthed check)
-    console.log('[tryAuth] Testando autenticação com x-app-password length=' + (appPassword?.length || 0));
-    const headers = {
-      'x-app-password': appPassword,
-    };
-    const res = await fetch('/api/conversations', { headers });
+    const headers = { 'x-app-password': appPassword };
+    const res = await fetch('/api/conversations', { headers, cache: 'no-store' });
     if (res.ok) {
       isAuthed = true;
       authError.style.display = 'none';
       authModal.close();
       logger.add('✅ Autenticado com sucesso', 'info', 'Auth');
-      console.log('[tryAuth] ✅ Sucesso - isAuthed=true');
       return true;
-    } else {
-      console.warn('[tryAuth] ❌ GET /api/conversations retornou ' + res.status, res);
     }
   } catch (_err) {
-    console.error('[tryAuth] Erro na requisição:', _err);
+    // ignore
   }
   isAuthed = false;
   authError.style.display = 'block';
   logger.add('❌ Falha na autenticação - verifique a senha', 'error', 'Auth');
-  console.log('[tryAuth] ❌ Falha - isAuthed=false');
   return false;
 }
 
