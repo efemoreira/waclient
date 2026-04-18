@@ -18,6 +18,9 @@ const TIMEOUT = 30000; // 30 seconds
  * Create headers for WhatsApp API requests
  */
 function getHeaders(token: string): Record<string, string> {
+  if (!token || token.trim() === '') {
+    console.error('[getHeaders] ❌ Token vazio! Não é possível enviar para WhatsApp API');
+  }
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
@@ -75,9 +78,35 @@ export async function sendTextMessage(
     messageFrame.context = { message_id: msgId };
   }
 
-  return axios.post(url, messageFrame, {
-    headers: getHeaders(token),
-    timeout: TIMEOUT,
+  console.log('[sendTextMessage] 📤 Enviando para WhatsApp API', {
+    url,
+    phoneNumber,
+    textLength: text.length,
+    tokenPresent: !!token,
+    tokenLength: token?.length,
+  });
+
+  try {
+    const response = await axios.post(url, messageFrame, {
+      headers: getHeaders(token),
+      timeout: TIMEOUT,
+    });
+    console.log('[sendTextMessage] ✅ Resposta da WhatsApp API', {
+      status: response.status,
+      messageId: response.data?.messages?.[0]?.id,
+    });
+    return response;
+  } catch (error: any) {
+    console.error('[sendTextMessage] ❌ Erro ao enviar para WhatsApp API', {
+      status: error?.response?.status,
+      statusText: error?.response?.statusText,
+      errorMessage: error?.message,
+      errorCode: error?.response?.data?.error?.code,
+      errorType: error?.response?.data?.error?.type,
+      fbtrace_id: error?.response?.data?.error?.fbtrace_id,
+    });
+    throw error;
+  }
   });
 }
 

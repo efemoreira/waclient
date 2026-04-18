@@ -140,6 +140,20 @@ export class ConversationManager {
     this.log(`🔧 Usando API v${apiVersion}.0`);
     const storageMode = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN ? 'Upstash Redis' : '/tmp local';
     this.log(`🗄️  Storage mode: ${storageMode}`);
+    
+    // Debug: verificar se token está configurado
+    console.log('[ConversationManager Constructor] 🔐 Configuração:', {
+      tokenPresent: !!config.whatsapp.token,
+      tokenLength: config.whatsapp.token?.length,
+      tokenStart: config.whatsapp.token?.substring(0, 10) + '***',
+      numberId: config.whatsapp.numberId,
+    });
+    
+    if (!config.whatsapp.token) {
+      console.error('[ConversationManager Constructor] ❌ WHATSAPP_ACCESS_TOKEN não configurado!');
+      this.log('❌ WHATSAPP_ACCESS_TOKEN não configurado!');
+    }
+    
     this.client = new WhatsApp({
       token: config.whatsapp.token,
       numberId: config.whatsapp.numberId,
@@ -551,6 +565,11 @@ export class ConversationManager {
       // Garantir que conversa existe (será criada se não existir)
       this.obterOuCriarConversa(paraNormalizado);
       
+      console.log('[enviarMensagem] 🔄 Chamando client.sendMessage', {
+        para: paraNormalizado,
+        textoLength: texto.length,
+      });
+      
       this.log(`🔄 Chamando client.sendMessage(${paraNormalizado}, texto)`);
       const resposta = await this.client.sendMessage(para, texto);
       
@@ -568,10 +587,30 @@ export class ConversationManager {
       const errorCode = erro?.response?.data?.error?.code || null;
       const errorType = erro?.response?.data?.error?.type || null;
       const status = erro?.response?.status || 'unknown';
+      const fbtrace = erro?.response?.data?.error?.fbtrace_id || null;
+      
+      console.error('[enviarMensagem] ❌ Erro ao enviar mensagem para WhatsApp', {
+        status,
+        errorMessage,
+        errorCode,
+        errorType,
+        fbtrace,
+      });
       
       this.log('❌ Erro capturado');
       this.log(`Mensagem: ${errorMessage}`);
       this.log(`Status HTTP: ${status}`);
+      
+      // Debug adicional para 401
+      if (status === 401) {
+        this.log('⚠️ ERRO 401 - Autenticação falhou!');
+        this.log('Possíveis causas:');
+        this.log('1. WHATSAPP_ACCESS_TOKEN não configurado');
+        this.log('2. Token expirado');
+        this.log('3. Token sem permissão');
+        if (fbtrace) this.log(`Trace ID: ${fbtrace}`);
+      }
+      
       if (errorCode) this.log(`Código: ${errorCode}`);
       if (errorType) this.log(`Tipo: ${errorType}`);
       
