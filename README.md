@@ -239,19 +239,19 @@ Cada linha representa um militante cadastrado. **Crie a planilha com esta ordem 
 | O | militantes_recrutados | Contador de recrutamentos |
 
 ### Aba `Missões`
-Registra cada resposta de missão. Colunas: `data`, `telefone`, `missao_do_dia`, `status`, `pontos_gerados`
+Cada linha = uma missão do dia. Colunas: `data`, `missao`, `concluiram` (array de telefones separados por vírgula)
 
 ### Aba `Conteúdos`
 Registra acessos a conteúdos. Colunas: `data`, `telefone`, `conteudo_acessado`, `tipo`
 
 ### Aba `Eventos`
-Registra confirmações de presença. Colunas: `data`, `telefone`, `evento`, `confirmacao`
+Cada linha = um evento. Colunas: `nome`, `data`, `local`, `confirmacoes` (array de telefones separados por vírgula dos que confirmaram presença)
 
 ### Aba `Liderança`
 Registra interesse em liderar. Colunas: `data`, `nome`, `telefone`, `bairro`, `area_interesse`, `disponibilidade`
 
 ### Aba `Denúncias`
-Registra denúncias enviadas. Colunas: `data`, `telefone`, `bairro`, `descricao`, `link_midia`, `status_analise`
+Registra denúncias enviadas. Colunas: `data`, `telefone`, `bairro`, `descricao` (sem coluna de mídia — o bot não processa imagens)
 
 > **Importante:** A primeira linha de cada aba deve ser o cabeçalho (nomes das colunas). O bot começa a ler a partir da linha 2.
 

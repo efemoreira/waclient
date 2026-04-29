@@ -650,12 +650,13 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
   }
 }
 
-// ---- Missões tab (columns: data, telefone, missao_do_dia, status, pontos_gerados) ----
+// ---- Missões tab (columns: data, missao, concluiram) ----
+// One row per daily mission. 'concluiram' stores a comma-separated list
+// of phone numbers of militants who confirmed completion.
 
 export async function registrarRespostaMissao(
   celular: string,
-  missaoDia: string,
-  status: 'concluído' | 'pendente'
+  missaoDia: string
 ): Promise<MissaoResultado> {
   const defaultResult: MissaoResultado = {
     levelUp: false,
@@ -665,37 +666,60 @@ export async function registrarRespostaMissao(
     streakAtual: 1,
     missoesConcluidasTotal: 0,
   };
-  const pontos = status === 'concluído' ? 10 : 0;
   try {
-    await appendRow(SHEET_MISSOES, [dataAtual(), celular.replace(/\D/g, ''), missaoDia, status, pontos]);
+    const auth = getAuth();
+    const cel = celular.replace(/\D/g, '');
 
-    if (status === 'concluído') {
-      // Update optional pontos (fire-and-forget; failures do not affect gamification flow)
-      atualizarPontosENivel(celular, pontos).catch((e) =>
-        logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (non-critical): ${e?.message}`)
-      );
-
-      const resultado = await atualizarMissoesStreakNivel(celular);
-      let novasConquistas: string[] = [];
-      if (resultado.militante) {
-        novasConquistas = verificarConquistas(resultado.militante);
-        if (novasConquistas.length > 0) {
-          await atualizarTitulos(celular, novasConquistas);
+    // Try to find an existing row for today's mission and append the phone to 'concluiram'
+    if (auth) {
+      const sheets = google.sheets({ version: 'v4', auth });
+      const rows = await getRows(SHEET_MISSOES, 'A:C');
+      const hoje = dataAtual();
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] || [];
+        const rowData = String(row[0] || '').trim();
+        const rowMissao = String(row[1] || '').trim();
+        if (rowData === hoje && rowMissao === missaoDia) {
+          const jaRegistrados = String(row[2] || '').trim();
+          const lista = jaRegistrados ? jaRegistrados.split(',').map((t) => t.trim()) : [];
+          if (!lista.includes(cel)) lista.push(cel);
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SHEET_ID,
+            range: `${SHEET_MISSOES}!C${i + 1}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[lista.join(',')]] },
+          });
+          logger.info('MilitanciaSheet', `✅ Missão: ${cel} adicionado a concluiram`);
+          break;
         }
       }
-
-      return {
-        levelUp: resultado.levelUp,
-        nivelAnterior: resultado.nivelAnterior,
-        novoNivel: resultado.novoNivel,
-        novasConquistas,
-        streakAtual: resultado.streakAtual,
-        missoesConcluidasTotal: resultado.missoesConcluidasTotal,
-      };
+    } else {
+      // No auth available — create a new row as fallback
+      await appendRow(SHEET_MISSOES, [dataAtual(), missaoDia, cel]);
     }
 
-    logger.info('MilitanciaSheet', `✅ Missão registrada: ${celular} - ${status}`);
-    return defaultResult;
+    // Update pontos (fire-and-forget)
+    atualizarPontosENivel(celular, 10).catch((e) =>
+      logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (non-critical): ${e?.message}`)
+    );
+
+    const resultado = await atualizarMissoesStreakNivel(celular);
+    let novasConquistas: string[] = [];
+    if (resultado.militante) {
+      novasConquistas = verificarConquistas(resultado.militante);
+      if (novasConquistas.length > 0) {
+        await atualizarTitulos(celular, novasConquistas);
+      }
+    }
+
+    return {
+      levelUp: resultado.levelUp,
+      nivelAnterior: resultado.nivelAnterior,
+      novoNivel: resultado.novoNivel,
+      novasConquistas,
+      streakAtual: resultado.streakAtual,
+      missoesConcluidasTotal: resultado.missoesConcluidasTotal,
+    };
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao registrar missão: ${err?.message}`);
     return defaultResult;
@@ -757,16 +781,44 @@ export async function registrarAcessoConteudo(
   }
 }
 
-// ---- Eventos tab (columns: data, telefone, evento, confirmacao) ----
+// ---- Eventos tab (columns: nome, data, local, confirmacoes) ----
+// One row per event. 'confirmacoes' stores a comma-separated list
+// of phone numbers of militants who confirmed attendance.
 
 export async function registrarConfirmacaoEvento(
   celular: string,
-  evento: string,
-  confirmacao: 'sim' | 'talvez'
+  nomeEvento: string
 ): Promise<void> {
   try {
-    await appendRow(SHEET_EVENTOS, [dataAtual(), celular.replace(/\D/g, ''), evento, confirmacao]);
-    logger.info('MilitanciaSheet', `✅ Evento confirmado: ${celular} - ${evento} (${confirmacao})`);
+    const auth = getAuth();
+    const cel = celular.replace(/\D/g, '');
+
+    if (auth) {
+      const sheets = google.sheets({ version: 'v4', auth });
+      const rows = await getRows(SHEET_EVENTOS, 'A:D');
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i] || [];
+        const rowNome = String(row[0] || '').trim();
+        if (rowNome === nomeEvento) {
+          const jaRegistrados = String(row[3] || '').trim();
+          const lista = jaRegistrados ? jaRegistrados.split(',').map((t) => t.trim()) : [];
+          if (!lista.includes(cel)) lista.push(cel);
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SHEET_ID,
+            range: `${SHEET_EVENTOS}!D${i + 1}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: { values: [[lista.join(',')]] },
+          });
+          logger.info('MilitanciaSheet', `✅ Evento confirmado: ${cel} → ${nomeEvento}`);
+          return;
+        }
+      }
+      // Event row not found — create it
+      await appendRow(SHEET_EVENTOS, [nomeEvento, '', '', cel]);
+      logger.info('MilitanciaSheet', `✅ Evento criado e confirmado: ${cel} → ${nomeEvento}`);
+    } else {
+      await appendRow(SHEET_EVENTOS, [nomeEvento, '', '', cel]);
+    }
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao registrar evento: ${err?.message}`);
   }
@@ -796,13 +848,13 @@ export async function registrarInteresseLideranca(
   }
 }
 
-// ---- Denúncias tab (columns: data, telefone, bairro, descricao, link_midia, status_analise) ----
+// ---- Denúncias tab (columns: data, telefone, bairro, descricao) ----
+// No media column — the bot does not process images.
 
 export async function registrarDenuncia(
   celular: string,
   bairro: string,
-  descricao: string,
-  linkMidia?: string
+  descricao: string
 ): Promise<void> {
   try {
     await appendRow(SHEET_DENUNCIAS, [
@@ -810,8 +862,6 @@ export async function registrarDenuncia(
       celular.replace(/\D/g, ''),
       bairro,
       descricao,
-      linkMidia || '',
-      'pendente',
     ]);
     // Increment denuncias_enviadas counter (col M) – fire-and-forget
     incrementarContador(celular, 'M').catch((e) =>
@@ -1039,37 +1089,22 @@ export type EventoInfo = {
 };
 
 /**
- * Returns the nearest upcoming event from the Eventos sheet.
- * The sheet has two kinds of rows:
- *   - Catalog rows (added by admins): column B (telefone) is empty.
- *     Format: [data_publicacao, '', nome_evento, local, data_evento]
- *   - Confirmation-log rows (appended when a user confirms attendance): column B is a phone number.
- *     Format: [data, telefone, evento, confirmacao]
- * Catalog rows take priority; the function searches from the bottom for the most recent one.
- * Falls back to last confirmation-log row if no catalog entries exist.
+ * Returns the next event from the Eventos sheet.
+ * Sheet structure: [nome, data, local, confirmacoes]
+ * Returns the last row with a non-empty nome (most recently added event).
  */
 export async function obterProximoEvento(): Promise<EventoInfo | null> {
   try {
-    const rows = await getRows(SHEET_EVENTOS, 'A:E');
-    // Search from the bottom for a catalog entry (empty telefone)
+    const rows = await getRows(SHEET_EVENTOS, 'A:C');
     for (let i = rows.length - 1; i >= 1; i--) {
       const row = rows[i] || [];
-      const telefone = String(row[1] || '').trim();
-      const nome = String(row[2] || '').trim();
-      if (!telefone && nome) {
+      const nome = String(row[0] || '').trim();
+      if (nome) {
         return {
           nome,
-          local: String(row[3] || '').trim() || undefined,
-          data: String(row[4] || '').trim() || undefined,
+          data: String(row[1] || '').trim() || undefined,
+          local: String(row[2] || '').trim() || undefined,
         };
-      }
-    }
-    // Fall back to last access-log row
-    for (let i = rows.length - 1; i >= 1; i--) {
-      const row = rows[i] || [];
-      const evento = String(row[2] || '').trim();
-      if (evento) {
-        return { nome: evento };
       }
     }
     return null;

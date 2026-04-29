@@ -259,11 +259,11 @@ export class MilitanciaManager {
       // ---- Mission response ----
       case 'missao_resposta': {
         const missaoDia = config.militancia.missaoDia;
-        const status = this.detectarRespostaMissao(textoNorm);
-        const resultado: MissaoResultado = await registrarRespostaMissao(celular, missaoDia, status);
+        const fezMissao = this.detectarRespostaMissao(textoNorm) === 'concluído';
         conversa.militanciaStage = undefined;
 
-        if (status === 'concluído') {
+        if (fezMissao) {
+          const resultado: MissaoResultado = await registrarRespostaMissao(celular, missaoDia);
           // Base confirmation with streak
           await this.client.sendMessage(
             celular,
@@ -292,11 +292,10 @@ export class MilitanciaManager {
       // ---- Event confirmation ----
       case 'evento_confirmacao': {
         const evento = config.militancia.proximosEventos;
-        let confirmacao: 'sim' | 'talvez' = 'talvez';
-        if (['1', 'sim', 'vou', 'vou sim', 'sim vou'].some((k) => textoNorm.includes(k))) {
-          confirmacao = 'sim';
-        }
-        await registrarConfirmacaoEvento(celular, evento, confirmacao);
+        await registrarConfirmacaoEvento(celular, evento);
+        const confirmacao: 'sim' | 'talvez' = ['1', 'sim', 'vou', 'vou sim', 'sim vou'].some((k) => textoNorm.includes(k))
+          ? 'sim'
+          : 'talvez';
         conversa.militanciaStage = undefined;
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTO_CONFIRMADO(confirmacao));
         return true;
@@ -350,18 +349,9 @@ export class MilitanciaManager {
       }
 
       case 'denuncia_descricao': {
-        conversa.militanciaData.descricao = texto.trim();
-        conversa.militanciaStage = 'denuncia_foto';
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_FOTO_DENUNCIA);
-        return true;
-      }
-
-      case 'denuncia_foto': {
         const bairro = conversa.militanciaData.bairro || '';
-        const descricao = conversa.militanciaData.descricao || '';
-        const semMidia = ['nao', 'não', 'n', 'no'].includes(textoNorm);
-        const linkMidia = semMidia ? undefined : texto.trim();
-        await registrarDenuncia(celular, bairro, descricao, linkMidia);
+        const descricao = texto.trim();
+        await registrarDenuncia(celular, bairro, descricao);
         conversa.militanciaStage = undefined;
         conversa.militanciaData = {};
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.DENUNCIA_REGISTRADA);

@@ -207,11 +207,11 @@ Armazena o perfil e os dados de gamificação de cada militante.
 | A | `data_inscricao` | string (dd/mm/aaaa) | Data de registro |
 | B | `nome` | string | Nome completo |
 | C | `telefone` | string (só dígitos) | Telefone normalizado |
-| D | `bairro` | string | Bairro do militante |
-| E | `nivel` | number (1–6) | Nível calculado por missões |
-| F | `pontos` | number | Pontuação acumulada |
-| G | `ultima_interacao` | string (dd/mm/aaaa) | Data da última mensagem |
-| H | `cidade` | string | Cidade |
+| D | `cidade` | string | Cidade |
+| E | `bairro` | string | Bairro do militante |
+| F | `nivel` | number (1–6) | Nível calculado por missões |
+| G | `pontos` | number | Pontuação acumulada |
+| H | `ultima_interacao` | string (dd/mm/aaaa) | Data da última mensagem |
 | I | `missoes_concluidas` | number | Total de missões concluídas |
 | J | `streak_atual` | number | Sequência de dias consecutivos |
 | K | `ultima_missao_data` | string (dd/mm/aaaa) | Data da última missão concluída |
@@ -224,14 +224,13 @@ Armazena o perfil e os dados de gamificação de cada militante.
 
 > Variável: `GOOGLE_MISSOES_SHEET_NAME` (padrão: `Missões`)
 
-Registra cada resposta de missão enviada pelos militantes.
+Cada linha representa uma missão do dia. A coluna `concluiram` armazena um array (lista separada por vírgulas) com os números de telefone dos militantes que responderam que já fizeram a missão.
 
 | Col | Variável | Descrição |
 |-----|----------|-----------|
-| A | `data` | Data de resposta |
-| B | `telefone` | Telefone do militante |
-| C | `missao` | Texto identificador da missão do dia |
-| D | `status` | `concluído` ou `pendente` |
+| A | `data` | Data da missão (dd/mm/aaaa) |
+| B | `missao` | Texto identificador da missão do dia |
+| C | `concluiram` | Telefones separados por vírgula dos que concluíram |
 
 ### Aba: Conteúdos
 
@@ -251,14 +250,14 @@ Biblioteca de conteúdos para compartilhamento, com rastreamento de acessos.
 
 > Variável: `GOOGLE_EVENTOS_SHEET_NAME` (padrão: `Eventos`)
 
-Próximos eventos com rastreamento de confirmações.
+Cada linha representa um evento. A coluna `confirmacoes` armazena um array (lista separada por vírgulas) com os números de telefone dos militantes que confirmaram presença.
 
 | Col | Variável | Descrição |
 |-----|----------|-----------|
 | A | `nome` | Nome do evento |
 | B | `data` | Data do evento |
 | C | `local` | Local do evento |
-| D | `confirmacoes` | Contador de confirmações |
+| D | `confirmacoes` | Telefones separados por vírgula dos confirmados |
 
 ### Aba: Liderança
 
@@ -273,7 +272,6 @@ Registra militantes interessados em assumir responsabilidades.
 | C | `telefone` | Telefone |
 | D | `bairro` | Bairro |
 | E | `area` | Área de interesse escolhida |
-| F | `disponibilidade` | Disponibilidade (legado) |
 
 **Opções de área disponíveis:**
 
@@ -288,7 +286,7 @@ Registra militantes interessados em assumir responsabilidades.
 
 > Variável: `GOOGLE_DENUNCIAS_SHEET_NAME` (padrão: `Denúncias`)
 
-Denúncias comunitárias enviadas pelos militantes.
+Denúncias comunitárias enviadas pelos militantes. Não há coluna de mídia — o bot não processa imagens.
 
 | Col | Variável | Descrição |
 |-----|----------|-----------|
@@ -296,7 +294,6 @@ Denúncias comunitárias enviadas pelos militantes.
 | B | `telefone` | Telefone do militante |
 | C | `bairro` | Bairro relatado |
 | D | `descricao` | Descrição do problema |
-| E | `midia` | Link de foto ou mídia (opcional) |
 
 ---
 
