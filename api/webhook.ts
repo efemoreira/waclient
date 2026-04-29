@@ -1,8 +1,32 @@
+/**
+ * api/webhook.ts — Endpoint do Webhook do WhatsApp
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Este arquivo é uma Vercel Serverless Function. Cada request HTTP vira uma
+ * chamada a essa função.
+ *
+ * GET  /api/webhook → Verificação do webhook pela Meta.
+ *   Quando você cadastra o webhook no painel do Meta for Developers, a Meta
+ *   faz um GET com os parâmetros hub.mode, hub.verify_token e hub.challenge.
+ *   Se o token bater com WHATSAPP_WEBHOOK_TOKEN, respondemos com hub.challenge
+ *   para confirmar que somos o dono da URL.
+ *
+ * POST /api/webhook → Receber mensagens e eventos.
+ *   Cada vez que alguém envia mensagem para o número do WhatsApp, a Meta faz
+ *   um POST aqui com o payload JSON. Repassamos para o ConversationManager.
+ *
+ * Segurança: a Meta não usa um header de autenticação no POST — a segurança é
+ * feita pelo verify_token no GET. Para maior segurança em produção, considere
+ * validar a assinatura HMAC (X-Hub-Signature-256).
+ */
+
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { ConversationManager } from '../src/inbox/ConversationManager';
 import type { WebhookPayload } from '../src/wabapi/types';
 import { logger } from '../src/utils/logger';
 
+// Uma única instância reutilizada enquanto o container Vercel está "quente".
+// Em ambientes serverless, o container pode ser criado a cada request (cold start)
+// ou reutilizado entre requests próximos (warm start).
 const conversationManager = new ConversationManager();
 
 // Último webhook recebido (para debug)

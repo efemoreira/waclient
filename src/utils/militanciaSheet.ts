@@ -90,11 +90,11 @@ async function getRows(sheetName: string, range: string): Promise<string[][]> {
 // A (0): data_inscricao
 // B (1): nome
 // C (2): telefone
-// D (3): bairro
-// E (4): nivel
-// F (5): pontos
-// G (6): ultima_interacao
-// H (7): cidade
+// D (3): cidade
+// E (4): bairro
+// F (5): nivel
+// G (6): pontos
+// H (7): ultima_interacao
 // I (8): missoes_concluidas      [gamification]
 // J (9): streak_atual            [gamification]
 // K (10): ultima_missao_data     [gamification]
@@ -141,11 +141,11 @@ function parseMilitanteRow(row: string[]): MilitanteInfo {
     dataInscricao: String(row[0] || ''),
     nome: String(row[1] || ''),
     celular: String(row[2] || ''),
-    bairro: String(row[3] || ''),
-    nivel: Number(row[4] || 1),
-    pontos: Number(row[5] || 0),
-    dataUltimaInteracao: String(row[6] || ''),
-    cidade: String(row[7] || ''),
+    cidade: String(row[3] || ''),
+    bairro: String(row[4] || ''),
+    nivel: Number(row[5] || 1),
+    pontos: Number(row[6] || 0),
+    dataUltimaInteracao: String(row[7] || ''),
     missoesConcluidasTotal: Number(row[8] || 0),
     streakAtual: Number(row[9] || 0),
     ultimaMissaoData: String(row[10] || ''),
@@ -209,11 +209,11 @@ export async function registrarMilitante(
       dataAtual(), // A: data_inscricao
       nome,        // B: nome
       celular.replace(/\D/g, ''), // C: telefone
-      bairro,      // D: bairro
-      1,           // E: nivel
-      0,           // F: pontos
-      dataAtual(), // G: ultima_interacao
-      cidade,      // H: cidade
+      cidade,      // D: cidade
+      bairro,      // E: bairro
+      1,           // F: nivel
+      0,           // G: pontos
+      dataAtual(), // H: ultima_interacao
       0,           // I: missoes_concluidas
       0,           // J: streak_atual
       '',          // K: ultima_missao_data
@@ -250,11 +250,11 @@ export async function registrarContato(celular: string): Promise<boolean> {
       dataAtual(), // A: data_inscricao
       '',          // B: nome (empty – not yet registered)
       normalizarTelefone(celular), // C: telefone
-      '',          // D: bairro (empty)
-      1,           // E: nivel
-      0,           // F: pontos
-      dataAtual(), // G: ultima_interacao
-      '',          // H: cidade (empty)
+      '',          // D: cidade (empty)
+      '',          // E: bairro (empty)
+      1,           // F: nivel
+      0,           // G: pontos
+      dataAtual(), // H: ultima_interacao
       0,           // I: missoes_concluidas
       0,           // J: streak_atual
       '',          // K: ultima_missao_data
@@ -278,8 +278,8 @@ export async function registrarContato(celular: string): Promise<boolean> {
  *
  * Column mapping:
  *  B (1) – nome
- *  D (3) – bairro
- *  H (7) – cidade
+ *  D (3) – cidade
+ *  E (4) – bairro
  */
 export async function atualizarCamposMilitante(
   celular: string,
@@ -302,8 +302,8 @@ export async function atualizarCamposMilitante(
 
       // Prefer updating an incomplete row when duplicates exist.
       const rowNome = String(row[1] || '').trim();
-      const rowBairro = String(row[3] || '').trim();
-      const rowCidade = String(row[7] || '').trim();
+      const rowBairro = String(row[4] || '').trim();
+      const rowCidade = String(row[3] || '').trim();
       if (!rowNome || !rowBairro || !rowCidade) {
         rowIndexToUpdate = i;
         break;
@@ -316,8 +316,8 @@ export async function atualizarCamposMilitante(
     const rowNum = chosen + 1; // sheet rows are 1-based (+1 for header)
     const data: Array<{ range: string; values: string[][] }> = [];
     if (campos.nome !== undefined) data.push({ range: `${SHEET_MILITANTES}!B${rowNum}`, values: [[campos.nome]] });
-    if (campos.bairro !== undefined) data.push({ range: `${SHEET_MILITANTES}!D${rowNum}`, values: [[campos.bairro]] });
-    if (campos.cidade !== undefined) data.push({ range: `${SHEET_MILITANTES}!H${rowNum}`, values: [[campos.cidade]] });
+    if (campos.cidade !== undefined) data.push({ range: `${SHEET_MILITANTES}!D${rowNum}`, values: [[campos.cidade]] });
+    if (campos.bairro !== undefined) data.push({ range: `${SHEET_MILITANTES}!E${rowNum}`, values: [[campos.bairro]] });
 
     if (data.length > 0) {
       await sheets.spreadsheets.values.batchUpdate({

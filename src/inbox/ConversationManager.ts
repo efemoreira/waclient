@@ -1,3 +1,24 @@
+/**
+ * ConversationManager
+ * ──────────────────────────────────────────────────────────────────────────────
+ * Ponto central do bot. É instanciado uma vez por função Vercel (ou reutilizado
+ * entre chamadas no mesmo container, se o Node.js reaproveitar a instância).
+ *
+ * Responsabilidades:
+ *  1. Receber o payload bruto do webhook e extrair mensagens/status
+ *  2. Manter um Map<telefone, Conversation> em memória (cache local)
+ *  3. Persistir/carregar esse Map no Upstash Redis (ou /tmp como fallback)
+ *  4. Delegar cada mensagem recebida ao MilitanciaManager (lógica do bot)
+ *  5. Registrar mensagens enviadas de volta ao Map e persistir
+ *
+ * Fluxo resumido de uma mensagem recebida:
+ *   processarWebhook(payload)
+ *     → adicionarMensagem(de, 'in', texto)
+ *     → MilitanciaManager.processar(celular, texto, conversa)
+ *       → WhatsApp.sendMessage(...)
+ *     → persistirConversas()
+ */
+
 import { WhatsApp } from '../wabapi';
 import type { WebhookPayload, WhatsAppMessage } from '../wabapi/types';
 import { config } from '../config';
@@ -64,7 +85,10 @@ export class ConversationManager {
     logger.info('Inbox', msg);
   }
 
-  // Garante que resets globais foram aplicados antes de operar
+  // Garante que resets globais foram aplicados antes de operar.
+  // Um "reset" é disparado pela interface web para limpar todas as conversas.
+  // Como cada instância Vercel tem seu próprio Map em memória, precisamos de
+  // um mecanismo compartilhado (o campo resetAt no storage) para sincronizá-las.
   private async garantirResetAtualizado(): Promise<void> {
     const meta = await lerMeta();
     if (meta?.resetAt && meta.resetAt > this.resetAt) {
@@ -74,7 +98,14 @@ export class ConversationManager {
     }
   }
 
-  // Mescla conversas (evita sobrescrever mensagens entre instâncias)
+  // Mescla duas versões do Map de conversas evitando perda de mensagens.
+  //
+  // Por quê isso é necessário?
+  // A Vercel pode ter múltiplas instâncias do bot rodando ao mesmo tempo, cada
+  // uma com seu próprio Map em memória. Quando precisamos salvar no Redis, não
+  // podemos simplesmente sobrescrever — precisamos unir as mensagens de ambas
+  // as instâncias. Essa função faz isso usando o ID da mensagem como chave de
+  // deduplicação.
   private mergeConversas(
     base: Record<string, Conversation>,
     updates: Record<string, Conversation>
@@ -374,7 +405,27 @@ export class ConversationManager {
   }
 
   /**
-   * Processar webhook do WhatsApp
+   * Processa o payload JSON bruto recebido do webhook do WhatsApp.
+   *
+   * Estrutura do payload do WhatsApp:
+   * {
+   *   entry: [{
+   *     id: "business_account_id",
+   *     changes: [{
+   *       field: "messages",
+   *       value: {
+   *         metadata: { phone_number_id, display_phone_number },
+   *         contacts: [{ wa_id, profile: { name } }],
+   *         messages: [{ from, id, text, type, timestamp }],  ← mensagens recebidas
+   *         statuses: [{ id, status, recipient_id, timestamp }] ← confirmações de entrega
+   *       }
+   *     }]
+   *   }]
+   * }
+   *
+   * O campo `contacts` mapeamos para obter o nome do remetente.
+   * O campo `messages` contém as mensagens recebidas — cada uma é processada pelo MilitanciaManager.
+   * O campo `statuses` são atualizações de entrega/leitura das mensagens que enviamos.
    */
   async processarWebhook(payload: WebhookPayload): Promise<void> {
     this.log('🔍 PROCESSANDO WEBHOOK');
@@ -412,7 +463,9 @@ export class ConversationManager {
           }
         }
 
-        // Mapear contatos por wa_id
+        // Mapear contatos por wa_id para obter o nome de perfil do remetente.
+        // O payload pode conter múltiplos contatos se várias pessoas enviaram mensagens
+        // no mesmo batch de webhook.
         const contacts = Array.isArray(valor.contacts) ? valor.contacts : [];
         const contatoPorId = new Map<string, string>();
         for (const c of contacts) {
@@ -427,7 +480,10 @@ export class ConversationManager {
           await this.processarHistory(valor.history);
         }
 
-        // Mensagens recebidas
+        // Mensagens recebidas dos usuários.
+        // Cada mensagem é registrada no histórico e depois entregue ao MilitanciaManager,
+        // exceto se a conversa estiver em modo humano (isHuman = true), caso em que
+        // o operador está respondendo manualmente pelo painel.
         if (Array.isArray(valor.messages) && valor.messages.length > 0) {
           this.log(`📨 Processando ${valor.messages.length} mensagem(ns)...`);
           for (const msg of valor.messages) {
@@ -458,11 +514,15 @@ export class ConversationManager {
             // Obter conversa
             const conversa = this.obterOuCriarConversa(de);
 
-            // Skip if a human agent has taken over
+            // Se a conversa está em modo humano, o operador está respondendo
+            // manualmente pelo painel web. O bot fica em silêncio.
             if (conversa.isHuman) {
               continue;
             }
 
+            // Entrega a mensagem ao MilitanciaManager.
+            // O método processar() retorna true se o estado da conversa mudou
+            // (ex: stage foi avançado), indicando que precisa ser persistido.
             // Delegate all message handling to MilitanciaManager
             try {
               const precisaPersistir = await this.militanciaManager.processar(de, texto, conversa);

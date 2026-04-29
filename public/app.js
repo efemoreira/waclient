@@ -1,4 +1,24 @@
-// Sistema de Logging
+// ─────────────────────────────────────────────────────────────────────────────
+// public/app.js — Lógica do painel de conversas
+// ─────────────────────────────────────────────────────────────────────────────
+// Este arquivo roda no navegador (não no servidor).
+// Responsável pela aba "Conversas" da interface web.
+//
+// Funcionalidades:
+//   - Login com senha (APP_PASSWORD) usando um modal
+//   - Listar conversas e atualizar automaticamente (polling a cada 5s)
+//   - Selecionar conversa e exibir mensagens
+//   - Enviar mensagem manual via POST /api/messages
+//   - Criar nova conversa digitando um telefone
+//   - Alternar modo bot/humano por conversa (botão no cabeçalho do chat)
+//   - Buscar conversas pelo nome/telefone
+//
+// Comunicação com o backend:
+//   Todas as requisições passam por authFetch(), que adiciona automaticamente
+//   o header x-app-password com a senha salva na sessionStorage.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Sistema de Logging — exibe logs na aba "Logs" da interface
 class LogManager {
   constructor() {
     this.logs = [];
@@ -57,6 +77,10 @@ function escapeHtml(text) {
 const logger = new LogManager();
 logger.add('Logs inicializados', 'info', 'UI');
 
+// Estado global da aplicação.
+// conversations: lista de todas as conversas carregadas da API
+// selectedId: telefone da conversa atualmente aberta
+// filter: texto digitado no campo de busca
 const state = {
   conversations: [],
   selectedId: null,
@@ -84,11 +108,14 @@ const authForm = document.getElementById('authForm');
 const authPassword = document.getElementById('authPassword');
 const authError = document.getElementById('authError');
 
+// Senha salva na sessionStorage — persiste enquanto a aba está aberta.
+// Se APP_PASSWORD não estiver definido no servidor, qualquer valor (inclusive vazio) passa.
 let appPassword = sessionStorage.getItem('appPassword') || '';
 let isAuthed = false;
 
+// Wrapper de fetch que injeta automaticamente o header de autenticação.
+// Use sempre esta função ao invés de fetch() direto para os endpoints da API.
 async function authFetch(url, options = {}) {
-  // Proteger: não fazer requisições sem autenticação
   if (!isAuthed) {
     const err = new Error('Não autenticado - abra o modal de autenticação');
     err.name = 'AuthError';
@@ -255,6 +282,9 @@ function formatTime(ts) {
   return d.toLocaleString('pt-BR');
 }
 
+// ─── Polling de conversas ────────────────────────────────────────────────────
+// Carrega a lista de conversas da API e atualiza o estado local.
+// Chamado na inicialização e a cada 5 segundos pelo setInterval() no final do arquivo.
 async function fetchConversations() {
   try {
     logger.add('➡️ GET /api/conversations');
@@ -296,6 +326,7 @@ async function fetchConversations() {
   }
 }
 
+// Carrega uma conversa específica pelo ID (telefone) e renderiza as mensagens.
 async function fetchConversation(id) {
   try {
     logger.add(`➡️ GET /api/conversations?id=${id}`);
@@ -326,6 +357,8 @@ async function fetchConversation(id) {
   }
 }
 
+// Renderiza a lista de conversas no painel esquerdo.
+// Aplica o filtro de busca (state.filter) e destaca a conversa selecionada.
 function renderConversationList() {
   if (!Array.isArray(state.conversations)) {
     console.warn('state.conversations não é um array:', state.conversations);
@@ -474,7 +507,10 @@ searchInput.addEventListener('input', (e) => {
   renderConversationList();
 });
 
-// Auto-polling: atualiza lista a cada 8s e conversa ativa a cada 5s
+// ─── Polling automático ──────────────────────────────────────────────────────
+// Mantém a tela atualizada sem precisar recarregar a página.
+//   pollingListInterval: atualiza a lista de conversas a cada 8 segundos
+//   pollingConvInterval: atualiza as mensagens da conversa aberta a cada 5 segundos
 let pollingListInterval = null;
 let pollingConvInterval = null;
 
@@ -505,6 +541,10 @@ function startPolling() {
   }, 5000);
 }
 
+// ─── Inicialização ───────────────────────────────────────────────────────────
+// Tenta autenticar com a senha salva na sessionStorage.
+// Se conseguir, carrega conversas e inicia o polling.
+// Se não conseguir (senha errada ou sem senha), abre o modal de login.
 tryAuth().then((ok) => {
   if (ok) {
     fetchConversations();

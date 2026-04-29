@@ -1,3 +1,22 @@
+/**
+ * api/messages.ts — Endpoint para envio manual de mensagens
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Usado pelo painel web para que operadores humanos enviem mensagens manualmente.
+ *
+ * POST /api/messages
+ *   Body: { to: "5511999999999", text: "Olá!" }
+ *   Header: x-app-password (se APP_PASSWORD estiver configurado)
+ *
+ * Autenticação:
+ *   Se APP_PASSWORD estiver definido no .env, o header x-app-password precisa
+ *   ter o mesmo valor. Isso protege o endpoint de uso não autorizado.
+ *
+ * Erros comuns:
+ *   401 → Senha incorreta no header x-app-password
+ *   401 (da Meta) → WHATSAPP_ACCESS_TOKEN expirado ou inválido
+ *   400 → Body sem os campos `to` ou `text`
+ */
+
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { ConversationManager } from '../src/inbox/ConversationManager';
 import { config, validateConfig } from '../src/config';

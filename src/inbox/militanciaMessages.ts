@@ -36,27 +36,22 @@ function proximoNivel(
 
 export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
-  WELCOME_FIRST_CONTACT: `👋 Olá! Seja bem-vindo ao assistente do movimento.
+  WELCOME_FIRST_CONTACT: `👋 Olá! Que bom ter você por aqui.
 
-Escolha uma opção:
+Somos um movimento político comprometido com melhorias reais para nossa cidade. Aqui você acompanha novidades, participa de missões e ajuda a mobilizar mais pessoas.
 
-1️⃣ Fazer meu cadastro para participar ativamente
-2️⃣ Ver último conteúdo e próximo evento`,
+O que você prefere?
+
+1️⃣ Fazer meu cadastro e participar
+2️⃣ Ver o último conteúdo e o próximo evento`,
 
   // ---- Segundo contato (retornou, ainda não cadastrado) ----
   WELCOME_SECOND_CONTACT: `👋 Que bom ver você novamente!
 
-Percebi que você ainda não fez seu cadastro na base da militância.
+Seu cadastro ainda não está completo — leva menos de 1 minuto para finalizar e garante seu lugar na base da militância.
 
-Se quiser participar mais ativamente, recomendo fazer o cadastro.
-
-Se tiver alguma dúvida, pode falar diretamente com:
-
-Felipe
-📞 85 99722-3863
-
-1️⃣ Fazer cadastro
-2️⃣ Ver novidades / conteúdos`,
+1️⃣ Concluir meu cadastro
+2️⃣ Ver novidades e próximo evento`,
 
   // ---- Mostrar conteúdo ou evento para não-cadastrados ----
   MOSTRAR_CONTEUDO: (conteudo: ConteudoInfo) => {
@@ -73,58 +68,60 @@ Felipe
     return msg;
   },
 
-  MOSTRAR_NOVIDADES_FALLBACK: `📢 Fique de olho nas nossas redes para as últimas novidades!
+  MOSTRAR_NOVIDADES_FALLBACK: `📢 Não há novidades cadastradas no momento.
 
-Quando quiser se cadastrar e participar mais ativamente, é só mandar uma mensagem! 💪`,
+Assim que houver conteúdo novo ou eventos confirmados, você será um dos primeiros a saber!
+
+Se quiser participar mais ativamente, responda *1* para fazer seu cadastro. 💪`,
 
   // Cadastro de novo militante
-  WELCOME_NEW_USER: `👋 Bem-vindo à *Central da Militância*!
+  WELCOME_NEW_USER: `✍️ Ótimo! Vamos ao cadastro.
 
-Para começar, por favor me envie seu *nome completo*.`,
+Qual é o seu *nome completo*?`,
 
-  PEDIR_BAIRRO: `👍 Ótimo!
+  PEDIR_BAIRRO: `👍 Perfeito, *{nome}*!
 
-Agora me diga qual é o seu *bairro*.`,
+Em qual *bairro* você mora?`,
 
-  PEDIR_CIDADE: `📍 Perfeito!
+  PEDIR_CIDADE: `📍 Quase lá!
 
 E qual é a sua *cidade*?`,
 
-  CADASTRO_SUCESSO: (nome: string) => `🎉 *Cadastro realizado com sucesso!*
+  CADASTRO_SUCESSO: (nome: string) => `🎉 *Cadastro concluído!*
 
-Bem-vindo(a), *${nome}*! Você agora faz parte da nossa militância! 💪
+Bem-vindo, *${nome}*! Você já faz parte da nossa militância. 💪
 
 ${MESSAGES_MILITANCIA.MENU_PERSONALIZADO(nome)}`,
 
-  ERRO_CADASTRO: `❌ Ocorreu um erro ao realizar seu cadastro.
-
-Por favor, tente novamente respondendo com seu *nome completo*.`,
+  ERRO_CADASTRO: `⚠️ Não consegui salvar essa informação. Por favor, tente enviar novamente.`,
 
   // Menu principal (personalizado para usuário cadastrado)
   MENU_PERSONALIZADO: (nome: string) => `👋 Olá, *${nome}*!
 
-Bem-vindo à Central da Militância.
+O que você quer fazer hoje?
 
-Escolha uma opção:
+1️⃣ Missão do dia
+2️⃣ Próximos eventos
+3️⃣ Novo conteúdo
+4️⃣ Fazer uma denúncia
+5️⃣ Quero liderar
+6️⃣ Meu painel
+7️⃣ Painel do bairro
 
-1️⃣ Missão
-2️⃣ Eventos
-3️⃣ Conteúdos
-4️⃣ Enviar denúncia
-5️⃣ Quero assumir mais responsabilidade
-6️⃣ Dashboard`,
+_Digite *perfil* para ver seus pontos e nível._`,
 
   // Menu principal (sem nome, para compatibilidade e casos de uso genérico)
   MENU: `👋 *Central da Militância*
 
-Escolha uma opção:
+O que você quer fazer hoje?
 
-1️⃣ Missão
-2️⃣ Eventos
-3️⃣ Conteúdos
-4️⃣ Enviar denúncia
-5️⃣ Quero assumir mais responsabilidade
-6️⃣ Dashboard`,
+1️⃣ Missão do dia
+2️⃣ Próximos eventos
+3️⃣ Novo conteúdo
+4️⃣ Fazer uma denúncia
+5️⃣ Quero liderar
+6️⃣ Meu painel
+7️⃣ Painel do bairro`,
 
   // 1 - Missão do dia
   MISSAO: (missaoTexto: string) => `🚀 *MISSÃO DE HOJE*
@@ -132,10 +129,11 @@ Escolha uma opção:
 ${missaoTexto}
 
 ---
-Depois responda:
+Já concluiu?
 
-✅ Já fiz
-⏳ Vou fazer agora`,
+✅ *Já fiz* — para registrar como concluída
+⏳ *Ainda não* — para registrar e voltar depois`,
+
 
   MISSAO_CONCLUIDA: (streakAtual: number) => {
     let msg = `🏆 *Parabéns!* Missão registrada com sucesso!\n\nVocê ganhou *10 pontos* por concluir a missão de hoje! 🎯`;
@@ -163,9 +161,9 @@ Continue assim!`,
 
 Você completou ${missoesTotal} missões! Continue mobilizado! 💪`,
 
-  MISSAO_PENDENTE: `⏳ Missão registrada! Assim que concluir, envie *✅ Já fiz*.
+  MISSAO_PENDENTE: `⏳ Anotado! Missão registrada como pendente.
 
-Continue mobilizado! 💪
+Quando concluir, acesse a opção *1 – Missão do dia* para marcar como feita e ganhar seus pontos. 🎯
 
 Digite *menu* para ver outras opções.`,
 
@@ -177,14 +175,13 @@ ${eventosTexto}
 ---
 Você vai participar?
 
-1 - ✅ Sim, vou!
-2 - 🤔 Talvez`,
+*1* – Sim, estarei lá! ✅
+*2* – Talvez, vou tentar 🤔`,
 
-  EVENTO_CONFIRMADO: (confirmacao: string) => `✅ Presença *${confirmacao}* registrada!
-
-Obrigado por confirmar! Fique de olho nas novidades.
-
-Digite *menu* para ver outras opções.`,
+  EVENTO_CONFIRMADO: (confirmacao: 'sim' | 'talvez') =>
+    confirmacao === 'sim'
+      ? `✅ Presença confirmada! Te vemos lá. 🎉\n\nDigite *menu* para ver outras opções.`
+      : `👍 Entendido! Registramos que você talvez apareça.\n\nFique atento — avisamos se houver novidades sobre o evento.\n\nDigite *menu* para ver outras opções.`,
 
   // 3 - Conteúdo
   CONTEUDO: (conteudoTexto: string) => `📢 *Novo Conteúdo*
@@ -199,36 +196,31 @@ Digite *menu* para ver outras opções.`,
   // 4 - Denúncia
   DENUNCIA_INICIO: `📢 *Enviar Denúncia*
 
-Vamos registrar sua denúncia.
+Vamos registrar o problema. Quanto mais detalhes, melhor!
 
-Qual é o seu *bairro*?`,
+Em qual *bairro* o problema está ocorrendo?`,
 
-  PEDIR_DESCRICAO_DENUNCIA: `📝 Descreva o *problema* que você quer reportar:`,
+  PEDIR_DESCRICAO_DENUNCIA: `📝 Descreva o problema com detalhes:\n\n_O que está acontecendo? Onde exatamente? Há quanto tempo?_`,
 
-  PEDIR_FOTO_DENUNCIA: `📷 Você tem alguma *foto ou link de mídia* para enviar?
+  PEDIR_FOTO_DENUNCIA: `📷 Tem alguma foto ou link (imagem, vídeo, notícia) que ilustre o problema?\n\nSe sim, envie agora. Se não, responda *não*.`,
 
-Se sim, envie agora.
-Se não, responda *não*.`,
+  DENUNCIA_REGISTRADA: `✅ *Denúncia recebida!*
 
-  DENUNCIA_REGISTRADA: `✅ *Denúncia registrada com sucesso!*
+Sua mensagem foi registrada e será analisada pela equipe.
 
-Sua denúncia foi recebida e será analisada pela equipe.
-
-Obrigado por contribuir com a melhoria da sua comunidade! 🌟
+Obrigado por ajudar a melhorar sua comunidade. Cada denúncia faz diferença! 🌟
 
 Digite *menu* para ver outras opções.`,
 
-  // 5 - Quero assumir mais responsabilidade
-  LIDERANCA_AGRADECIMENTO: `🙏 Obrigado por ajudar!
+  // 5 - Quero liderar
+  LIDERANCA_AGRADECIMENTO: `🙌 Que ótimo! Pessoas engajadas são o coração do movimento.
 
-Curtir, comentar e compartilhar conteúdos já faz muita diferença para o movimento.`,
+Escolha como você quer contribuir:`,
 
-  LIDERANCA_OPCOES: `Como você gostaria de ajudar mais?
-
-1️⃣ Fazer uma doação
+  LIDERANCA_OPCOES: `1️⃣ Fazer uma doação financeira
 2️⃣ Organizar reuniões no meu bairro
-3️⃣ Ajudar com minha experiência profissional
-4️⃣ Participar de pesquisas e estratégias`,
+3️⃣ Oferecer minha experiência profissional
+4️⃣ Participar de pesquisas e planejamento estratégico`,
 
   // Keep for backward compatibility (existing code that imports LIDERANCA_MENU will still compile)
   LIDERANCA_MENU: `🙏 Obrigado por ajudar!
@@ -239,11 +231,11 @@ Curtir, comentar e compartilhar conteúdos já faz muita diferença para o movim
 
 (Exemplo: fins de semana, noites, integral, etc.)`,
 
-  LIDERANCA_REGISTRADA: `🌟 *Interesse registrado com sucesso!*
+  LIDERANCA_REGISTRADA: `🌟 *Registrado!*
 
-Entraremos em contato em breve para orientá-lo(a) sobre os próximos passos.
+Vamos entrar em contato em breve para alinhar os próximos passos com você.
 
-Obrigado pela disposição em ajudar! 💪
+Obrigado por querer fazer mais pelo movimento! 💪
 
 Digite *menu* para ver outras opções.`,
 
@@ -288,6 +280,12 @@ Digite *menu* para ver outras opções.`,
 Tente novamente mais tarde.
 
 Digite *menu* para ver outras opções.`,
+
+  PAINEL_BAIRRO_PROMPT: `📍 *Painel do Bairro*
+
+Qual bairro você quer consultar?
+
+_Pode ser o seu ou qualquer outro da cidade._`,
 
   // Painel do bairro
   PAINEL_BAIRRO: (params: {

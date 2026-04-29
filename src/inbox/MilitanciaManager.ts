@@ -1,15 +1,26 @@
 /**
- * Gerenciador do bot de militância política
- * Central de Mobilização da Militância
+ * MilitanciaManager
+ * ──────────────────────────────────────────────────────────────────────────────
+ * Contém toda a lógica de conversa do bot de militância política.
  *
- * Handles all conversation flows:
- * - Member registration
- * - Daily mission
- * - Upcoming events
- * - New content
- * - Leadership interest
- * - Neighborhood panel
- * - Complaints
+ * É chamado pelo ConversationManager para cada mensagem recebida.
+ * Retorna `true` se o estado da conversa mudou e precisa ser persistido.
+ *
+ * Fluxos suportados:
+ * ─────────────────
+ *  Cadastro (orientado pela planilha):
+ *    Novo contato → pergunta nome → pergunta bairro → pergunta cidade → menu
+ *
+ *  Fluxos multi-passo (via militanciaStage na conversa):
+ *    missao_resposta      → registra resposta da missão do dia
+ *    evento_confirmacao   → registra confirmação de presença
+ *    lideranca_area       → registra área de interesse em liderança
+ *    denuncia_bairro      → coleta bairro da denúncia
+ *    denuncia_descricao   → coleta descrição da denúncia
+ *    denuncia_foto        → coleta foto opcional e finaliza denúncia
+ *    painel_bairro        → coleta bairro e exibe ranking
+ *
+ *  Todos os dados são gravados no Google Sheets via militanciaSheet.ts
  */
 
 import { WhatsApp } from '../wabapi';
@@ -52,16 +63,24 @@ export class MilitanciaManager {
   }
 
   /**
-   * Process incoming message.
-   * Mutates `conversa` state as needed.
-   * Returns true if the conversation state needs to be persisted.
+   * Ponto de entrada principal — processa uma mensagem recebida.
    *
-   * Registration state is derived entirely from the sheet:
-  *   - phone not in sheet              → save contact + welcome menu
-   *   - phone in sheet, nome empty      → collecting name
-   *   - nome filled, bairro empty       → collecting bairro
-   *   - nome+bairro filled, cidade empty → collecting cidade
-   *   - all filled                      → main menu
+   * Muta o objeto `conversa` quando o state muda (ex: avança um stage).
+   * Retorna `true` quando o estado foi alterado e precisa ser persistido no Redis.
+   * Retorna `false` quando só enviou uma resposta sem mudar o estado (ex: menu).
+   *
+   * Ordem de verificação:
+   *   1. Se existe um stage ativo → delega para processarStage()
+   *   2. Se militante cadastrado → delega para processarMenuOuComando()
+   *   3. Se cadastro incompleto → coleta o campo que falta (nome/bairro/cidade)
+   *   4. Se telefone não existe na planilha → registra contato novo
+   *
+   * Estado de cadastro é derivado da planilha (não de flags locais):
+   *   - telefone NÃO está na planilha  → salva contato + mostra boas-vindas
+   *   - nome vazio                     → coleta nome
+   *   - nome preenchido, bairro vazio  → coleta bairro
+   *   - nome+bairro, cidade vazia      → coleta cidade
+   *   - tudo preenchido                → menu principal
    */
   async processar(celular: string, texto: string, conversa: Conversation): Promise<boolean> {
     const textoNorm = normalizarTexto(texto).trim();
@@ -69,10 +88,12 @@ export class MilitanciaManager {
     const isOpcao2 = ['2', 'novidades', 'acompanhar'].includes(textoNorm);
     conversa.militanciaData = conversa.militanciaData || {};
 
-    // Continue flows that still require stage tracking (mission/event/leadership/complaint/panel).
-    // Registration stages are intentionally ignored: registration must be sheet-driven.
+    // Continua fluxos multi-passo que ainda precisam de stage tracking (missão, evento, liderança...).
+    // Stages de cadastro são ignorados propositalmente: o cadastro é derivado da planilha,
+    // não de um stage salvo localmente (isso evita inconsistências após re-deploys).
     if (conversa.militanciaStage) {
       if (['cadastro_nome', 'cadastro_bairro', 'cadastro_cidade'].includes(conversa.militanciaStage)) {
+        // Stages legados de cadastro: limpa e deixa cair no fluxo derivado da planilha
         conversa.militanciaStage = undefined;
         conversa.militanciaData = {};
       } else {
@@ -213,7 +234,18 @@ export class MilitanciaManager {
   }
 
   /**
-   * Handle messages when a multi-step flow is active
+   * Processa a mensagem quando há um fluxo multi-passo ativo (stage).
+   *
+   * Cada case corresponde a uma etapa de um fluxo que precisa de mais de uma
+   * resposta do usuário. O stage é salvo na conversa entre mensagens.
+   *
+   * Exemplo de fluxo de denúncia:
+   *   Bot: "Qual o bairro?" → stage = 'denuncia_bairro'
+   *   Usuário: "Centro"     → stage = 'denuncia_descricao'
+   *   Bot: "Qual o problema?"
+   *   Usuário: "Buraco na rua" → stage = 'denuncia_foto'
+   *   Bot: "Tem foto?"
+   *   Usuário: "não"        → stage = undefined → grava na planilha
    */
   private async processarStage(
     celular: string,
@@ -266,8 +298,7 @@ export class MilitanciaManager {
         }
         await registrarConfirmacaoEvento(celular, evento, confirmacao);
         conversa.militanciaStage = undefined;
-        const label = confirmacao === 'sim' ? 'confirmada' : 'talvez';
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTO_CONFIRMADO(label));
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTO_CONFIRMADO(confirmacao));
         return true;
       }
 
@@ -354,7 +385,20 @@ export class MilitanciaManager {
   }
 
   /**
-   * Process menu selections and global commands for registered members
+   * Processa seleções do menu principal e comandos globais para militantes cadastrados.
+   *
+   * Comandos globais (funcionam em qualquer momento):
+   *   menu / ajuda / voltar → exibe o menu principal personalizado
+   *   perfil / pontos / nível → exibe o perfil do militante com pontuação
+   *
+   * Opções do menu:
+   *   1 → Missão do dia
+   *   2 → Próximos eventos
+   *   3 → Novo conteúdo
+   *   4 → Quero liderar
+   *   5 → Painel do bairro
+   *   6 → Fazer denúncia
+   *   dashboard → Estatísticas pessoais detalhadas
    */
   private async processarMenuOuComando(
     celular: string,
@@ -445,12 +489,22 @@ export class MilitanciaManager {
       return true;
     }
 
-    // Option 6 - Dashboard
+    // Option 6 - Painel pessoal (dashboard)
     if (
-      ['6', 'dashboard', 'painel', 'painel do meu bairro', 'meu bairro'].includes(textoNorm)
+      ['6', 'dashboard', 'painel', 'meu painel'].includes(textoNorm)
     ) {
       await this.enviarDashboard(celular, militante);
       return false;
+    }
+
+    // Option 7 - Painel do bairro
+    if (
+      ['7', 'painel do bairro', 'painel bairro', 'meu bairro', 'ver bairro'].includes(textoNorm)
+    ) {
+      conversa.militanciaStage = 'painel_bairro';
+      conversa.militanciaData = {};
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PAINEL_BAIRRO_PROMPT);
+      return true;
     }
 
     // Unrecognized - show personalized menu
