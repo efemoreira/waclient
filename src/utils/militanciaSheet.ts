@@ -781,7 +781,7 @@ export async function registrarAcessoConteudo(
   }
 }
 
-// ---- Eventos tab (columns: nome, data, local, confirmacoes) ----
+// ---- Eventos tab (columns: nome, texto, data, hora, local, confirmacoes) ----
 // One row per event. 'confirmacoes' stores a comma-separated list
 // of phone numbers of militants who confirmed attendance.
 
@@ -795,17 +795,17 @@ export async function registrarConfirmacaoEvento(
 
     if (auth) {
       const sheets = google.sheets({ version: 'v4', auth });
-      const rows = await getRows(SHEET_EVENTOS, 'A:D');
+      const rows = await getRows(SHEET_EVENTOS, 'A:F');
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i] || [];
         const rowNome = String(row[0] || '').trim();
         if (rowNome === nomeEvento) {
-          const jaRegistrados = String(row[3] || '').trim();
+          const jaRegistrados = String(row[5] || '').trim();
           const lista = jaRegistrados ? jaRegistrados.split(',').map((t) => t.trim()) : [];
           if (!lista.includes(cel)) lista.push(cel);
           await sheets.spreadsheets.values.update({
             spreadsheetId: SHEET_ID,
-            range: `${SHEET_EVENTOS}!D${i + 1}`,
+            range: `${SHEET_EVENTOS}!F${i + 1}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: [[lista.join(',')]] },
           });
@@ -814,10 +814,10 @@ export async function registrarConfirmacaoEvento(
         }
       }
       // Event row not found — create it
-      await appendRow(SHEET_EVENTOS, [nomeEvento, '', '', cel]);
+      await appendRow(SHEET_EVENTOS, [nomeEvento, '', '', '', '', cel]);
       logger.info('MilitanciaSheet', `✅ Evento criado e confirmado: ${cel} → ${nomeEvento}`);
     } else {
-      await appendRow(SHEET_EVENTOS, [nomeEvento, '', '', cel]);
+      await appendRow(SHEET_EVENTOS, [nomeEvento, '', '', '', '', cel]);
     }
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao registrar evento: ${err?.message}`);
@@ -1051,7 +1051,7 @@ export type ConteudoInfo = {
  * Catalog rows take priority; the function searches from the bottom for the most recent one.
  * Falls back to access-log rows if no catalog entries exist.
  */
-export async function obterUltimoConteudo(): Promise<ConteudoInfo | null> {
+export async function obterUltimoConteudo(filtroTipo?: string): Promise<ConteudoInfo | null> {
   try {
     const rows = await getRows(SHEET_CONTEUDOS, 'A:E');
     // Search from the bottom for a catalog entry (row with empty telefone and non-empty conteudo)
@@ -1059,14 +1059,18 @@ export async function obterUltimoConteudo(): Promise<ConteudoInfo | null> {
       const row = rows[i] || [];
       const telefone = String(row[1] || '').trim();
       const conteudo = String(row[2] || '').trim();
+      const tipo = String(row[4] || '').trim();
       if (!telefone && conteudo) {
+        if (filtroTipo && tipo.toLowerCase() !== filtroTipo.toLowerCase()) continue;
         return {
           titulo: conteudo,
           link: String(row[3] || '').trim() || undefined,
-          tipo: String(row[4] || '').trim() || undefined,
+          tipo: tipo || undefined,
         };
       }
     }
+    // When filtering by tipo, do not fall back to access-log rows
+    if (filtroTipo) return null;
     // Fall back to last access-log row with non-empty conteudo
     for (let i = rows.length - 1; i >= 1; i--) {
       const row = rows[i] || [];
@@ -1084,30 +1088,66 @@ export async function obterUltimoConteudo(): Promise<ConteudoInfo | null> {
 
 export type EventoInfo = {
   nome: string;
-  local?: string;
+  texto?: string;
   data?: string;
+  hora?: string;
+  local?: string;
 };
 
+/** Parses a Brazilian date string 'dd/mm/yyyy' into a Date (midnight local time). */
+function parseDateBR(dateStr: string): Date | null {
+  const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+}
+
 /**
- * Returns the next event from the Eventos sheet.
- * Sheet structure: [nome, data, local, confirmacoes]
- * Returns the last row with a non-empty nome (most recently added event).
+ * Returns the next upcoming event from the Eventos sheet.
+ * Sheet structure: [nome, texto, data, hora, local, confirmacoes]
+ * Filters out past events and returns the soonest future event.
+ * Events without a date are included as last resort (no date = always future).
  */
 export async function obterProximoEvento(): Promise<EventoInfo | null> {
   try {
-    const rows = await getRows(SHEET_EVENTOS, 'A:C');
-    for (let i = rows.length - 1; i >= 1; i--) {
+    const rows = await getRows(SHEET_EVENTOS, 'A:E');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const upcoming: Array<{ evento: EventoInfo; date: Date | null }> = [];
+
+    for (let i = 1; i < rows.length; i++) {
       const row = rows[i] || [];
       const nome = String(row[0] || '').trim();
-      if (nome) {
-        return {
-          nome,
-          data: String(row[1] || '').trim() || undefined,
-          local: String(row[2] || '').trim() || undefined,
-        };
+      if (!nome) continue;
+
+      const texto = String(row[1] || '').trim() || undefined;
+      const dataStr = String(row[2] || '').trim();
+      const hora = String(row[3] || '').trim() || undefined;
+      const local = String(row[4] || '').trim() || undefined;
+
+      // Skip events that have already passed
+      if (dataStr) {
+        const eventDate = parseDateBR(dataStr);
+        if (eventDate && eventDate < today) continue;
       }
+
+      upcoming.push({
+        evento: { nome, texto, data: dataStr || undefined, hora, local },
+        date: dataStr ? parseDateBR(dataStr) : null,
+      });
     }
-    return null;
+
+    if (!upcoming.length) return null;
+
+    // Sort ascending by date; events without a date go to the end
+    upcoming.sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return a.date.getTime() - b.date.getTime();
+    });
+
+    return upcoming[0].evento;
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao obter próximo evento: ${err?.message}`);
     return null;

@@ -36,21 +36,22 @@ function proximoNivel(
 
 export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
-  WELCOME_FIRST_CONTACT: `👋 Olá! Que bom ter você por aqui.
+  WELCOME_FIRST_CONTACT: `👋 Esse é o canal direto com Felipe Moreira.
+Sua participação aqui ajuda a transformar nosso país.
 
-Somos um movimento político comprometido com melhorias reais para nossa cidade. Aqui você acompanha novidades, participa de missões e ajuda a mobilizar mais pessoas.
+O que você quer fazer agora?
 
-O que você prefere?
-
-1️⃣ Fazer meu cadastro e participar
-2️⃣ Ver o último conteúdo e o próximo evento`,
+1️⃣ Participar da missão
+2️⃣ Ver conteúdos e eventos`,
 
   // ---- Segundo contato (retornou, ainda não cadastrado) ----
-  WELCOME_SECOND_CONTACT: `👋 Que bom ver você novamente!
+  WELCOME_SECOND_CONTACT: `👋 Que bom ter você de volta!
 
-Seu cadastro ainda não está completo — leva menos de 1 minuto para finalizar e garante seu lugar na base da militância.
+Você já começou a entrar para a missão — falta só um passo rápido para concluir.
 
-1️⃣ Concluir meu cadastro
+O que deseja agora?
+
+1️⃣ Concluir minha entrada na missão
 2️⃣ Ver novidades e próximo evento`,
 
   // ---- Mostrar conteúdo ou evento para não-cadastrados ----
@@ -62,9 +63,14 @@ Seu cadastro ainda não está completo — leva menos de 1 minuto para finalizar
   },
 
   MOSTRAR_EVENTO: (evento: EventoInfo) => {
-    let msg = `📅 Próximo evento:\n\n${evento.nome}`;
+    let msg = `📅 Próximo evento:\n\n*${evento.nome}*`;
+    if (evento.texto) msg += `\n\n${evento.texto}`;
+    if (evento.data || evento.hora) {
+      msg += '\n\n🗓';
+      if (evento.data) msg += ` ${evento.data}`;
+      if (evento.hora) msg += ` às ${evento.hora}`;
+    }
     if (evento.local) msg += `\n📍 ${evento.local}`;
-    if (evento.data) msg += `\n🗓 ${evento.data}`;
     return msg;
   },
 
@@ -168,15 +174,18 @@ Quando concluir, acesse a opção *1 – Missão do dia* para marcar como feita 
 Digite *menu* para ver outras opções.`,
 
   // 2 - Eventos
-  EVENTOS: (eventosTexto: string) => `📅 *Próximos Eventos*
-
-${eventosTexto}
-
----
-Você vai participar?
-
-*1* – Sim, estarei lá! ✅
-*2* – Talvez, vou tentar 🤔`,
+  EVENTOS: (evento: EventoInfo) => {
+    let msg = `📅 *Próximos Eventos*\n\n*${evento.nome}*`;
+    if (evento.texto) msg += `\n\n${evento.texto}`;
+    if (evento.data || evento.hora) {
+      msg += '\n\n🗓';
+      if (evento.data) msg += ` ${evento.data}`;
+      if (evento.hora) msg += ` às ${evento.hora}`;
+    }
+    if (evento.local) msg += `\n📍 ${evento.local}`;
+    msg += `\n\n---\nVocê vai participar?\n\n*1* – Sim, estarei lá! ✅\n*2* – Talvez, vou tentar 🤔`;
+    return msg;
+  },
 
   EVENTO_CONFIRMADO: (confirmacao: 'sim' | 'talvez') =>
     confirmacao === 'sim'

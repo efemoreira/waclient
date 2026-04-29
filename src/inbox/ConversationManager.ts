@@ -66,6 +66,7 @@ export interface Conversation {
     cidade?: string;
     area?: string;
     descricao?: string;
+    evento?: string;
   };
 }
 

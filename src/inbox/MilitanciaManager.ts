@@ -291,12 +291,13 @@ export class MilitanciaManager {
 
       // ---- Event confirmation ----
       case 'evento_confirmacao': {
-        const evento = config.militancia.proximosEventos;
-        await registrarConfirmacaoEvento(celular, evento);
+        const nomeEvento = conversa.militanciaData?.evento || config.militancia.proximosEventos;
+        await registrarConfirmacaoEvento(celular, nomeEvento);
         const confirmacao: 'sim' | 'talvez' = ['1', 'sim', 'vou', 'vou sim', 'sim vou'].some((k) => textoNorm.includes(k))
           ? 'sim'
           : 'talvez';
         conversa.militanciaStage = undefined;
+        conversa.militanciaData = {};
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTO_CONFIRMADO(confirmacao));
         return true;
       }
@@ -430,11 +431,17 @@ export class MilitanciaManager {
 
     // Option 2 - Events
     if (
-      ['2', 'eventos', 'evento', 'proximos eventos', 'próximos eventos'].includes(textoNorm)
+      ['2', 'eventos', 'evento', 'proximos eventos', 'óximos eventos'].includes(textoNorm)
     ) {
+      const evento = await obterProximoEvento();
+      const eventoFinal = evento || (config.militancia.proximosEventos ? { nome: config.militancia.proximosEventos } : null);
+      if (!eventoFinal) {
+        await this.client.sendMessage(celular, 'Não há eventos próximos cadastrados no momento.\n\nDigite *menu* para ver outras opções.');
+        return true;
+      }
       conversa.militanciaStage = 'evento_confirmacao';
-      const eventosTexto = config.militancia.proximosEventos;
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTOS(eventosTexto));
+      conversa.militanciaData = { evento: eventoFinal.nome };
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTOS(eventoFinal));
       return true;
     }
 
@@ -552,7 +559,7 @@ export class MilitanciaManager {
   private async enviarConteudoEEvento(celular: string): Promise<void> {
     try {
       const [conteudo, evento] = await Promise.all([
-        obterUltimoConteudo(),
+        obterUltimoConteudo('instagram'),
         obterProximoEvento(),
       ]);
 
@@ -584,7 +591,7 @@ export class MilitanciaManager {
   private async enviarNovidades(celular: string): Promise<void> {
     try {
       const [conteudo, evento] = await Promise.all([
-        obterUltimoConteudo(),
+        obterUltimoConteudo('instagram'),
         obterProximoEvento(),
       ]);
 
