@@ -95,6 +95,15 @@ Em qual *bairro* você mora?`,
 
 E qual é a sua *cidade*?`,
 
+  PEDIR_ORIGEM: `📱 *Última pergunta:*
+
+Quem te trouxe para o movimento?
+
+📞 Se foi indicação de alguém, envie o número com DD (ex: *85 99999-0001*)
+🌐 Se veio pelas redes sociais, informe qual (ex: *Instagram*, *Facebook*, *TikTok*)
+
+_Digite *0* para pular._`,
+
   CADASTRO_SUCESSO: (nome: string, posicao: number) => `🎉 *Bem-vindo ao movimento, *${nome}*!*
 
 Você é o *${posicao}º membro* da nossa rede. Sua participação faz diferença! 💪

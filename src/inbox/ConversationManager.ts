@@ -57,7 +57,8 @@ export interface Conversation {
     | 'lideranca_disponibilidade'
     | 'denuncia_bairro'
     | 'denuncia_descricao'
-    | 'painel_bairro';
+    | 'painel_bairro'
+    | 'cadastro_origem';
   militanciaData?: {
     cadastroIniciado?: boolean;
     nome?: string;

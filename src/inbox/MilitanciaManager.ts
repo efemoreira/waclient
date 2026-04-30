@@ -9,15 +9,14 @@
  * Fluxos suportados:
  * ─────────────────
  *  Cadastro (orientado pela planilha):
- *    Novo contato → pergunta nome → pergunta bairro → pergunta cidade → menu
+ *    Novo contato → pergunta nome → pergunta bairro → pergunta cidade → pergunta origem → menu
  *
  *  Fluxos multi-passo (via militanciaStage na conversa):
  *    missao_resposta      → registra resposta da missão do dia
  *    evento_confirmacao   → registra confirmação de presença
  *    lideranca_area       → registra área de interesse em liderança
  *    denuncia_bairro      → coleta bairro da denúncia
- *    denuncia_descricao   → coleta descrição da denúncia
- *    denuncia_foto        → coleta foto opcional e finaliza denúncia
+ *    denuncia_descricao   → coleta descrição e finaliza denúncia
  *    painel_bairro        → coleta bairro e exibe ranking
  *
  *  Todos os dados são gravados no Google Sheets via militanciaSheet.ts
@@ -39,6 +38,7 @@ import {
   registrarConfirmacaoEvento,
   registrarInteresseLideranca,
   registrarDenuncia,
+  registrarOrigem,
   obterPainelBairro,
   obterRankingBairros,
   obterUltimoConteudo,
@@ -88,6 +88,9 @@ export class MilitanciaManager {
    *   - tudo preenchido                → menu principal
    */
   async processar(celular: string, texto: string, conversa: Conversation): Promise<boolean> {
+    // Guard: se a conversa está em modo humano, o operador responde manualmente — bot fica em silêncio.
+    if (conversa.isHuman) return false;
+
     const textoNorm = normalizarTexto(texto).trim();
     const isOpcao1 = ['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm);
     const isOpcao2 = ['2', 'novidades', 'acompanhar'].includes(textoNorm);
@@ -201,15 +204,12 @@ export class MilitanciaManager {
       const ok = await atualizarCamposMilitante(celular, { cidade: texto.trim() });
       if (ok) {
         atualizarDataCadastro(celular).catch(() => {});
+        conversa.militanciaStage = 'cadastro_origem';
         conversa.militanciaData = {};
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_ORIGEM);
+      } else {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.ERRO_CADASTRO);
       }
-      const posicao = ok ? await contarMilitantes() : 0;
-      await this.client.sendMessage(
-        celular,
-        ok
-          ? MESSAGES_MILITANCIA.CADASTRO_SUCESSO(militante.nome, posicao)
-          : MESSAGES_MILITANCIA.ERRO_CADASTRO
-      );
       return true;
     }
 
@@ -249,9 +249,7 @@ export class MilitanciaManager {
    *   Bot: "Qual o bairro?" → stage = 'denuncia_bairro'
    *   Usuário: "Centro"     → stage = 'denuncia_descricao'
    *   Bot: "Qual o problema?"
-   *   Usuário: "Buraco na rua" → stage = 'denuncia_foto'
-   *   Bot: "Tem foto?"
-   *   Usuário: "não"        → stage = undefined → grava na planilha
+   *   Usuário: "Buraco na rua" → stage = undefined → grava na planilha
    */
   private async processarStage(
     celular: string,
@@ -262,6 +260,23 @@ export class MilitanciaManager {
     conversa.militanciaData = conversa.militanciaData || {};
 
     switch (conversa.militanciaStage) {
+      // ---- Registration origin step ----
+      case 'cadastro_origem': {
+        const origemTexto = texto.trim();
+        const pulou = ['0', 'nao', 'nao sei', 'pular', 'skip', 'nenhum', 'nenhuma'].includes(textoNorm);
+        conversa.militanciaStage = undefined;
+        if (!pulou && origemTexto) {
+          registrarOrigem(celular, origemTexto).catch(() => {});
+        }
+        const militantePos = await buscarMilitante(celular);
+        const posicao = await contarMilitantes();
+        await this.client.sendMessage(
+          celular,
+          MESSAGES_MILITANCIA.CADASTRO_SUCESSO(militantePos?.nome || '', posicao)
+        );
+        return true;
+      }
+
       // ---- Mission response ----
       case 'missao_resposta': {
         const missaoDia = conversa.militanciaData?.missao || config.militancia.missaoDia;

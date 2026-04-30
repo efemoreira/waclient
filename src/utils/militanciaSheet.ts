@@ -103,6 +103,8 @@ async function getRows(sheetName: string, range: string): Promise<string[][]> {
 // M (12): denuncias_enviadas     [gamification]
 // N (13): conteudos_compartilhados [gamification]
 // O (14): militantes_recrutados  [gamification]
+// P (15): data_cadastro
+// Q (16): origem                  [quem convidou ou qual rede social]
 
 export type MilitanteInfo = {
   dataInscricao: string;
@@ -512,6 +514,47 @@ export async function atualizarDataCadastro(celular: string): Promise<void> {
     }
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao atualizar data de cadastro: ${err?.message}`);
+  }
+}
+
+/**
+ * Registers the referral source for a newly registered militant.
+ * - If `origem` looks like a Brazilian phone number (10–13 digits), normalizes it,
+ *   increments the recruiter's militantes_recrutados counter (col O) and awards +15 pts.
+ * - Otherwise saves the text as-is (e.g. 'Instagram', 'Facebook').
+ * Always stores the result in column Q of the militant's row.
+ */
+export async function registrarOrigem(celular: string, origem: string): Promise<void> {
+  try {
+    const digits = origem.replace(/\D/g, '');
+    const isPhone = digits.length >= 10 && digits.length <= 13;
+
+    let origemParaSalvar = origem.trim();
+    if (isPhone) {
+      const phoneCompleto = digits.startsWith('55') && digits.length >= 12 ? digits : `55${digits}`;
+      origemParaSalvar = phoneCompleto;
+      // Credit recruiter (fire-and-forget)
+      incrementarContador(phoneCompleto, 'O').catch(() => {});
+      atualizarPontosENivel(phoneCompleto, 15).catch(() => {});
+    }
+
+    const auth = getAuth();
+    if (!auth) return;
+    const sheets = google.sheets({ version: 'v4', auth });
+    const rows = await getRows(SHEET_MILITANTES, 'A:C');
+    for (let i = 1; i < rows.length; i++) {
+      if (telefonesIguais(String(rows[i]?.[2] || ''), celular)) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SHEET_ID,
+          range: `${SHEET_MILITANTES}!Q${i + 1}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[origemParaSalvar]] },
+        });
+        return;
+      }
+    }
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao registrar origem: ${err?.message}`);
   }
 }
 
@@ -1075,25 +1118,35 @@ export type RankingBairro = {
   pontos: number;  // sum of all members' pontos
 };
 
-export async function obterRankingBairros(): Promise<RankingBairro[]> {
-  try {
-    // Use pontos (col G, index 6) from the Militantes sheet — points reflect diverse engagement
-    const militantes = await getRows(SHEET_MILITANTES, 'A:G');
+// In-memory cache for ranking — avoids re-reading all rows on every panel request.
+// TTL = 5 minutes. Resets on each cold start, shared within a warm Vercel instance.
+let _rankingCache: { data: RankingBairro[]; ts: number } | null = null;
+const RANKING_TTL_MS = 5 * 60 * 1000;
 
+export async function obterRankingBairros(): Promise<RankingBairro[]> {
+  if (_rankingCache && Date.now() - _rankingCache.ts < RANKING_TTL_MS) {
+    return _rankingCache.data;
+  }
+  try {
+    // Read only E:G (bairro, nivel, pontos) — 3 columns instead of 7
+    const militantes = await getRows(SHEET_MILITANTES, 'E:G');
     const bairroPontos = new Map<string, number>();
     for (let i = 1; i < militantes.length; i++) {
       const row = militantes[i] || [];
-      const b = String(row[4] || '').trim();  // E(4) = bairro
-      const pts = Number(row[6] || 0);        // G(6) = pontos
+      const b = String(row[0] || '').trim();  // E = row[0] in E:G range
+      const pts = Number(row[2] || 0);        // G = row[2] in E:G range
       if (b) {
         bairroPontos.set(b, (bairroPontos.get(b) || 0) + pts);
       }
     }
 
-    return Array.from(bairroPontos.entries())
+    const result = Array.from(bairroPontos.entries())
       .map(([b, p]) => ({ bairro: b, pontos: p }))
       .sort((a, b) => b.pontos - a.pontos)
       .slice(0, 10);
+
+    _rankingCache = { data: result, ts: Date.now() };
+    return result;
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao obter ranking: ${err?.message}`);
     return [];
@@ -1123,7 +1176,7 @@ export async function obterDashboardPessoal(
     const cel = celular.replace(/\D/g, '');
     const bairroNorm = bairro.toLowerCase().trim();
 
-    const militantes = await getRows(SHEET_MILITANTES, 'A:I');
+    const militantes = await getRows(SHEET_MILITANTES, 'C:I');
 
     const celBairroMap = new Map<string, string>();
     const celPontosMap = new Map<string, number>();
@@ -1132,10 +1185,10 @@ export async function obterDashboardPessoal(
 
     for (let i = 1; i < militantes.length; i++) {
       const row = militantes[i] || [];
-      const rowCel = String(row[2] || '').replace(/\D/g, '');
-      const rowBairro = String(row[4] || '').toLowerCase().trim();  // E(4) = bairro
-      const rowPontos = Number(row[6] || 0);   // G(6) = pontos
-      const rowMissoes = Number(row[8] || 0);  // I(8) = missoes_concluidas
+      const rowCel = String(row[0] || '').replace(/\D/g, '');  // C(0 in C:I) = telefone
+      const rowBairro = String(row[2] || '').toLowerCase().trim();  // E(2 in C:I) = bairro
+      const rowPontos = Number(row[4] || 0);   // G(4 in C:I) = pontos
+      const rowMissoes = Number(row[6] || 0);  // I(6 in C:I) = missoes_concluidas
       if (rowCel) {
         celBairroMap.set(rowCel, rowBairro);
         celPontosMap.set(rowCel, rowPontos);

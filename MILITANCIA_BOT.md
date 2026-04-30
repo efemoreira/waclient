@@ -47,7 +47,29 @@ Google Sheets (militanciaSheet.ts)
 
 ### Pontos
 
-Cada missão concluída concede **10 pontos** ao militante. Os pontos são acumulados na coluna `pontos` (col F) da aba **Militantes**.
+Os pontos são a principal moeda de engajamento e base dos rankings. São acumulados na coluna `pontos` (col G) da aba **Militantes**.
+
+| Ação | Pontos concedidos |
+|------|------------------:|
+| Missão concluída (streak 1–6 dias) | **10 pts** |
+| Missão concluída (streak 7–29 dias) | **15 pts** (+5 bônus streak) |
+| Missão concluída (streak 30+ dias) | **20 pts** (+10 bônus streak) |
+| Confirmar presença em evento | **+5 pts** |
+| Enviar denúncia comunitária | **+8 pts** |
+| Acessar conteúdo | **+3 pts** |
+
+A função `calcularPontosMissao(streak)` encapsula o multiplicador de streak:
+
+```typescript
+// src/utils/militanciaSheet.ts
+export function calcularPontosMissao(streak: number): number {
+  if (streak >= 30) return 20;
+  if (streak >= 7)  return 15;
+  return 10;
+}
+```
+
+Os rankings — tanto pessoal (posição no bairro / posição geral) quanto coletivo (ranking de bairros) — são calculados pela soma de **pontos**, não por missões. Isso incentiva engajamento diversificado: quem confirma eventos, denuncia problemas e acessa conteúdos pode superar quem só faz missões.
 
 ### Níveis
 
@@ -74,7 +96,7 @@ export function calcularNivel(missoesConcluidasTotal: number): number {
 }
 ```
 
-Quando a missão é concluída, `atualizarMissoesStreakNivel()` faz um `batchUpdate` na planilha atualizando colunas E (nível), G (última interação), I (missões), J (streak) e K (data da última missão) em uma única chamada à API.
+Quando a missão é concluída, `atualizarMissoesStreakNivel()` faz um `batchUpdate` na planilha atualizando colunas F (nível), G (pontos), H (última interação), I (missões), J (streak) e K (data da última missão) em uma única chamada à API.
 
 ### Streak (Sequência)
 
@@ -153,13 +175,13 @@ Objeto `MESSAGES_MILITANCIA` com todas as mensagens do bot. Funções que geram 
 | `WELCOME_SECOND_CONTACT` | Retorno sem cadastro — oferece cadastro ou novidades |
 | `MENU_PERSONALIZADO(nome)` | Menu principal personalizado com o nome do usuário |
 | `MISSAO(texto)` | Envia a missão do dia com instruções de resposta |
-| `MISSAO_CONCLUIDA(streak)` | Confirmação de missão com streak atual |
+| `MISSAO_CONCLUIDA(streak, pontos, pontosGanhos)` | Confirmação de missão — mostra delta de pontos ganhos e bônus de streak |
 | `NIVEL_SUBIU(nomeNivel)` | Notificação de subida de nível |
 | `CONQUISTA_DESBLOQUEADA(nome, total)` | Notificação de nova conquista |
 | `PERFIL(params)` | Perfil completo com nível, streak, conquistas e próximo nível |
-| `DASHBOARD(params)` | Dashboard com posição no bairro, posição geral e progresso |
-| `PAINEL_BAIRRO(params)` | Painel coletivo do bairro |
-| `PAINEL_RANKING(ranking)` | Ranking de bairros com medalhas |
+| `DASHBOARD(params)` | Dashboard com pontos, streak, missões, posição no bairro e posição geral (ranking por pontos) |
+| `PAINEL_BAIRRO(params)` | Painel coletivo do bairro — exibe pontos acumulados como principal métrica competitiva |
+| `PAINEL_RANKING(ranking)` | Ranking de bairros por pontos totais com medalhas |
 
 A função auxiliar `proximoNivel()` calcula quantas missões faltam para o próximo nível e retorna `null` quando o usuário está no nível máximo.
 
@@ -181,9 +203,11 @@ Funções exportadas para operações na planilha:
 | `registrarConfirmacaoEvento(...)` | Registra confirmação na aba Eventos |
 | `registrarInteresseLideranca(...)` | Registra interesse na aba Liderança |
 | `registrarDenuncia(...)` | Registra denúncia na aba Denúncias, retorna código de protocolo |
-| `obterDashboardPessoal(celular, bairro)` | Calcula posição no bairro e posição geral |
-| `obterPainelBairro(bairro)` | Agrega dados do bairro (militantes, missões, nível médio) |
-| `obterRankingBairros()` | Ordena bairros por missões totais |
+| `registrarOrigem(celular, origem)` | Salva origem do novo militante (col Q); se for número de telefone, credita +1 recrutado e +15 pts ao recrutador |
+| `obterDashboardPessoal(celular, bairro)` | Calcula posição no bairro e posição geral — ambas ranqueadas por **pontos** |
+| `obterPainelBairro(bairro)` | Agrega dados do bairro (militantes, missões, nível médio, **pontos totais**) |
+| `obterRankingBairros()` | Ordena bairros por **pontos totais** dos membros |
+| `calcularPontosMissao(streak)` | Retorna pontos a conceder pela missão: 10, 15 ou 20 conforme streak |
 | `obterMissaoDia()` | Retorna missão do dia da aba Missões (linha com data de hoje) |
 | `obterUltimoConteudo(filtroTipo?)` | Retorna último conteúdo publicado, com filtro opcional por tipo |
 | `obterProximoEvento()` | Retorna próximo evento futuro |
@@ -225,6 +249,8 @@ Armazena o perfil e os dados de gamificação de cada militante.
 | M | `denuncias_enviadas` | number | Total de denúncias enviadas |
 | N | `conteudos_compartilhados` | number | Total de conteúdos acessados |
 | O | `militantes_recrutados` | number | Total de militantes indicados |
+| P | `data_cadastro` | string (dd/mm/aaaa) | Data em que o cadastro foi concluído |
+| Q | `origem` | string | Número do recrutador (normalizado com 55) ou nome da rede social |
 
 ### Aba: Missões
 
@@ -365,6 +391,8 @@ export type MissaoResultado = {
   novasConquistas: string[];
   streakAtual: number;
   missoesConcluidasTotal: number;
+  pontos: number;       // total de pontos após a missão
+  pontosGanhos: number; // delta concedido nessa missão (10, 15 ou 20)
 };
 ```
 
@@ -401,8 +429,8 @@ militanciaStage?:
   | 'lideranca_disponibilidade' // legado — disponibilidade (fluxo antigo)
   | 'denuncia_bairro'         // coleta bairro da denúncia
   | 'denuncia_descricao'      // coleta descrição do problema
-
   | 'painel_bairro'           // coleta bairro para exibir painel coletivo
+  | 'cadastro_origem'         // último passo do cadastro: quem convidou ou qual rede social
 ```
 
 ---
@@ -425,9 +453,15 @@ Se responder "1":
 Nas próximas mensagens, o bot busca o telefone na planilha e decide o próximo passo:
   - nome vazio   → salva nome via atualizarCamposMilitante() e pede bairro
   - bairro vazio → salva bairro e pede cidade
-  - cidade vazia → salva cidade e confirma cadastro
+  - cidade vazia → salva cidade, define stage `cadastro_origem` e pergunta a origem
 
-Não há stage de cadastro; o progresso vem dos campos da planilha.
+Na resposta da origem (stage `cadastro_origem`):
+  - Número de telefone (10–13 dígitos) → salva com `55` prefix, credita recrutador (+1 recrutado, +15 pts)
+  - Texto (rede social) → salva como está (ex: Instagram)
+  - `0` ou equivalente → pula sem registrar
+  Em seguida mostra CADASTRO_SUCESSO com posição na rede.
+
+Não há stage de cadastro para nome/bairro/cidade; o progresso vem dos campos da planilha.
 ```
 
 Se o usuário responder "2" (ou qualquer outra coisa) no `welcome_opcao`, o bot busca o último conteúdo ou evento publicado e exibe como novidades.
@@ -458,10 +492,10 @@ detectarRespostaMissao() → "concluído" | "pendente"
 
   Se "concluído":
     registrarRespostaMissao()
-      → atualizarMissoesStreakNivel() [batchUpdate Sheets]
+      → atualizarMissoesStreakNivel() [batchUpdate Sheets: nível, pontos, interação, missões, streak, data]
       → verificarConquistas()
       → atualizarTitulos() se novas conquistas
-    Bot → MISSAO_CONCLUIDA(streak)
+    Bot → MISSAO_CONCLUIDA(streak, pontos, pontosGanhos) — mostra bônus se streak ≥ 7
     Se levelUp → Bot → NIVEL_SUBIU(nomeNivel)
     Para cada conquista nova → Bot → CONQUISTA_DESBLOQUEADA(nome, total)
 
@@ -483,12 +517,14 @@ Bot → EVENTOS(texto dos próximos eventos)
         ↓ (stage: evento_confirmacao)
 Usuário responde "1" / "sim" / "vou"
         ↓
-registrarConfirmacaoEvento() → aba Eventos
+confirmacao = 'sim'
+registrarConfirmacaoEvento(celular, evento, true) → aba Eventos + atualizarPontosENivel(celular, 5)
 Bot → EVENTO_CONFIRMADO("confirmada")
 
 Usuário responde "2" / qualquer outra coisa
         ↓
-registrarConfirmacaoEvento() com confirmacao="talvez"
+confirmacao = 'talvez'
+registrarConfirmacaoEvento(celular, evento, false) → aba Eventos (sem pontos)
 Bot → EVENTO_CONFIRMADO("talvez")
         ↓ (stage: undefined)
 ```
@@ -551,8 +587,8 @@ Usuário envia "6" / "dashboard" / "painel"
         ↓
 obterDashboardPessoal(celular, bairro)
   → busca todos os militantes do bairro na planilha
-  → calcula posição por missões
-Bot → DASHBOARD(nome, nível, missões, posição no bairro, posição geral, streak)
+  → calcula posição no bairro e posição geral por **pontos**
+Bot → DASHBOARD(nome, nível, pontos, streak, missões, posição no bairro, posição geral)
         ↓ (stage não alterado)
 
 Usuário envia "perfil" / "meu perfil" / "pontos"
@@ -610,5 +646,8 @@ Quando um atendente humano assume a conversa via painel administrativo, o campo 
 
 As funções serverless têm limite de **10 segundos** de execução no Vercel. Para evitar timeout:
 - As chamadas à planilha que não precisam de resposta imediata usam **fire-and-forget** com `.catch(() => {})`.
-- A função `atualizarMissoesStreakNivel` consolida 5 atualizações de células em um único `batchUpdate`.
+- A função `atualizarMissoesStreakNivel` consolida 6 atualizações de células em um único `batchUpdate`.
+- `obterRankingBairros` lê apenas as colunas `E:G` (bairro, nível, pontos) em vez de `A:G`, reduzindo 57% dos dados transferidos.
+- `obterDashboardPessoal` lê `C:I` em vez de `A:I`, reduzindo 22% dos dados transferidos.
+- O resultado de `obterRankingBairros` é mantido em **cache em memória** com TTL de 5 minutos. Instâncias aquecidas do Vercel respondem ao ranking sem nenhuma chamada à API do Sheets.
 - O bulk messaging usa um sistema de fila com múltiplas chamadas sequenciais à API.
