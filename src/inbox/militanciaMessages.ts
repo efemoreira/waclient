@@ -37,6 +37,7 @@ function proximoNivel(
 export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
   WELCOME_FIRST_CONTACT: `👋 Esse é o canal direto com Felipe Moreira.
+  
 Sua participação aqui ajuda a transformar nosso país.
 
 O que você quer fazer agora?

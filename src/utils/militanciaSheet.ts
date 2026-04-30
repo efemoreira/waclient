@@ -1153,3 +1153,88 @@ export async function obterProximoEvento(): Promise<EventoInfo | null> {
     return null;
   }
 }
+
+/**
+ * Returns up to `limite` upcoming events sorted from nearest to farthest.
+ * Same filtering logic as obterProximoEvento (past events excluded).
+ */
+export async function obterProximosEventos(limite: number = 3): Promise<EventoInfo[]> {
+  try {
+    const rows = await getRows(SHEET_EVENTOS, 'A:E');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const upcoming: Array<{ evento: EventoInfo; date: Date | null }> = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const nome = String(row[0] || '').trim();
+      if (!nome) continue;
+
+      const texto = String(row[1] || '').trim() || undefined;
+      const dataStr = String(row[2] || '').trim();
+      const hora = String(row[3] || '').trim() || undefined;
+      const local = String(row[4] || '').trim() || undefined;
+
+      if (dataStr) {
+        const eventDate = parseDateBR(dataStr);
+        if (eventDate && eventDate < today) continue;
+      }
+
+      upcoming.push({
+        evento: { nome, texto, data: dataStr || undefined, hora, local },
+        date: dataStr ? parseDateBR(dataStr) : null,
+      });
+    }
+
+    upcoming.sort((a, b) => {
+      if (!a.date && !b.date) return 0;
+      if (!a.date) return 1;
+      if (!b.date) return -1;
+      return a.date.getTime() - b.date.getTime();
+    });
+
+    return upcoming.slice(0, limite).map((u) => u.evento);
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao obter próximos eventos: ${err?.message}`);
+    return [];
+  }
+}
+
+/**
+ * Returns the most recent catalog entry for each unique tipo from the Conteúdos sheet.
+ * Useful for registered users who want to see the latest content of every type.
+ */
+export async function obterUltimosConteudosPorTipo(): Promise<ConteudoInfo[]> {
+  try {
+    const rows = await getRows(SHEET_CONTEUDOS, 'A:E');
+    const vistoPorTipo = new Map<string, ConteudoInfo>();
+    const semTipo: ConteudoInfo[] = [];
+
+    // Iterate bottom-to-top so first match per tipo = most recent
+    for (let i = rows.length - 1; i >= 1; i--) {
+      const row = rows[i] || [];
+      const telefone = String(row[1] || '').trim();
+      const conteudo = String(row[2] || '').trim();
+      if (telefone || !conteudo) continue; // skip access-log rows and empty rows
+
+      const tipo = String(row[4] || '').trim().toLowerCase();
+      const info: ConteudoInfo = {
+        titulo: conteudo,
+        link: String(row[3] || '').trim() || undefined,
+        tipo: tipo || undefined,
+      };
+
+      if (tipo) {
+        if (!vistoPorTipo.has(tipo)) vistoPorTipo.set(tipo, info);
+      } else {
+        if (semTipo.length === 0) semTipo.push(info);
+      }
+    }
+
+    return [...vistoPorTipo.values(), ...semTipo];
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao obter conteúdos por tipo: ${err?.message}`);
+    return [];
+  }
+}

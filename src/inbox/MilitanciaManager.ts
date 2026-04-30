@@ -43,6 +43,8 @@ import {
   obterRankingBairros,
   obterUltimoConteudo,
   obterProximoEvento,
+  obterProximosEventos,
+  obterUltimosConteudosPorTipo,
   obterDashboardPessoal,
   nomeDoNivel,
   type MilitanteInfo,
@@ -145,7 +147,7 @@ export class MilitanciaManager {
           }
         }
 
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_SECOND_CONTACT);
         return true;
       }
 
@@ -429,31 +431,40 @@ export class MilitanciaManager {
       return true;
     }
 
-    // Option 2 - Events
+    // Option 2 - Events (up to 3 upcoming, nearest first)
     if (
       ['2', 'eventos', 'evento', 'proximos eventos', 'óximos eventos'].includes(textoNorm)
     ) {
-      const evento = await obterProximoEvento();
-      const eventoFinal = evento || (config.militancia.proximosEventos ? { nome: config.militancia.proximosEventos } : null);
-      if (!eventoFinal) {
+      const eventos = await obterProximosEventos(3);
+      if (!eventos.length) {
         await this.client.sendMessage(celular, 'Não há eventos próximos cadastrados no momento.\n\nDigite *menu* para ver outras opções.');
         return true;
       }
+      // Show each event; confirmation applies to the first (nearest) one
+      for (const ev of eventos) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTOS(ev));
+      }
       conversa.militanciaStage = 'evento_confirmacao';
-      conversa.militanciaData = { evento: eventoFinal.nome };
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTOS(eventoFinal));
+      conversa.militanciaData = { evento: eventos[0].nome };
       return true;
     }
 
-    // Option 3 - Content
+    // Option 3 - Content (latest post per type from sheet)
     if (
       ['3', 'conteudo', 'conteúdo', 'conteudos', 'conteúdos', 'novo conteudo', 'novo conteúdo'].includes(textoNorm)
     ) {
-      const conteudoTexto = config.militancia.novoConteudo;
-      const conteudoTipo = config.militancia.novoConteudoTipo;
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CONTEUDO(conteudoTexto));
-      // Register content access (fire-and-forget)
-      registrarAcessoConteudo(celular, conteudoTexto, conteudoTipo).catch(() => {});
+      const conteudos = await obterUltimosConteudosPorTipo();
+      if (conteudos.length) {
+        for (const c of conteudos) {
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO(c));
+        }
+      } else {
+        // Fallback to env var
+        const conteudoTexto = config.militancia.novoConteudo;
+        const conteudoTipo = config.militancia.novoConteudoTipo;
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CONTEUDO(conteudoTexto));
+        registrarAcessoConteudo(celular, conteudoTexto, conteudoTipo).catch(() => {});
+      }
       return false;
     }
 
