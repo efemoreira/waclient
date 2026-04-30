@@ -572,14 +572,36 @@ export type TituloInfo = {
 };
 
 export const TITULOS_PADRAO: Record<string, TituloInfo> = {
-  '1': { id: '1', nome: 'Primeira Missão',     criterio: 'Completar 1 missão' },
-  '2': { id: '2', nome: 'Militante Ativo',      criterio: 'Completar 7 missões' },
-  '3': { id: '3', nome: 'Persistente',          criterio: 'Completar 30 missões' },
-  '4': { id: '4', nome: 'Influenciador',        criterio: 'Compartilhar 20 conteúdos' },
-  '5': { id: '5', nome: 'Mobilizador',          criterio: 'Recrutar 3 membros' },
-  '6': { id: '6', nome: 'Observador da Cidade', criterio: 'Enviar 3 denúncias' },
-  '7': { id: '7', nome: 'Uma Semana Seguida',   criterio: 'Streak de 7 dias consecutivos' },
-  '8': { id: '8', nome: 'Mês Completo',         criterio: 'Streak de 30 dias consecutivos' },
+  // === MISSÕES ===
+  '1':  { id: '1',  nome: 'Recruta',              criterio: 'Completar a 1ª missão' },
+  '2':  { id: '2',  nome: 'Ativista',             criterio: 'Completar 7 missões' },
+  '3':  { id: '3',  nome: 'Combatente',           criterio: 'Completar 30 missões' },
+  '9':  { id: '9',  nome: 'Ativista Prata',       criterio: 'Completar 20 missões' },
+  '10': { id: '10', nome: 'Ativista Ouro',        criterio: 'Completar 50 missões' },
+  '11': { id: '11', nome: 'Combatente Prata',     criterio: 'Completar 80 missões' },
+  '12': { id: '12', nome: 'Combatente Ouro',      criterio: 'Completar 120 missões' },
+  '13': { id: '13', nome: 'Veterano da Causa',    criterio: 'Completar 180 missões' },
+  // === STREAK ===
+  '7':  { id: '7',  nome: 'Semana em Campo',      criterio: 'Streak de 7 dias consecutivos' },
+  '14': { id: '14', nome: 'Semana em Campo Prata',criterio: 'Streak de 14 dias consecutivos' },
+  '8':  { id: '8',  nome: 'Mês em Campo',         criterio: 'Streak de 30 dias consecutivos' },
+  '15': { id: '15', nome: 'Mês em Campo Ouro',    criterio: 'Streak de 60 dias consecutivos' },
+  '16': { id: '16', nome: 'Incansável',           criterio: 'Streak de 90 dias consecutivos' },
+  // === CONTEÚDO ===
+  '4':  { id: '4',  nome: 'Porta-Voz',           criterio: 'Compartilhar 20 conteúdos' },
+  '17': { id: '17', nome: 'Porta-Voz Prata',     criterio: 'Compartilhar 40 conteúdos' },
+  '18': { id: '18', nome: 'Porta-Voz Ouro',      criterio: 'Compartilhar 60 conteúdos' },
+  // === RECRUTAMENTO ===
+  '5':  { id: '5',  nome: 'Articulador',         criterio: 'Recrutar 3 membros' },
+  '19': { id: '19', nome: 'Articulador Prata',   criterio: 'Recrutar 7 membros' },
+  '20': { id: '20', nome: 'Articulador Ouro',    criterio: 'Recrutar 15 membros' },
+  // === DENÚNCIAS ===
+  '6':  { id: '6',  nome: 'Fiscal das Ruas',     criterio: 'Enviar 3 denúncias' },
+  '21': { id: '21', nome: 'Fiscal Prata',        criterio: 'Enviar 7 denúncias' },
+  '22': { id: '22', nome: 'Fiscal Ouro',         criterio: 'Enviar 15 denúncias' },
+  // === PONTOS ===
+  '23': { id: '23', nome: 'Força do Movimento',  criterio: 'Acumular 500 pontos' },
+  '24': { id: '24', nome: 'Pilar da Causa',      criterio: 'Acumular 1000 pontos' },
 };
 
 /** Returns the display name for a title ID (falls back gracefully). */
@@ -619,8 +641,16 @@ function verificarStreakMilestones(titulosAtuais: string, novoStreak: number): s
     titulosAtuais.split(',').map((s) => s.trim()).filter(Boolean)
   );
   const novas: string[] = [];
-  if (novoStreak >= 30 && !conquistasAtivas.has('8')) novas.push('8');
-  else if (novoStreak >= 7 && !conquistasAtivas.has('7')) novas.push('7');
+  const milestones: Array<{ streak: number; id: string }> = [
+    { streak: 7,  id: '7'  },
+    { streak: 14, id: '14' },
+    { streak: 30, id: '8'  },
+    { streak: 60, id: '15' },
+    { streak: 90, id: '16' },
+  ];
+  for (const { streak, id } of milestones) {
+    if (novoStreak >= streak && !conquistasAtivas.has(id)) novas.push(id);
+  }
   return novas;
 }
 
@@ -650,12 +680,33 @@ export function verificarConquistas(militante: MilitanteInfo): string[] {
   const novas: string[] = [];
 
   const m = militante.missoesConcluidasTotal;
-  if (m >= 1  && !conquistasAtivas.has('1')) novas.push('1');
-  if (m >= 7  && !conquistasAtivas.has('2')) novas.push('2');
-  if (m >= 30 && !conquistasAtivas.has('3')) novas.push('3');
-  if ((militante.conteudosCompartilhados || 0) >= 20 && !conquistasAtivas.has('4')) novas.push('4');
-  if ((militante.militantesRecrutados   || 0) >= 3  && !conquistasAtivas.has('5')) novas.push('5');
-  if ((militante.denunciasEnviadas      || 0) >= 3  && !conquistasAtivas.has('6')) novas.push('6');
+  if (m >= 1   && !conquistasAtivas.has('1'))  novas.push('1');
+  if (m >= 7   && !conquistasAtivas.has('2'))  novas.push('2');
+  if (m >= 20  && !conquistasAtivas.has('9'))  novas.push('9');
+  if (m >= 30  && !conquistasAtivas.has('3'))  novas.push('3');
+  if (m >= 50  && !conquistasAtivas.has('10')) novas.push('10');
+  if (m >= 80  && !conquistasAtivas.has('11')) novas.push('11');
+  if (m >= 120 && !conquistasAtivas.has('12')) novas.push('12');
+  if (m >= 180 && !conquistasAtivas.has('13')) novas.push('13');
+
+  const c = militante.conteudosCompartilhados || 0;
+  if (c >= 20 && !conquistasAtivas.has('4'))  novas.push('4');
+  if (c >= 40 && !conquistasAtivas.has('17')) novas.push('17');
+  if (c >= 60 && !conquistasAtivas.has('18')) novas.push('18');
+
+  const r = militante.militantesRecrutados || 0;
+  if (r >= 3  && !conquistasAtivas.has('5'))  novas.push('5');
+  if (r >= 7  && !conquistasAtivas.has('19')) novas.push('19');
+  if (r >= 15 && !conquistasAtivas.has('20')) novas.push('20');
+
+  const d = militante.denunciasEnviadas || 0;
+  if (d >= 3  && !conquistasAtivas.has('6'))  novas.push('6');
+  if (d >= 7  && !conquistasAtivas.has('21')) novas.push('21');
+  if (d >= 15 && !conquistasAtivas.has('22')) novas.push('22');
+
+  const p = militante.pontos || 0;
+  if (p >= 500  && !conquistasAtivas.has('23')) novas.push('23');
+  if (p >= 1000 && !conquistasAtivas.has('24')) novas.push('24');
 
   return novas;
 }

@@ -52,7 +52,7 @@ describe('Flow 1 – Primeiro contato', () => {
 
     await manager.processar(CEL, 'Oi', conversa);
 
-    expect(client.lastMessage()).toContain('canal direto com Felipe Moreira');
+    expect(client.lastMessage()).toContain('Felipe Moreira');
     expect(conversa.militanciaStage).toBeUndefined();
   });
 });
@@ -66,7 +66,7 @@ describe('Flow 1/2 – Cadastro completo com origem', () => {
 
     // 1. Primeiro contato
     await manager.processar(CEL, 'Oi', conversa);
-    expect(client.lastMessage()).toContain('canal direto');
+    expect(client.lastMessage()).toContain('Felipe Moreira');
 
     // 2. Escolhe opção 1 (cadastrar)
     client.reset();
@@ -171,7 +171,7 @@ describe('Flow 3 – Missão do dia', () => {
 
     expect(conversa.militanciaStage).toBeUndefined();
     const mensagens = client.messagesTo(CEL);
-    expect(mensagens[0]).toContain('Missão registrada');
+    expect(mensagens[0]).toContain('Missão feita');
     expect(mensagens[0]).toMatch(/\+\d+ pontos/);
   });
 
@@ -207,7 +207,7 @@ describe('Flow 3 – Missão do dia', () => {
     expect(temLevelUp).toBe(true);
   });
 
-  test('1ª missão desbloqueia conquista "Primeira Missão"', async () => {
+  test('1ª missão desbloqueia conquista "Recruta"', async () => {
     const { client, manager } = buildManager();
     mockDB.setMilitante({
       celular: CEL, nome: 'João', bairro: 'Centro', cidade: 'Fortaleza',
@@ -221,7 +221,7 @@ describe('Flow 3 – Missão do dia', () => {
     await manager.processar(CEL, 'já fiz', conversa);
 
     const mensagens = client.messagesTo(CEL);
-    const temConquista = mensagens.some((m: string) => m.includes('Primeira Missão'));
+    const temConquista = mensagens.some((m: string) => m.includes('Recruta'));
     expect(temConquista).toBe(true);
   });
 
@@ -459,7 +459,7 @@ describe('Streak – reset por data', () => {
     expect(client.messagesTo(CEL)[0]).not.toContain('bônus streak');
   });
 
-  test('streak 7 consecutivos desbloqueia conquista "Uma Semana Seguida"', async () => {
+  test('streak 7 consecutivos desbloqueia conquista "Semana em Campo"', async () => {
     const { client, manager } = buildManager();
     // Streak 6 com ultima missão ontem → ao fazer hoje vai para 7
     mockDB.setMilitante({
@@ -475,11 +475,11 @@ describe('Streak – reset por data', () => {
     await manager.processar(CEL, 'já fiz', conversa);
 
     const mensagens = client.messagesTo(CEL);
-    const temConquista = mensagens.some((m: string) => m.includes('Uma Semana Seguida'));
+    const temConquista = mensagens.some((m: string) => m.includes('Semana em Campo'));
     expect(temConquista).toBe(true);
   });
 
-  test('streak 30 consecutivos desbloqueia conquista "Mês Completo"', async () => {
+  test('streak 30 consecutivos desbloqueia conquista "Mês em Campo"', async () => {
     const { client, manager } = buildManager();
     mockDB.setMilitante({
       celular: CEL, nome: 'João', bairro: 'Centro', cidade: 'Fortaleza',
@@ -494,7 +494,7 @@ describe('Streak – reset por data', () => {
     await manager.processar(CEL, 'já fiz', conversa);
 
     const mensagens = client.messagesTo(CEL);
-    const temConquista = mensagens.some((m: string) => m.includes('Mês Completo'));
+    const temConquista = mensagens.some((m: string) => m.includes('Mês em Campo'));
     expect(temConquista).toBe(true);
   });
 });
@@ -608,7 +608,7 @@ describe('Flow 2 – Retorno sem cadastro (WELCOME_SECOND_CONTACT)', () => {
     await manager.processar(CEL, 'Oi', conversa);
 
     // Deve exibir mensagem de retorno, não perguntar nome diretamente
-    expect(client.lastMessage()).toContain('Que bom ter você de volta');
+    expect(client.lastMessage()).toContain('De volta por aqui');
   });
 
   test('opção "1" com cadastroIniciado false seta flag e pede nome', async () => {

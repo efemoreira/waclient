@@ -111,18 +111,63 @@ const novoStreak = isOntem(ultimaMissaoData) ? streakPrev + 1 : 1;
 
 ### Conquistas (Títulos)
 
-As conquistas são desbloqueadas automaticamente na função `verificarConquistas()` e armazenadas separadas por vírgula na coluna `titulos` (col L):
+As conquistas são desbloqueadas automaticamente pelas funções `verificarConquistas()` (missões, conteúdo, recrutamento, denúncias, pontos) e `verificarStreakMilestones()` (sequências). Os IDs são armazenados como CSV na coluna `titulos` (col L). O nome de cada título é resolvido em tempo de execução via `resolverNomeTitulo(id)` — pode ser personalizado na aba **Títulos** da planilha sem novo deploy.
 
-| Conquista              | Critério                                 |
-|------------------------|------------------------------------------|
-| Primeira missão        | ≥ 1 missão concluída                     |
-| Militante ativo        | ≥ 7 missões concluídas                   |
-| Persistente            | ≥ 30 missões concluídas                  |
-| Influenciador          | ≥ 20 conteúdos compartilhados            |
-| Mobilizador            | ≥ 3 militantes recrutados                |
-| Observador da cidade   | ≥ 3 denúncias enviadas                   |
+Ao concluir uma missão, o bot verifica quais conquistas são novas e envia uma mensagem de desbloqueio para cada uma. A função `verificarStreakMilestones` usa **loop** (não `else if`), portanto um militante que pular de 1 para 30 dias recebe todos os títulos de streak de uma vez.
 
-Ao concluir uma missão, o bot verifica quais conquistas são novas (não estão em `titulos`) e envia uma mensagem de desbloqueio para cada uma.
+#### Títulos por missões concluídas
+
+| ID | Nome | Critério |
+|----|------|----------|
+| 1 | Recruta | ≥ 1 missão |
+| 2 | Ativista | ≥ 7 missões |
+| 9 | Ativista Prata | ≥ 20 missões |
+| 3 | Combatente | ≥ 30 missões |
+| 10 | Ativista Ouro | ≥ 50 missões |
+| 11 | Combatente Prata | ≥ 80 missões |
+| 12 | Combatente Ouro | ≥ 120 missões |
+| 13 | Veterano da Causa | ≥ 180 missões |
+
+#### Títulos por streak (dias consecutivos)
+
+| ID | Nome | Critério |
+|----|------|----------|
+| 7 | Semana em Campo | ≥ 7 dias |
+| 14 | Semana em Campo Prata | ≥ 14 dias |
+| 8 | Mês em Campo | ≥ 30 dias |
+| 15 | Mês em Campo Ouro | ≥ 60 dias |
+| 16 | Incansável | ≥ 90 dias |
+
+#### Títulos por conteúdo compartilhado
+
+| ID | Nome | Critério |
+|----|------|----------|
+| 4 | Porta-Voz | ≥ 20 conteúdos |
+| 17 | Porta-Voz Prata | ≥ 40 conteúdos |
+| 18 | Porta-Voz Ouro | ≥ 60 conteúdos |
+
+#### Títulos por recrutamento
+
+| ID | Nome | Critério |
+|----|------|----------|
+| 5 | Articulador | ≥ 3 recrutados |
+| 19 | Articulador Prata | ≥ 7 recrutados |
+| 20 | Articulador Ouro | ≥ 15 recrutados |
+
+#### Títulos por denúncias
+
+| ID | Nome | Critério |
+|----|------|----------|
+| 6 | Fiscal das Ruas | ≥ 3 denúncias |
+| 21 | Fiscal Prata | ≥ 7 denúncias |
+| 22 | Fiscal Ouro | ≥ 15 denúncias |
+
+#### Títulos por pontos acumulados
+
+| ID | Nome | Critério |
+|----|------|----------|
+| 23 | Força do Movimento | ≥ 500 pts |
+| 24 | Pilar da Causa | ≥ 1000 pts |
 
 ### Nível do Bairro
 
@@ -177,10 +222,10 @@ Objeto `MESSAGES_MILITANCIA` com todas as mensagens do bot. Funções que geram 
 | `MISSAO(texto)` | Envia a missão do dia com instruções de resposta |
 | `MISSAO_CONCLUIDA(streak, pontos, pontosGanhos)` | Confirmação de missão — mostra delta de pontos ganhos e bônus de streak |
 | `NIVEL_SUBIU(nomeNivel)` | Notificação de subida de nível |
-| `CONQUISTA_DESBLOQUEADA(nome, total)` | Notificação de nova conquista |
-| `PERFIL(params)` | Perfil completo com nível, streak, conquistas e próximo nível |
-| `DASHBOARD(params)` | Dashboard com pontos, streak, missões, posição no bairro e posição geral (ranking por pontos) |
-| `PAINEL_BAIRRO(params)` | Painel coletivo do bairro — exibe pontos acumulados como principal métrica competitiva |
+| `CONQUISTA_DESBLOQUEADA(nome, total)` | Notificação de nova conquista (usa singular/plural: "1 missão" / "N missões") |
+| `PERFIL(params)` | Perfil compacto: nome, bairro, nível, pontos, missões, streak, conquistas e próximo nível |
+| `DASHBOARD(params)` | Dashboard compacto: pontos em destaque, streak, posição no bairro e posição geral |
+| `PAINEL_BAIRRO(params)` | Painel coletivo do bairro — exibe nível do bairro, pontos totais, ranking |
 | `PAINEL_RANKING(ranking)` | Ranking de bairros por pontos totais com medalhas |
 
 A função auxiliar `proximoNivel()` calcula quantas missões faltam para o próximo nível e retorna `null` quando o usuário está no nível máximo.
@@ -342,18 +387,9 @@ Opcional. Define os títulos/conquistas exibidos no sistema de gamificação. A 
 | B | `nome` | Nome exibido ao militante |
 | C | `criterio` | Descrição do critério de desbloqueio |
 
-**IDs fixos no código:**
+**IDs fixos no código (fallback `TITULOS_PADRAO`):**
 
-| ID | Nome padrão | Critério |
-|---|---|---|
-| 1 | Primeira Missão | ≥ 1 missão concluída |
-| 2 | Militante Ativo | ≥ 7 missões concluídas |
-| 3 | Persistente | ≥ 30 missões concluídas |
-| 4 | Influenciador | ≥ 20 conteúdos compartilhados |
-| 5 | Mobilizador | ≥ 3 membros recrutados |
-| 6 | Observador da Cidade | ≥ 3 denúncias enviadas |
-| 7 | Uma Semana Seguida | Streak de 7 dias consecutivos |
-| 8 | Mês Completo | Streak de 30 dias consecutivos |
+A aba Títulos pode sobrescrever os nomes sem alterar os IDs. Os 24 IDs ativos são documentados na seção [Conquistas (Títulos)](#conquistas-títulos) acima.
 
 ---
 

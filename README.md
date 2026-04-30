@@ -195,7 +195,7 @@ Usuário envia qualquer mensagem
 - `2` – Próximos eventos (até 3, mostra o mais próximo primeiro; registra confirmação na aba "Eventos")
 - `3` – Novo conteúdo (registra acesso na aba "Conteúdos")
 - `4` – Fazer uma denúncia (registra na aba "Denúncias" com protocolo)
-- `5` – Quero liderar (registra interesse na aba "Liderança")
+- `5` – Quero contribuir mais (registra interesse na aba "Liderança")
 - `6` – Meu painel (dashboard pessoal com posição e progresso)
 - `7` – Painel do bairro (mostra ranking da aba "Militantes")
 - `perfil` – Mostra pontos, nível e conquistas do militante
@@ -256,18 +256,36 @@ Registra denúncias enviadas. Colunas: `data`, `telefone`, `bairro`, `descricao`
 ### Aba `Títulos`
 Define os títulos/conquistas disponíveis no sistema de gamificação. Colunas: `id`, `nome`, `criterio`
 
-A aba é opcional — se ausente, o bot usa os defaults do código. Quando presente, os nomes e critérios exibidos nas mensagens vêm desta aba.
+A aba é opcional — se ausente, o bot usa os 24 títulos padrão do código. Quando presente, os nomes exibidos nas mensagens vêm desta aba (sem novo deploy).
+
+Os títulos são organizados em categorias com níveis progressivos (Base → Prata → Ouro):
 
 | ID | Nome padrão | Critério |
 |---|---|---|
-| 1 | Primeira Missão | Completar 1 missão |
-| 2 | Militante Ativo | Completar 7 missões |
-| 3 | Persistente | Completar 30 missões |
-| 4 | Influenciador | Compartilhar 20 conteúdos |
-| 5 | Mobilizador | Recrutar 3 membros |
-| 6 | Observador da Cidade | Enviar 3 denúncias |
-| 7 | Uma Semana Seguida | Streak de 7 dias consecutivos |
-| 8 | Mês Completo | Streak de 30 dias consecutivos |
+| 1 | Recruta | 1ª missão |
+| 2 | Ativista | 7 missões |
+| 9 | Ativista Prata | 20 missões |
+| 3 | Combatente | 30 missões |
+| 10 | Ativista Ouro | 50 missões |
+| 11 | Combatente Prata | 80 missões |
+| 12 | Combatente Ouro | 120 missões |
+| 13 | Veterano da Causa | 180 missões |
+| 7 | Semana em Campo | Streak 7 dias |
+| 14 | Semana em Campo Prata | Streak 14 dias |
+| 8 | Mês em Campo | Streak 30 dias |
+| 15 | Mês em Campo Ouro | Streak 60 dias |
+| 16 | Incansável | Streak 90 dias |
+| 4 | Porta-Voz | 20 conteúdos |
+| 17 | Porta-Voz Prata | 40 conteúdos |
+| 18 | Porta-Voz Ouro | 60 conteúdos |
+| 5 | Articulador | 3 recrutados |
+| 19 | Articulador Prata | 7 recrutados |
+| 20 | Articulador Ouro | 15 recrutados |
+| 6 | Fiscal das Ruas | 3 denúncias |
+| 21 | Fiscal Prata | 7 denúncias |
+| 22 | Fiscal Ouro | 15 denúncias |
+| 23 | Força do Movimento | 500 pts |
+| 24 | Pilar da Causa | 1000 pts |
 
 > **Importante:** A primeira linha de cada aba deve ser o cabeçalho (nomes das colunas). O bot começa a ler a partir da linha 2.
 

@@ -68,7 +68,7 @@ describe('MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA', () => {
   test('exibe nome da conquista e total de missões', () => {
     const msg = MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA('Primeira Missão', 1);
     expect(msg).toContain('Primeira Missão');
-    expect(msg).toContain('1 missões');
+    expect(msg).toContain('1 missão');
   });
 });
 

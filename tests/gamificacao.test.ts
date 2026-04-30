@@ -94,13 +94,13 @@ describe('verificarConquistas', () => {
     expect(conquistas).toContain('1');
   });
 
-  test('7 missões desbloqueia título 2 (Militante Ativo)', () => {
+  test('7 missões desbloqueia título 2 (Ativista)', () => {
     const conquistas = verificarConquistas(militanteComMissoes(7, { titulos: '1' }));
     expect(conquistas).toContain('2');
     expect(conquistas).not.toContain('1'); // já tinha
   });
 
-  test('30 missões desbloqueia título 3 (Persistente)', () => {
+  test('30 missões desbloqueia título 3 (Combatente)', () => {
     const conquistas = verificarConquistas(militanteComMissoes(30, { titulos: '1,2' }));
     expect(conquistas).toContain('3');
   });
@@ -110,21 +110,21 @@ describe('verificarConquistas', () => {
     expect(conquistas).not.toContain('1');
   });
 
-  test('20 conteúdos compartilhados → título 4 (Influenciador)', () => {
+  test('20 conteúdos compartilhados → título 4 (Porta-Voz)', () => {
     const conquistas = verificarConquistas(
       militanteComMissoes(1, { conteudosCompartilhados: 20, titulos: '1' })
     );
     expect(conquistas).toContain('4');
   });
 
-  test('3 militantes recrutados → título 5 (Mobilizador)', () => {
+  test('3 militantes recrutados → título 5 (Articulador)', () => {
     const conquistas = verificarConquistas(
       militanteComMissoes(1, { militantesRecrutados: 3, titulos: '1' })
     );
     expect(conquistas).toContain('5');
   });
 
-  test('3 denúncias enviadas → título 6 (Observador da Cidade)', () => {
+  test('3 denúncias enviadas → título 6 (Fiscal das Ruas)', () => {
     const conquistas = verificarConquistas(
       militanteComMissoes(1, { denunciasEnviadas: 3, titulos: '1' })
     );
@@ -145,12 +145,77 @@ describe('verificarConquistas', () => {
     expect(conquistas).toContain('2');
     expect(conquistas).toContain('6');
   });
+
+  test('20 missões desbloqueia título 9 (Ativista Prata)', () => {
+    const c = verificarConquistas(militanteComMissoes(20, { titulos: '1,2' }));
+    expect(c).toContain('9');
+  });
+
+  test('50 missões desbloqueia título 10 (Ativista Ouro)', () => {
+    const c = verificarConquistas(militanteComMissoes(50, { titulos: '1,2,9,3' }));
+    expect(c).toContain('10');
+  });
+
+  test('80 missões desbloqueia título 11 (Combatente Prata)', () => {
+    const c = verificarConquistas(militanteComMissoes(80, { titulos: '1,2,9,3,10' }));
+    expect(c).toContain('11');
+  });
+
+  test('120 missões desbloqueia título 12 (Combatente Ouro)', () => {
+    const c = verificarConquistas(militanteComMissoes(120, { titulos: '1,2,9,3,10,11' }));
+    expect(c).toContain('12');
+  });
+
+  test('180 missões desbloqueia título 13 (Veterano da Causa)', () => {
+    const c = verificarConquistas(militanteComMissoes(180, { titulos: '1,2,9,3,10,11,12' }));
+    expect(c).toContain('13');
+  });
+
+  test('40 conteúdos → título 17 (Porta-Voz Prata)', () => {
+    const c = verificarConquistas(militanteComMissoes(1, { conteudosCompartilhados: 40, titulos: '1,4' }));
+    expect(c).toContain('17');
+  });
+
+  test('60 conteúdos → título 18 (Porta-Voz Ouro)', () => {
+    const c = verificarConquistas(militanteComMissoes(1, { conteudosCompartilhados: 60, titulos: '1,4,17' }));
+    expect(c).toContain('18');
+  });
+
+  test('7 recrutados → título 19 (Articulador Prata)', () => {
+    const c = verificarConquistas(militanteComMissoes(1, { militantesRecrutados: 7, titulos: '1,5' }));
+    expect(c).toContain('19');
+  });
+
+  test('15 recrutados → título 20 (Articulador Ouro)', () => {
+    const c = verificarConquistas(militanteComMissoes(1, { militantesRecrutados: 15, titulos: '1,5,19' }));
+    expect(c).toContain('20');
+  });
+
+  test('7 denúncias → título 21 (Fiscal Prata)', () => {
+    const c = verificarConquistas(militanteComMissoes(1, { denunciasEnviadas: 7, titulos: '1,6' }));
+    expect(c).toContain('21');
+  });
+
+  test('15 denúncias → título 22 (Fiscal Ouro)', () => {
+    const c = verificarConquistas(militanteComMissoes(1, { denunciasEnviadas: 15, titulos: '1,6,21' }));
+    expect(c).toContain('22');
+  });
+
+  test('500 pontos → título 23 (Força do Movimento)', () => {
+    const c = verificarConquistas(militanteComMissoes(0, { pontos: 500, titulos: '' }));
+    expect(c).toContain('23');
+  });
+
+  test('1000 pontos → título 24 (Pilar da Causa)', () => {
+    const c = verificarConquistas(militanteComMissoes(0, { pontos: 1000, titulos: '23' }));
+    expect(c).toContain('24');
+  });
 });
 
 // ─── verificarStreakMilestones ────────────────────────────────────────────────
 
 describe('verificarStreakMilestones', () => {
-  test('streak 7 desbloqueia título 7 (Uma Semana Seguida)', () => {
+  test('streak 7 desbloqueia título 7 (Semana em Campo)', () => {
     expect(verificarStreakMilestones('1,2', 7)).toContain('7');
   });
 
@@ -164,21 +229,37 @@ describe('verificarStreakMilestones', () => {
     expect(r).not.toContain('8');
   });
 
-  test('streak 30 desbloqueia título 8 (Mês Completo)', () => {
+  test('streak 30 desbloqueia título 8 (Mês em Campo)', () => {
     const r = verificarStreakMilestones('1,2,7', 30);
     expect(r).toContain('8');
     expect(r).not.toContain('7'); // já possui
   });
 
-  test('streak 30+ sem título 7 anterior → só desbloqueia 8', () => {
-    // Streak pulou de 1 para 30 (teórico) — prioriza 8 sobre 7 (lógica else-if)
+  test('streak 30+ sem título 7 anterior → desbloqueia 7 e 8', () => {
+    // Ao atingir 30 dias sem ter os anteriores, recebe todos de uma vez
     const r = verificarStreakMilestones('1', 30);
+    expect(r).toContain('7');
     expect(r).toContain('8');
-    expect(r).not.toContain('7');
+  });
+
+  test('streak 14 desbloqueia título 14 (Semana em Campo Prata)', () => {
+    const r = verificarStreakMilestones('1,2,7', 14);
+    expect(r).toContain('14');
+    expect(r).not.toContain('7'); // já tem
+  });
+
+  test('streak 60 desbloqueia título 15 (Mês em Campo Ouro)', () => {
+    const r = verificarStreakMilestones('1,2,7,14,8', 60);
+    expect(r).toContain('15');
+  });
+
+  test('streak 90 desbloqueia título 16 (Incansável)', () => {
+    const r = verificarStreakMilestones('1,2,7,14,8,15', 90);
+    expect(r).toContain('16');
   });
 
   test('não duplica título já conquistado', () => {
     expect(verificarStreakMilestones('1,7', 7)).toHaveLength(0);
-    expect(verificarStreakMilestones('1,7,8', 30)).toHaveLength(0);
+    expect(verificarStreakMilestones('1,7,14,8,15,16', 90)).toHaveLength(0);
   });
 });

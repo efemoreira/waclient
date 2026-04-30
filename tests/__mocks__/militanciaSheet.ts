@@ -304,9 +304,16 @@ export async function obterTitulosSheet() { return {}; }
 
 export function resolverNomeTitulo(id: string): string {
   const nomes: Record<string, string> = {
-    '1': 'Primeira Missão', '2': 'Militante Ativo', '3': 'Persistente',
-    '4': 'Influenciador', '5': 'Mobilizador', '6': 'Observador da Cidade',
-    '7': 'Uma Semana Seguida', '8': 'Mês Completo',
+    '1': 'Recruta', '2': 'Ativista', '3': 'Combatente',
+    '4': 'Porta-Voz', '5': 'Articulador', '6': 'Fiscal das Ruas',
+    '7': 'Semana em Campo', '8': 'Mês em Campo',
+    '9': 'Ativista Prata', '10': 'Ativista Ouro',
+    '11': 'Combatente Prata', '12': 'Combatente Ouro', '13': 'Veterano da Causa',
+    '14': 'Semana em Campo Prata', '15': 'Mês em Campo Ouro', '16': 'Incansável',
+    '17': 'Porta-Voz Prata', '18': 'Porta-Voz Ouro',
+    '19': 'Articulador Prata', '20': 'Articulador Ouro',
+    '21': 'Fiscal Prata', '22': 'Fiscal Ouro',
+    '23': 'Força do Movimento', '24': 'Pilar da Causa',
   };
   return nomes[id] ?? `Título #${id}`;
 }
@@ -345,23 +352,55 @@ export function calcularPontosMissao(streak: number): number {
 export function verificarConquistas(m: MilitanteInfo): string[] {
   const ativos = new Set(m.titulos.split(',').map((s) => s.trim()).filter(Boolean));
   const novas: string[] = [];
-  if (m.missoesConcluidasTotal >= 1  && !ativos.has('1')) novas.push('1');
-  if (m.missoesConcluidasTotal >= 7  && !ativos.has('2')) novas.push('2');
-  if (m.missoesConcluidasTotal >= 30 && !ativos.has('3')) novas.push('3');
-  if ((m.conteudosCompartilhados || 0) >= 20 && !ativos.has('4')) novas.push('4');
-  if ((m.militantesRecrutados   || 0) >= 3  && !ativos.has('5')) novas.push('5');
-  if ((m.denunciasEnviadas      || 0) >= 3  && !ativos.has('6')) novas.push('6');
+
+  const mis = m.missoesConcluidasTotal;
+  if (mis >= 1   && !ativos.has('1'))  novas.push('1');
+  if (mis >= 7   && !ativos.has('2'))  novas.push('2');
+  if (mis >= 20  && !ativos.has('9'))  novas.push('9');
+  if (mis >= 30  && !ativos.has('3'))  novas.push('3');
+  if (mis >= 50  && !ativos.has('10')) novas.push('10');
+  if (mis >= 80  && !ativos.has('11')) novas.push('11');
+  if (mis >= 120 && !ativos.has('12')) novas.push('12');
+  if (mis >= 180 && !ativos.has('13')) novas.push('13');
+
+  const c = m.conteudosCompartilhados || 0;
+  if (c >= 20 && !ativos.has('4'))  novas.push('4');
+  if (c >= 40 && !ativos.has('17')) novas.push('17');
+  if (c >= 60 && !ativos.has('18')) novas.push('18');
+
+  const r = m.militantesRecrutados || 0;
+  if (r >= 3  && !ativos.has('5'))  novas.push('5');
+  if (r >= 7  && !ativos.has('19')) novas.push('19');
+  if (r >= 15 && !ativos.has('20')) novas.push('20');
+
+  const d = m.denunciasEnviadas || 0;
+  if (d >= 3  && !ativos.has('6'))  novas.push('6');
+  if (d >= 7  && !ativos.has('21')) novas.push('21');
+  if (d >= 15 && !ativos.has('22')) novas.push('22');
+
+  const p = m.pontos || 0;
+  if (p >= 500  && !ativos.has('23')) novas.push('23');
+  if (p >= 1000 && !ativos.has('24')) novas.push('24');
+
   return novas;
 }
 
 /**
- * Verifica conquistas por streak (IDs 7 e 8).
+ * Verifica conquistas por streak (IDs 7, 14, 8, 15, 16).
  * Chamada separadamente de verificarConquistas, como no código real.
  */
 export function verificarStreakMilestones(titulosAtuais: string, novoStreak: number): string[] {
   const ativos = new Set(titulosAtuais.split(',').map((s) => s.trim()).filter(Boolean));
   const novas: string[] = [];
-  if (novoStreak >= 30 && !ativos.has('8')) novas.push('8');
-  else if (novoStreak >= 7 && !ativos.has('7')) novas.push('7');
+  const milestones: Array<{ streak: number; id: string }> = [
+    { streak: 7,  id: '7'  },
+    { streak: 14, id: '14' },
+    { streak: 30, id: '8'  },
+    { streak: 60, id: '15' },
+    { streak: 90, id: '16' },
+  ];
+  for (const { streak, id } of milestones) {
+    if (novoStreak >= streak && !ativos.has(id)) novas.push(id);
+  }
   return novas;
 }

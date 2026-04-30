@@ -36,36 +36,38 @@ function proximoNivel(
 
 export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
-  WELCOME_FIRST_CONTACT: `👋 Esse é o canal direto com Felipe Moreira.
+  WELCOME_FIRST_CONTACT: `✊ Olá! Bem-vindo ao canal de *Felipe Moreira*.
 
-Sua participação aqui ajuda a transformar nosso país.
+Sua participação transforma a cidade. Cada ação conta!
 
-O que você quer fazer agora?
+O que você quer fazer?
 
-1️⃣ Participar da missão
+1️⃣ Entrar para a rede
 2️⃣ Ver conteúdos e eventos`,
 
   // ---- Segundo contato (retornou, ainda não cadastrado) ----
-  WELCOME_SECOND_CONTACT: `👋 Que bom ter você de volta!
+  WELCOME_SECOND_CONTACT: `👋 De volta por aqui!
 
-Você já começou a entrar para a missão — falta só um passo rápido para concluir.
+Você está a um passo de entrar para a rede — vale concluir!
 
-O que deseja agora?
-
-1️⃣ Concluir minha entrada na missão
-2️⃣ Ver novidades e próximo evento`,
+1️⃣ Concluir meu cadastro
+2️⃣ Ver novidades e eventos`,
 
   // ---- Mostrar conteúdo ou evento para não-cadastrados ----
   MOSTRAR_CONTEUDO: (conteudo: ConteudoInfo) => {
-    let msg = `📢 *Conteúdo publicado:*\n\n${conteudo.titulo}`;
+    const tipoLabel: Record<string, string> = {
+      instagram: '📸 Instagram', video: '🎬 Vídeo', youtube: '▶️ YouTube',
+      artigo: '📰 Artigo', tiktok: '📱 TikTok',
+    };
+    const tipo = tipoLabel[(conteudo.tipo ?? '').toLowerCase()] ?? '📢 Conteúdo';
+    let msg = `${tipo}\n\n*${conteudo.titulo}*`;
     if (conteudo.link) msg += `\n${conteudo.link}`;
-    if (conteudo.tipo) msg += `\n\n_Tipo: ${conteudo.tipo}_`;
-    msg += `\n\n---\nGostou? Encaminhe para 3 pessoas 📲`;
+    msg += `\n\n_Encaminhe para 3 pessoas e amplie o movimento_ 📲`;
     return msg;
   },
 
   MOSTRAR_EVENTO: (evento: EventoInfo) => {
-    let msg = `📅 Próximo evento:\n\n*${evento.nome}*`;
+    let msg = `📅 *${evento.nome}*`;
     if (evento.texto) msg += `\n\n${evento.texto}`;
     if (evento.data || evento.hora) {
       msg += '\n\n🗓';
@@ -76,24 +78,24 @@ O que deseja agora?
     return msg;
   },
 
-  MOSTRAR_NOVIDADES_FALLBACK: `📢 Não há novidades cadastradas no momento.
+  MOSTRAR_NOVIDADES_FALLBACK: `📢 Ainda não há novidades cadastradas.
 
-Assim que houver conteúdo novo ou eventos confirmados, você será um dos primeiros a saber!
+Em breve chegarão conteúdos e eventos — você será avisado!
 
-Se quiser participar mais ativamente, responda *1* para fazer seu cadastro. 💪`,
+Responda *1* para entrar e participar ativamente. 💪`,
 
   // Cadastro de novo militante
   WELCOME_NEW_USER: `✍️ Ótimo! Vamos ao cadastro.
 
 Qual é o seu *nome completo*?`,
 
-  PEDIR_BAIRRO: `👍 Perfeito, *{nome}*!
+  PEDIR_BAIRRO: `👍 Ótimo!
 
 Em qual *bairro* você mora?`,
 
   PEDIR_CIDADE: `📍 Quase lá!
 
-E qual é a sua *cidade*?`,
+Em qual *cidade* você mora?`,
 
   PEDIR_ORIGEM: `📱 *Última pergunta:*
 
@@ -104,13 +106,13 @@ Quem te trouxe para o movimento?
 
 _Digite *0* para pular._`,
 
-  CADASTRO_SUCESSO: (nome: string, posicao: number) => `🎉 *Bem-vindo ao movimento, *${nome}*!*
+  CADASTRO_SUCESSO: (nome: string, posicao: number) => `🎉 *Bem-vindo ao movimento, ${nome}!*
 
-Você é o *${posicao}º membro* da nossa rede. Sua participação faz diferença! 💪
+Você é o *${posicao}º membro* da nossa rede. Cada pessoa faz diferença! 💪
 
 ${MESSAGES_MILITANCIA.MENU_PERSONALIZADO(nome)}`,
 
-  ERRO_CADASTRO: `⚠️ Não consegui salvar essa informação. Por favor, tente enviar novamente.`,
+  ERRO_CADASTRO: `⚠️ Não consegui salvar. Por favor, tente enviar novamente.`,
 
   // Menu principal (personalizado para usuário cadastrado)
   MENU_PERSONALIZADO: (nome: string) => `👋 Olá, *${nome}*!
@@ -121,22 +123,22 @@ O que você quer fazer hoje?
 2️⃣ Próximos eventos
 3️⃣ Novo conteúdo
 4️⃣ Fazer uma denúncia
-5️⃣ Quero liderar
+5️⃣ Quero contribuir mais
 6️⃣ Meu painel
 7️⃣ Painel do bairro
 
-_Digite *perfil* para ver seus pontos e nível._`,
+_Digite *perfil* para ver seus pontos e conquistas._`,
 
   // Menu principal (sem nome, para compatibilidade e casos de uso genérico)
-  MENU: `👋 *Central da Militância*
+  MENU: `✊ *Central da Militância*
 
-O que você quer fazer hoje?
+O que você quer fazer?
 
 1️⃣ Missão do dia
 2️⃣ Próximos eventos
 3️⃣ Novo conteúdo
 4️⃣ Fazer uma denúncia
-5️⃣ Quero liderar
+5️⃣ Quero contribuir mais
 6️⃣ Meu painel
 7️⃣ Painel do bairro`,
 
@@ -154,40 +156,40 @@ Já concluiu?
 
   MISSAO_CONCLUIDA: (streakAtual: number, pontos: number, pontosGanhos: number) => {
     const bonus = pontosGanhos > 10 ? ` _(+${pontosGanhos - 10} bônus streak 🔥)_` : '';
-    let msg = `🏆 *Missão registrada!*\n\n+${pontosGanhos} pontos${bonus} · Total: *${pontos} pts*`;
-    if (streakAtual === 30) {
-      msg += `\n\n🔥 *30 dias seguidos! Você é uma lenda!* 🏆`;
+    let msg = `✅ *Missão feita!*\n\n+${pontosGanhos} pontos${bonus} · Total: *${pontos} pts*`;
+    if (streakAtual >= 90) {
+      msg += `\n\n🔥 *${streakAtual} dias consecutivos!* Você é uma lenda desta causa! 🏆`;
+    } else if (streakAtual >= 60) {
+      msg += `\n\n🔥 *${streakAtual} dias seguidos!* Dois meses de dedicação! 🏆`;
+    } else if (streakAtual === 30) {
+      msg += `\n\n🔥 *30 dias consecutivos!* Um mês completo — você é imparável! 🏆`;
     } else if (streakAtual === 7) {
-      msg += `\n\n🔥 *Uma semana seguida! Incrível!* Continue assim!`;
+      msg += `\n\n🔥 *Uma semana seguida!* Continue assim! 💪`;
     } else if (streakAtual > 1) {
-      msg += `\n\n🔥 Sequência: *${streakAtual} dias!*`;
+      msg += `\n\n🔥 *${streakAtual} dias seguidos!*`;
     } else {
       msg += `\n\n🔥 Sequência iniciada! Volte amanhã para continuar.`;
     }
-    msg += `\n\nDigite *menu* para ver outras opções.`;
+    msg += `\n\nDigite *menu* para continuar.`;
     return msg;
   },
 
-  NIVEL_SUBIU: (nomeNivel: string) => `🎉 *Parabéns!*
+  NIVEL_SUBIU: (nomeNivel: string) => `🚀 *Você subiu de nível!*
 
-Você subiu de nível.
+→ *${nomeNivel}*
 
-Novo nível: *${nomeNivel}* 🚀
+Cada missão cumprida constrói um futuro melhor. Continue! 💪`,
 
-Continue assim!`,
+  CONQUISTA_DESBLOQUEADA: (nomeConquista: string, missoesTotal: number) => {
+    const gram = missoesTotal === 1 ? 'missão' : 'missões';
+    return `🎖️ *Conquista desbloqueada!*\n\n*${nomeConquista}*\n\n${missoesTotal} ${gram} no seu histórico. Siga em frente! 💪`;
+  },
 
-  CONQUISTA_DESBLOQUEADA: (nomeConquista: string, missoesTotal: number) =>
-    `🏅 *Nova conquista desbloqueada!*
+  MISSAO_PENDENTE: `⏳ *Missão pendente.*
 
-*${nomeConquista}*
+Quando fizer, acesse *1 – Missão do dia* para registrar e ganhar seus pontos. 🎯
 
-Você completou ${missoesTotal} missões! Continue mobilizado! 💪`,
-
-  MISSAO_PENDENTE: `⏳ Anotado! Missão registrada como pendente.
-
-Quando concluir, acesse a opção *1 – Missão do dia* para marcar como feita e ganhar seus pontos. 🎯
-
-Digite *menu* para ver outras opções.`,
+Digite *menu* para continuar.`,
 
   // 2 - Eventos
   EVENTOS: (evento: EventoInfo) => {
@@ -199,14 +201,14 @@ Digite *menu* para ver outras opções.`,
       if (evento.hora) msg += ` às ${evento.hora}`;
     }
     if (evento.local) msg += `\n📍 ${evento.local}`;
-    msg += `\n\n---\nVocê vai participar?\n\n*1* – Sim, estarei lá! ✅\n*2* – Talvez, vou tentar 🤔`;
+    msg += `\n\n---\nVocê vai?\n\n*1* – Sim, estarei lá! ✅\n*2* – Talvez 🤔`;
     return msg;
   },
 
   EVENTO_CONFIRMADO: (confirmacao: 'sim' | 'talvez') =>
     confirmacao === 'sim'
-      ? `✅ Presença confirmada! Te vemos lá. 🎉\n\nDigite *menu* para ver outras opções.`
-      : `👍 Entendido! Registramos que você talvez apareça.\n\nFique atento — avisamos se houver novidades sobre o evento.\n\nDigite *menu* para ver outras opções.`,
+      ? `✅ *Presença confirmada!* +5 pontos 🎉\n\nNos vemos lá!\n\nDigite *menu* para continuar.`
+      : `👍 Registrado como *talvez*.\n\nFique atento — avisaremos sobre o evento.\n\nDigite *menu* para continuar.`,
 
   // 3 - Conteúdo
   CONTEUDO: (conteudoTexto: string) => `📢 *Novo Conteúdo*
@@ -214,40 +216,40 @@ Digite *menu* para ver outras opções.`,
 ${conteudoTexto}
 
 ---
-Gostou? Compartilhe com mais pessoas! 🔥
+Gostou? Compartilhe — cada divulgação fortalece o movimento! 🔥
 
-Digite *menu* para ver outras opções.`,
+Digite *menu* para continuar.`,
 
   // 4 - Denúncia
-  DENUNCIA_INICIO: `📢 *Enviar Denúncia*
+  DENUNCIA_INICIO: `� *Enviar Denúncia*
 
-Vamos registrar o problema. Quanto mais detalhes, melhor!
+Registrar um problema é um ato cívico. Obrigado!
 
-Em qual *bairro* o problema está ocorrendo?`,
+Em qual *bairro* está o problema?`,
 
-  PEDIR_DESCRICAO_DENUNCIA: `📝 Descreva o problema com detalhes:\n\n_O que está acontecendo? Onde exatamente? Há quanto tempo?_`,
+  PEDIR_DESCRICAO_DENUNCIA: `📝 *Descreva o problema com detalhes:*
+
+_O que é? Onde fica? Há quanto tempo?_`,
 
   PEDIR_FOTO_DENUNCIA: `📷 Tem alguma foto ou link (imagem, vídeo, notícia) que ilustre o problema?\n\nSe sim, envie agora. Se não, responda *não*.`,
 
-  DENUNCIA_REGISTRADA: (protocolo: string) => `✅ *Denúncia recebida!*
+  DENUNCIA_REGISTRADA: (protocolo: string) => `✅ *Denúncia registrada!*
 
-Protocolo: *#${protocolo}*
+🔖 Protocolo: *#${protocolo}*
 
-Sua mensagem foi registrada e será analisada pela equipe.
+Equipe notificada. Obrigado por fiscalizar sua comunidade! 🌟
 
-Obrigado por ajudar a melhorar sua comunidade. Cada denúncia faz diferença! 🌟
-
-Digite *menu* para ver outras opções.`,
+Digite *menu* para continuar.`,
 
   // 5 - Quero liderar
-  LIDERANCA_AGRADECIMENTO: `🙌 Que ótimo! Pessoas engajadas são o coração do movimento.
+  LIDERANCA_AGRADECIMENTO: `🙌 *Que atitude!*
 
-Escolha como você quer contribuir:`,
+Você é o tipo de pessoa que faz o movimento crescer. Como quer contribuir?`,
 
   LIDERANCA_OPCOES: `1️⃣ Fazer uma doação financeira
 2️⃣ Organizar reuniões no meu bairro
 3️⃣ Oferecer minha experiência profissional
-4️⃣ Participar de pesquisas e planejamento estratégico`,
+4️⃣ Participar de pesquisas e estratégia`,
 
   // Keep for backward compatibility (existing code that imports LIDERANCA_MENU will still compile)
   LIDERANCA_MENU: `🙏 Obrigado por ajudar!
@@ -258,13 +260,13 @@ Curtir, comentar e compartilhar conteúdos já faz muita diferença para o movim
 
 (Exemplo: fins de semana, noites, integral, etc.)`,
 
-  LIDERANCA_REGISTRADA: `🌟 *Registrado!*
+  LIDERANCA_REGISTRADA: `✅ *Registrado!*
 
-Vamos entrar em contato em breve para alinhar os próximos passos com você.
+Entraremos em contato em breve para alinhar os próximos passos.
 
 Obrigado por querer fazer mais pelo movimento! 💪
 
-Digite *menu* para ver outras opções.`,
+Digite *menu* para continuar.`,
 
   // 6 - Dashboard
   DASHBOARD: (params: {
@@ -282,31 +284,26 @@ Digite *menu* para ver outras opções.`,
     const prox = proximoNivel(params.nivel, params.missoesConcluidasTotal);
     let msg = `📊 *Seu progresso*
 
-👤 ${params.nome}
-
+👤 *${params.nome}*
 🎖️ Nível: *${params.nomeNivel}*
-🎯 Missões concluídas: *${params.missoesConcluidasTotal}*
+💰 *${params.pontos} pts*
+🎯 ${params.missoesConcluidasTotal} missões concluídas
+🔥 Sequência: *${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}*
 
-🏘 Seu bairro: *${params.bairro}*
-👥 Pessoas no seu bairro: ${params.militantesNoBairro}
-📍 Sua posição no bairro: *${ordinal(params.posicaoNoBairro)}*
-🌐 Posição geral: ${ordinal(params.posicaoGeral)}
-
-🔥 Sequência atual: *${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}*`;
+🏥 Bairro *${params.bairro}*: ${ordinal(params.posicaoNoBairro)} lugar (${params.militantesNoBairro} militantes)
+🌐 Posição geral: *${ordinal(params.posicaoGeral)}*`;
 
     if (prox && prox.missoesRestantes > 0) {
-      msg += `\n\n⬆️ Próximo nível: *${prox.nome}*\n🔢 Faltam ${prox.missoesRestantes} missões`;
+      msg += `\n\n⬆️ Próximo: *${prox.nome}*\nFaltam ${prox.missoesRestantes} missões`;
     }
 
-    msg += `\n\nDigite *menu* para voltar.`;
+    msg += `\n\nDigite *menu* para continuar.`;
     return msg;
   },
 
-  DASHBOARD_ERRO: `⚠️ Não foi possível carregar o dashboard no momento.
+  DASHBOARD_ERRO: `⚠️ Não foi possível carregar o painel. Tente novamente.
 
-Tente novamente mais tarde.
-
-Digite *menu* para ver outras opções.`,
+Digite *menu* para continuar.`,
 
   PAINEL_BAIRRO_PROMPT: `📍 *Painel do Bairro*
 
@@ -324,15 +321,14 @@ _Pode ser o seu ou qualquer outro da cidade._`,
     nivelBairro: number;
     missoesTotais: number;
     pontosTotais: number;
-  }) => `📍 *PAINEL DO BAIRRO – ${params.bairro.toUpperCase()}*
+  }) => `🏡 *PAINEL DO BAIRRO – ${params.bairro.toUpperCase()}*
 
-🏨 Nível do bairro: *${params.nivelBairro}*
-⭐ Pontos acumulados: *${params.pontosTotais} pts*
+📊 Nível do bairro: *${params.nivelBairro}* · ⭐ *${params.pontosTotais} pts*
 🎯 Missões totais: ${params.missoesTotais}
 
 👥 Militantes ativos: ${params.militantesAtivos}
-🎯 Missões concluídas essa semana: ${params.missoesConcluidasSemana}
-⭐ Nível médio: ${params.nivelMedio}${params.lider ? `\n👑 Líder responsável: ${params.lider}` : ''}
+📅 Missões essa semana: ${params.missoesConcluidasSemana}
+🏆 Nível médio: ${params.nivelMedio}${params.lider ? `\n👑 Líder responsável: ${params.lider}` : ''}
 
 ---
 🏆 *Ranking Geral de Bairros:*`,
@@ -345,11 +341,9 @@ _Pode ser o seu ou qualquer outro da cidade._`,
       .join('\n');
   },
 
-  PAINEL_ERRO: `⚠️ Não foi possível carregar o painel do bairro no momento.
+  PAINEL_ERRO: `⚠️ Não foi possível carregar o painel do bairro. Tente novamente.
 
-Tente novamente mais tarde.
-
-Digite *menu* para ver outras opções.`,
+Digite *menu* para continuar.`,
 
   // Perfil do militante
   PERFIL: (params: {
@@ -365,27 +359,26 @@ Digite *menu* para ver outras opções.`,
     const prox = proximoNivel(params.nivel, params.missoesConcluidasTotal);
     let msg = `⭐ *Seu Perfil*
 
-👤 Nome: ${params.nome}
-📍 Bairro: ${params.bairro}
-🎖️ Nível: ${params.nivel} – ${params.nomeNivel}
-🎯 Missões concluídas: ${params.missoesConcluidasTotal}
-🔥 Sequência atual: ${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}`;
+👤 *${params.nome}*  |  📍 ${params.bairro}
+🎖️ Nível ${params.nivel}: *${params.nomeNivel}*
+💰 *${params.pontos} pts*
+🎯 ${params.missoesConcluidasTotal} missões  ·  🔥 ${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}`;
 
     if (params.titulos) {
-      msg += `\n🏅 Conquistas: ${params.titulos}`;
+      msg += `\n\n🏅 *Conquistas:*\n${params.titulos}`;
     }
 
     if (prox && prox.missoesRestantes > 0) {
-      msg += `\n\n⬆️ Próximo nível: *${prox.nome}*\nFaltam ${prox.missoesRestantes} missões`;
+      msg += `\n\n⬆️ Próximo: *${prox.nome}*\nFaltam ${prox.missoesRestantes} missões`;
     }
 
     msg += `\n\n*Níveis:*
-• Nível 1 – Simpatizante: 0 missões
-• Nível 2 – Militante: 5 missões
-• Nível 3 – Militante Ativo: 15 missões
-• Nível 4 – Mobilizador: 40 missões
-• Nível 5 – Líder de Bairro: 80 missões
-• Nível 6 – Coordenador: 150 missões`;
+• 1 – Simpatizante: 0 missões
+• 2 – Militante: 5 missões
+• 3 – Militante Ativo: 15 missões
+• 4 – Mobilizador: 40 missões
+• 5 – Líder de Bairro: 80 missões
+• 6 – Coordenador: 150 missões`;
 
     return msg;
   },
