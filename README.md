@@ -192,11 +192,12 @@ Usuário envia qualquer mensagem
 
 **Menu principal (militante cadastrado):**
 - `1` – Missão do dia (registra resposta na aba "Missões")
-- `2` – Próximos eventos (registra confirmação na aba "Eventos")
+- `2` – Próximos eventos (até 3, mostra o mais próximo primeiro; registra confirmação na aba "Eventos")
 - `3` – Novo conteúdo (registra acesso na aba "Conteúdos")
-- `4` – Quero liderar (registra interesse na aba "Liderança")
-- `5` – Painel do bairro (mostra ranking da aba "Militantes")
-- `6` – Fazer uma denúncia (registra na aba "Denúncias")
+- `4` – Fazer uma denúncia (registra na aba "Denúncias" com protocolo)
+- `5` – Quero liderar (registra interesse na aba "Liderança")
+- `6` – Meu painel (dashboard pessoal com posição e progresso)
+- `7` – Painel do bairro (mostra ranking da aba "Militantes")
 - `perfil` – Mostra pontos, nível e conquistas do militante
 
 **Stages (fluxos multi-passo):**
@@ -208,7 +209,6 @@ Usuário envia qualquer mensagem
 | `lideranca_area` | Aguardando escolha de área de atuação |
 | `denuncia_bairro` | Aguardando bairro da denúncia |
 | `denuncia_descricao` | Aguardando descrição da denúncia |
-| `denuncia_foto` | Aguardando link de foto da denúncia |
 | `painel_bairro` | Aguardando nome do bairro para o painel |
 
 ---
@@ -242,16 +242,32 @@ Cada linha representa um militante cadastrado. **Crie a planilha com esta ordem 
 Cada linha = uma missão do dia. Colunas: `data`, `missao`, `concluiram` (array de telefones separados por vírgula)
 
 ### Aba `Conteúdos`
-Registra acessos a conteúdos. Colunas: `data`, `telefone`, `conteudo_acessado`, `tipo`
+Combina catálogo e registro de acessos. Colunas: `data`, `telefone` (vazio = linha de catálogo), `conteudo`, `link`, `tipo`
 
 ### Aba `Eventos`
-Cada linha = um evento. Colunas: `nome`, `data`, `local`, `confirmacoes` (array de telefones separados por vírgula dos que confirmaram presença)
+Cada linha = um evento. Colunas: `nome`, `texto`, `data` (dd/mm/aaaa), `hora`, `local`, `confirmacoes` (array de telefones dos que confirmaram presença)
 
 ### Aba `Liderança`
 Registra interesse em liderar. Colunas: `data`, `nome`, `telefone`, `bairro`, `area_interesse`, `disponibilidade`
 
 ### Aba `Denúncias`
-Registra denúncias enviadas. Colunas: `data`, `telefone`, `bairro`, `descricao` (sem coluna de mídia — o bot não processa imagens)
+Registra denúncias enviadas. Colunas: `data`, `telefone`, `bairro`, `descricao`, `protocolo`
+
+### Aba `Títulos`
+Define os títulos/conquistas disponíveis no sistema de gamificação. Colunas: `id`, `nome`, `criterio`
+
+A aba é opcional — se ausente, o bot usa os defaults do código. Quando presente, os nomes e critérios exibidos nas mensagens vêm desta aba.
+
+| ID | Nome padrão | Critério |
+|---|---|---|
+| 1 | Primeira Missão | Completar 1 missão |
+| 2 | Militante Ativo | Completar 7 missões |
+| 3 | Persistente | Completar 30 missões |
+| 4 | Influenciador | Compartilhar 20 conteúdos |
+| 5 | Mobilizador | Recrutar 3 membros |
+| 6 | Observador da Cidade | Enviar 3 denúncias |
+| 7 | Uma Semana Seguida | Streak de 7 dias consecutivos |
+| 8 | Mês Completo | Streak de 30 dias consecutivos |
 
 > **Importante:** A primeira linha de cada aba deve ser o cabeçalho (nomes das colunas). O bot começa a ler a partir da linha 2.
 

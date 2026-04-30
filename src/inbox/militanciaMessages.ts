@@ -37,7 +37,7 @@ function proximoNivel(
 export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
   WELCOME_FIRST_CONTACT: `👋 Esse é o canal direto com Felipe Moreira.
-  
+
 Sua participação aqui ajuda a transformar nosso país.
 
 O que você quer fazer agora?
@@ -57,9 +57,10 @@ O que deseja agora?
 
   // ---- Mostrar conteúdo ou evento para não-cadastrados ----
   MOSTRAR_CONTEUDO: (conteudo: ConteudoInfo) => {
-    let msg = `📢 Último conteúdo publicado:\n\n${conteudo.titulo}`;
+    let msg = `📢 *Conteúdo publicado:*\n\n${conteudo.titulo}`;
     if (conteudo.link) msg += `\n${conteudo.link}`;
     if (conteudo.tipo) msg += `\n\n_Tipo: ${conteudo.tipo}_`;
+    msg += `\n\n---\nGostou? Encaminhe para 3 pessoas 📲`;
     return msg;
   },
 
@@ -94,9 +95,9 @@ Em qual *bairro* você mora?`,
 
 E qual é a sua *cidade*?`,
 
-  CADASTRO_SUCESSO: (nome: string) => `🎉 *Cadastro concluído!*
+  CADASTRO_SUCESSO: (nome: string, posicao: number) => `🎉 *Bem-vindo ao movimento, *${nome}*!*
 
-Bem-vindo, *${nome}*! Você já faz parte da nossa militância. 💪
+Você é o *${posicao}º membro* da nossa rede. Sua participação faz diferença! 💪
 
 ${MESSAGES_MILITANCIA.MENU_PERSONALIZADO(nome)}`,
 
@@ -142,14 +143,19 @@ Já concluiu?
 ⏳ *Ainda não* — para registrar e voltar depois`,
 
 
-  MISSAO_CONCLUIDA: (streakAtual: number) => {
-    let msg = `🏆 *Parabéns!* Missão registrada com sucesso!\n\nVocê ganhou *10 pontos* por concluir a missão de hoje! 🎯`;
-    if (streakAtual > 1) {
-      msg += `\n\n🔥 Sequência atual: *${streakAtual} dias!*`;
+  MISSAO_CONCLUIDA: (streakAtual: number, pontos: number, pontosGanhos: number) => {
+    const bonus = pontosGanhos > 10 ? ` _(+${pontosGanhos - 10} bônus streak 🔥)_` : '';
+    let msg = `🏆 *Missão registrada!*\n\n+${pontosGanhos} pontos${bonus} · Total: *${pontos} pts*`;
+    if (streakAtual === 30) {
+      msg += `\n\n🔥 *30 dias seguidos! Você é uma lenda!* 🏆`;
+    } else if (streakAtual === 7) {
+      msg += `\n\n🔥 *Uma semana seguida! Incrível!* Continue assim!`;
+    } else if (streakAtual > 1) {
+      msg += `\n\n🔥 Sequência: *${streakAtual} dias!*`;
     } else {
       msg += `\n\n🔥 Sequência iniciada! Volte amanhã para continuar.`;
     }
-    msg += `\n\nContinue engajado e acumule mais pontos!\n\nDigite *menu* para ver outras opções.`;
+    msg += `\n\nDigite *menu* para ver outras opções.`;
     return msg;
   },
 
@@ -214,7 +220,9 @@ Em qual *bairro* o problema está ocorrendo?`,
 
   PEDIR_FOTO_DENUNCIA: `📷 Tem alguma foto ou link (imagem, vídeo, notícia) que ilustre o problema?\n\nSe sim, envie agora. Se não, responda *não*.`,
 
-  DENUNCIA_REGISTRADA: `✅ *Denúncia recebida!*
+  DENUNCIA_REGISTRADA: (protocolo: string) => `✅ *Denúncia recebida!*
+
+Protocolo: *#${protocolo}*
 
 Sua mensagem foi registrada e será analisada pela equipe.
 
@@ -306,10 +314,12 @@ _Pode ser o seu ou qualquer outro da cidade._`,
     lider?: string;
     nivelBairro: number;
     missoesTotais: number;
+    pontosTotais: number;
   }) => `📍 *PAINEL DO BAIRRO – ${params.bairro.toUpperCase()}*
 
-🏘 Nível do bairro: *${params.nivelBairro}*
-🎯 Missões totais: *${params.missoesTotais}*
+🏨 Nível do bairro: *${params.nivelBairro}*
+⭐ Pontos acumulados: *${params.pontosTotais} pts*
+🎯 Missões totais: ${params.missoesTotais}
 
 👥 Militantes ativos: ${params.militantesAtivos}
 🎯 Missões concluídas essa semana: ${params.missoesConcluidasSemana}
@@ -318,11 +328,11 @@ _Pode ser o seu ou qualquer outro da cidade._`,
 ---
 🏆 *Ranking Geral de Bairros:*`,
 
-  PAINEL_RANKING: (ranking: Array<{ bairro: string; missoes: number }>) => {
+  PAINEL_RANKING: (ranking: Array<{ bairro: string; pontos: number }>) => {
     if (!ranking.length) return 'Nenhum dado disponível ainda.';
     const medalhas = ['🥇', '🥈', '🥉'];
     return ranking
-      .map((r, i) => `${medalhas[i] || `${i + 1}º`} ${r.bairro} – ${r.missoes} missões`)
+      .map((r, i) => `${medalhas[i] || `${i + 1}º`} ${r.bairro} – ${r.pontos} pts`)
       .join('\n');
   },
 

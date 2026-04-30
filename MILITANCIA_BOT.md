@@ -172,23 +172,29 @@ Funções exportadas para operações na planilha:
 | `buscarMilitante(celular)` | Busca militante pelo telefone (retorna `MilitanteInfo` ou `null`) |
 | `isCadastroCompleto(militante)` | Verifica se nome, bairro e cidade estão preenchidos |
 | `registrarContato(celular)` | Registra telefone na aba Militantes sem duplicar telefone já existente |
+| `contarMilitantes()` | Conta militantes com nome preenchido (para social proof no cadastro) |
 | `atualizarCamposMilitante(celular, campos)` | Atualiza nome/bairro/cidade em linha existente do telefone |
-| `atualizarUltimaInteracao(celular)` | Atualiza coluna G com a data de hoje |
-| `atualizarPontosENivel(celular, pontos)` | Incrementa pontos na coluna F |
-| `registrarRespostaMissao(celular, missao, status)` | Registra missão e atualiza gamificação |
+| `atualizarUltimaInteracao(celular)` | Atualiza coluna H com a data de hoje |
+| `atualizarPontosENivel(celular, pontos)` | Incrementa pontos na coluna G |
+| `registrarRespostaMissao(celular, missao)` | Registra missão e atualiza gamificação |
 | `registrarAcessoConteudo(...)` | Registra acesso na aba Conteúdos e incrementa contador |
 | `registrarConfirmacaoEvento(...)` | Registra confirmação na aba Eventos |
 | `registrarInteresseLideranca(...)` | Registra interesse na aba Liderança |
-| `registrarDenuncia(...)` | Registra denúncia na aba Denúncias |
+| `registrarDenuncia(...)` | Registra denúncia na aba Denúncias, retorna código de protocolo |
 | `obterDashboardPessoal(celular, bairro)` | Calcula posição no bairro e posição geral |
 | `obterPainelBairro(bairro)` | Agrega dados do bairro (militantes, missões, nível médio) |
 | `obterRankingBairros()` | Ordena bairros por missões totais |
-| `obterUltimoConteudo()` | Retorna último conteúdo publicado |
-| `obterProximoEvento()` | Retorna próximo evento cadastrado |
+| `obterMissaoDia()` | Retorna missão do dia da aba Missões (linha com data de hoje) |
+| `obterUltimoConteudo(filtroTipo?)` | Retorna último conteúdo publicado, com filtro opcional por tipo |
+| `obterProximoEvento()` | Retorna próximo evento futuro |
+| `obterProximosEventos(limite)` | Retorna até N eventos futuros do mais próximo ao mais distante |
+| `obterUltimosConteudosPorTipo()` | Retorna o último conteúdo de cada tipo distinto |
+| `obterTitulosSheet()` | Lê a aba Títulos; fallback para `TITULOS_PADRAO` |
+| `resolverNomeTitulo(id)` | Retorna nome do título por ID (rápido, sem I/O) |
 | `calcularNivel(missoes)` | Converte missões em nível numérico |
 | `nomeDoNivel(nivel)` | Retorna nome textual do nível |
 | `calcularNivelBairro(missoes)` | Nível coletivo do bairro |
-| `verificarConquistas(militante)` | Retorna lista de novas conquistas desbloqueadas |
+| `verificarConquistas(militante)` | Retorna IDs de novas conquistas desbloqueadas |
 
 ---
 
@@ -236,15 +242,15 @@ Cada linha representa uma missão do dia. A coluna `concluiram` armazena um arra
 
 > Variável: `GOOGLE_CONTEUDOS_SHEET_NAME` (padrão: `Conteúdos`)
 
-Biblioteca de conteúdos para compartilhamento, com rastreamento de acessos.
+Duplo propósito: catálogo de conteúdos (linhas sem telefone, inseridas pelo admin) e log de acessos (linhas com telefone, inseridas pelo bot).
 
 | Col | Variável | Descrição |
 |-----|----------|-----------|
-| A | `data_publicacao` | Data de publicação |
-| B | `titulo` | Título ou texto do conteúdo |
-| C | `link` | URL do conteúdo (opcional) |
-| D | `tipo` | Tipo: `post`, `video`, `imagem`, etc. |
-| E | `acessos` | Contador de acessos |
+| A | `data` | Data de publicação ou acesso |
+| B | `telefone` | Vazio = linha de catálogo; preenchido = log de acesso |
+| C | `conteudo` | Título ou texto do conteúdo |
+| D | `link` | URL do conteúdo (opcional) |
+| E | `tipo` | Tipo: `instagram`, `video`, `artigo`, etc. |
 
 ### Aba: Eventos
 
@@ -255,9 +261,11 @@ Cada linha representa um evento. A coluna `confirmacoes` armazena um array (list
 | Col | Variável | Descrição |
 |-----|----------|-----------|
 | A | `nome` | Nome do evento |
-| B | `data` | Data do evento |
-| C | `local` | Local do evento |
-| D | `confirmacoes` | Telefones separados por vírgula dos confirmados |
+| B | `texto` | Descrição ou corpo do evento (opcional) |
+| C | `data` | Data do evento (dd/mm/aaaa) |
+| D | `hora` | Horário (opcional, ex: `19h00`) |
+| E | `local` | Local do evento (opcional) |
+| F | `confirmacoes` | Telefones separados por vírgula dos confirmados |
 
 ### Aba: Liderança
 
@@ -286,7 +294,7 @@ Registra militantes interessados em assumir responsabilidades.
 
 > Variável: `GOOGLE_DENUNCIAS_SHEET_NAME` (padrão: `Denúncias`)
 
-Denúncias comunitárias enviadas pelos militantes. Não há coluna de mídia — o bot não processa imagens.
+Denúncias comunitárias enviadas pelos militantes. O bot gera automaticamente um código de protocolo único por denúncia.
 
 | Col | Variável | Descrição |
 |-----|----------|-----------|
@@ -294,6 +302,32 @@ Denúncias comunitárias enviadas pelos militantes. Não há coluna de mídia �
 | B | `telefone` | Telefone do militante |
 | C | `bairro` | Bairro relatado |
 | D | `descricao` | Descrição do problema |
+| E | `protocolo` | Código de protocolo gerado automaticamente (ex: `D260430-1435`) |
+
+### Aba: Títulos
+
+> Variável: `GOOGLE_TITULOS_SHEET_NAME` (padrão: `Títulos`)
+
+Opcional. Define os títulos/conquistas exibidos no sistema de gamificação. A coluna `titulos` da aba Militantes armazena apenas os **IDs** dos títulos conquistados (CSV). A resolução ID → nome é feita em tempo de execução — mudar o nome de um título nesta aba atualiza imediatamente o texto do bot, sem novo deploy.
+
+| Col | Variável | Descrição |
+|-----|----------|-----------|
+| A | `id` | Identificador numérico (1–8) |
+| B | `nome` | Nome exibido ao militante |
+| C | `criterio` | Descrição do critério de desbloqueio |
+
+**IDs fixos no código:**
+
+| ID | Nome padrão | Critério |
+|---|---|---|
+| 1 | Primeira Missão | ≥ 1 missão concluída |
+| 2 | Militante Ativo | ≥ 7 missões concluídas |
+| 3 | Persistente | ≥ 30 missões concluídas |
+| 4 | Influenciador | ≥ 20 conteúdos compartilhados |
+| 5 | Mobilizador | ≥ 3 membros recrutados |
+| 6 | Observador da Cidade | ≥ 3 denúncias enviadas |
+| 7 | Uma Semana Seguida | Streak de 7 dias consecutivos |
+| 8 | Mês Completo | Streak de 30 dias consecutivos |
 
 ---
 
@@ -367,7 +401,7 @@ militanciaStage?:
   | 'lideranca_disponibilidade' // legado — disponibilidade (fluxo antigo)
   | 'denuncia_bairro'         // coleta bairro da denúncia
   | 'denuncia_descricao'      // coleta descrição do problema
-  | 'denuncia_foto'           // coleta foto ou link de mídia
+
   | 'painel_bairro'           // coleta bairro para exibir painel coletivo
 ```
 
@@ -486,12 +520,8 @@ Bot → PEDIR_DESCRICAO_DENUNCIA
         ↓ (stage: denuncia_descricao)
 Usuário descreve o problema
         ↓
-Bot → PEDIR_FOTO_DENUNCIA ("Tem foto? Se não, responda 'não'")
-        ↓ (stage: denuncia_foto)
-Usuário envia foto/link ou "não"
-        ↓
-registrarDenuncia(celular, bairro, descricao, linkMidia?) → aba Denúncias
-Bot → DENUNCIA_REGISTRADA
+registrarDenuncia(celular, bairro, descricao) → aba Denúncias (retorna protocolo)
+Bot → DENUNCIA_REGISTRADA(protocolo) com código de protocolo
         ↓ (stage: undefined)
 ```
 

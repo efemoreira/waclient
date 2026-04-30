@@ -45,6 +45,9 @@ import {
   obterProximoEvento,
   obterProximosEventos,
   obterUltimosConteudosPorTipo,
+  obterMissaoDia,
+  contarMilitantes,
+  resolverNomeTitulo,
   obterDashboardPessoal,
   nomeDoNivel,
   type MilitanteInfo,
@@ -200,10 +203,11 @@ export class MilitanciaManager {
         atualizarDataCadastro(celular).catch(() => {});
         conversa.militanciaData = {};
       }
+      const posicao = ok ? await contarMilitantes() : 0;
       await this.client.sendMessage(
         celular,
         ok
-          ? MESSAGES_MILITANCIA.CADASTRO_SUCESSO(militante.nome)
+          ? MESSAGES_MILITANCIA.CADASTRO_SUCESSO(militante.nome, posicao)
           : MESSAGES_MILITANCIA.ERRO_CADASTRO
       );
       return true;
@@ -260,16 +264,16 @@ export class MilitanciaManager {
     switch (conversa.militanciaStage) {
       // ---- Mission response ----
       case 'missao_resposta': {
-        const missaoDia = config.militancia.missaoDia;
+        const missaoDia = conversa.militanciaData?.missao || config.militancia.missaoDia;
         const fezMissao = this.detectarRespostaMissao(textoNorm) === 'concluído';
         conversa.militanciaStage = undefined;
 
         if (fezMissao) {
           const resultado: MissaoResultado = await registrarRespostaMissao(celular, missaoDia);
-          // Base confirmation with streak
+          // Base confirmation with streak and points
           await this.client.sendMessage(
             celular,
-            MESSAGES_MILITANCIA.MISSAO_CONCLUIDA(resultado.streakAtual)
+            MESSAGES_MILITANCIA.MISSAO_CONCLUIDA(resultado.streakAtual, resultado.pontos, resultado.pontosGanhos)
           );
           // Level-up notification
           if (resultado.levelUp) {
@@ -278,11 +282,11 @@ export class MilitanciaManager {
               MESSAGES_MILITANCIA.NIVEL_SUBIU(nomeDoNivel(resultado.novoNivel))
             );
           }
-          // Achievement notifications
-          for (const conquista of resultado.novasConquistas) {
+          // Achievement notifications (IDs resolved to display names)
+          for (const id of resultado.novasConquistas) {
             await this.client.sendMessage(
               celular,
-              MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, resultado.missoesConcluidasTotal)
+              MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(resolverNomeTitulo(id), resultado.missoesConcluidasTotal)
             );
           }
         } else {
@@ -294,10 +298,10 @@ export class MilitanciaManager {
       // ---- Event confirmation ----
       case 'evento_confirmacao': {
         const nomeEvento = conversa.militanciaData?.evento || config.militancia.proximosEventos;
-        await registrarConfirmacaoEvento(celular, nomeEvento);
         const confirmacao: 'sim' | 'talvez' = ['1', 'sim', 'vou', 'vou sim', 'sim vou'].some((k) => textoNorm.includes(k))
           ? 'sim'
           : 'talvez';
+        await registrarConfirmacaoEvento(celular, nomeEvento, confirmacao === 'sim');
         conversa.militanciaStage = undefined;
         conversa.militanciaData = {};
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTO_CONFIRMADO(confirmacao));
@@ -354,10 +358,10 @@ export class MilitanciaManager {
       case 'denuncia_descricao': {
         const bairro = conversa.militanciaData.bairro || '';
         const descricao = texto.trim();
-        await registrarDenuncia(celular, bairro, descricao);
+        const protocolo = await registrarDenuncia(celular, bairro, descricao);
         conversa.militanciaStage = undefined;
         conversa.militanciaData = {};
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.DENUNCIA_REGISTRADA);
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.DENUNCIA_REGISTRADA(protocolo));
         return true;
       }
 
@@ -407,6 +411,13 @@ export class MilitanciaManager {
     }
 
     if (['perfil', 'meu perfil', 'pontos', 'nivel', 'nível'].includes(textoNorm)) {
+      // Resolve title IDs to display names for PERFIL message
+      const titulosNomes = (militante.titulos || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((id) => resolverNomeTitulo(id))
+        .join(', ');
       await this.client.sendMessage(
         celular,
         MESSAGES_MILITANCIA.PERFIL({
@@ -417,7 +428,7 @@ export class MilitanciaManager {
           pontos: militante.pontos,
           missoesConcluidasTotal: militante.missoesConcluidasTotal,
           streakAtual: militante.streakAtual,
-          titulos: militante.titulos,
+          titulos: titulosNomes,
         })
       );
       return false;
@@ -425,24 +436,32 @@ export class MilitanciaManager {
 
     // Option 1 - Mission
     if (['1', 'missao', 'missão', 'missao de hoje', 'missão de hoje'].includes(textoNorm)) {
+      const missaoSheet = await obterMissaoDia();
+      const missaoTexto = missaoSheet || config.militancia.missaoDia || '';
+      if (!missaoTexto) {
+        await this.client.sendMessage(celular, 'A missão de hoje ainda não foi configurada. Tente novamente mais tarde.\n\nDigite *menu* para ver outras opções.');
+        return false;
+      }
       conversa.militanciaStage = 'missao_resposta';
-      const missaoTexto = config.militancia.missaoDia;
+      conversa.militanciaData = { missao: missaoTexto };
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MISSAO(missaoTexto));
       return true;
     }
 
     // Option 2 - Events (up to 3 upcoming, nearest first)
     if (
-      ['2', 'eventos', 'evento', 'proximos eventos', 'óximos eventos'].includes(textoNorm)
+      ['2', 'eventos', 'evento', 'proximos eventos'].includes(textoNorm)
     ) {
       const eventos = await obterProximosEventos(3);
       if (!eventos.length) {
         await this.client.sendMessage(celular, 'Não há eventos próximos cadastrados no momento.\n\nDigite *menu* para ver outras opções.');
         return true;
       }
-      // Show each event; confirmation applies to the first (nearest) one
-      for (const ev of eventos) {
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTOS(ev));
+      // First event uses EVENTOS (includes confirmation prompt)
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTOS(eventos[0]));
+      // Subsequent events are shown without confirmation prompt
+      for (let i = 1; i < eventos.length; i++) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(eventos[i]));
       }
       conversa.militanciaStage = 'evento_confirmacao';
       conversa.militanciaData = { evento: eventos[0].nome };
@@ -457,6 +476,7 @@ export class MilitanciaManager {
       if (conteudos.length) {
         for (const c of conteudos) {
           await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO(c));
+          registrarAcessoConteudo(celular, c.titulo, c.tipo ?? '').catch(() => {});
         }
       } else {
         // Fallback to env var
@@ -592,44 +612,6 @@ export class MilitanciaManager {
       }
     } catch (err: any) {
       this.log(`❌ Erro ao enviar conteúdo e evento: ${err?.message}`);
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_NOVIDADES_FALLBACK);
-    }
-  }
-
-  /**
-   * Fetch and send latest content or nearest event to non-registered users
-   */
-  private async enviarNovidades(celular: string): Promise<void> {
-    try {
-      const [conteudo, evento] = await Promise.all([
-        obterUltimoConteudo('instagram'),
-        obterProximoEvento(),
-      ]);
-
-      if (conteudo) {
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO(conteudo));
-      } else if (evento) {
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(evento));
-      } else {
-        // Fall back to env-var content
-        const conteudoTexto = config.militancia.novoConteudo;
-        const eventosTexto = config.militancia.proximosEventos;
-        if (conteudoTexto) {
-          await this.client.sendMessage(
-            celular,
-            MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO({ titulo: conteudoTexto })
-          );
-        } else if (eventosTexto) {
-          await this.client.sendMessage(
-            celular,
-            MESSAGES_MILITANCIA.MOSTRAR_EVENTO({ nome: eventosTexto })
-          );
-        } else {
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_NOVIDADES_FALLBACK);
-        }
-      }
-    } catch (err: any) {
-      this.log(`❌ Erro ao enviar novidades: ${err?.message}`);
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_NOVIDADES_FALLBACK);
     }
   }

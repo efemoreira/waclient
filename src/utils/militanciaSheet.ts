@@ -26,6 +26,7 @@ const SHEET_CONTEUDOS = process.env.GOOGLE_CONTEUDOS_SHEET_NAME || 'Conteúdos';
 const SHEET_EVENTOS = process.env.GOOGLE_EVENTOS_SHEET_NAME || 'Eventos';
 const SHEET_LIDERANCA = process.env.GOOGLE_LIDERANCA_SHEET_NAME || 'Liderança';
 const SHEET_DENUNCIAS = process.env.GOOGLE_DENUNCIAS_SHEET_NAME || 'Denúncias';
+const SHEET_TITULOS = process.env.GOOGLE_TITULOS_SHEET_NAME || 'Títulos';
 
 /**
  * Normalizes Google service account private key
@@ -272,6 +273,24 @@ export async function registrarContato(celular: string): Promise<boolean> {
 }
 
 /**
+ * Returns the count of militants who have a name filled in (i.e. completed at
+ * least the first registration step). Used for social-proof messaging.
+ */
+export async function contarMilitantes(): Promise<number> {
+  try {
+    const rows = await getRows(SHEET_MILITANTES, 'A:B');
+    let count = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const nome = String(rows[i]?.[1] || '').trim(); // B(1) = nome
+      if (nome) count++;
+    }
+    return count || 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
  * Updates registration fields (nome, bairro, cidade) for an existing row
  * in the Militantes sheet. Used to increment registration step-by-step
  * without creating a second row.
@@ -367,6 +386,19 @@ export function calcularNivelBairro(missoesTotais: number): number {
 }
 
 /**
+ * Returns the points awarded for completing a mission based on current streak.
+ * Longer streaks earn bonus points as a multiplier reward:
+ *   streak  1–6  → 10 pts (base)
+ *   streak  7–29 → 15 pts (+5 streak bonus)
+ *   streak  30+  → 20 pts (+10 streak bonus)
+ */
+export function calcularPontosMissao(streak: number): number {
+  if (streak >= 30) return 20;
+  if (streak >= 7) return 15;
+  return 10;
+}
+
+/**
  * Checks if a date string (dd/mm/yyyy, Brazilian format) represents yesterday
  * in the America/Sao_Paulo timezone.
  */
@@ -395,7 +427,7 @@ export async function atualizarPontosENivel(celular: string, pontos: number): Pr
   const auth = getAuth();
   if (!auth) return;
   try {
-    const rows = await getRows(SHEET_MILITANTES, 'A:G');
+    const rows = await getRows(SHEET_MILITANTES, 'A:H');
     const cel = celular.replace(/\D/g, '');
     const sheets = google.sheets({ version: 'v4', auth });
 
@@ -404,14 +436,14 @@ export async function atualizarPontosENivel(celular: string, pontos: number): Pr
       const rowCel = String(row[2] || '').replace(/\D/g, '');
       if (rowCel === cel) {
         const targetRow = i + 1;
-        const pontosAtual = Number(row[5] || 0);
+        const pontosAtual = Number(row[6] || 0);  // G(6) = pontos
         const novosPontos = pontosAtual + pontos;
 
-        // Only update pontos (col F). Level is now mission-based and managed
+        // Only update pontos (col G). Level is now mission-based and managed
         // by atualizarMissoesStreakNivel.
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: `${SHEET_MILITANTES}!F${targetRow}`,
+          range: `${SHEET_MILITANTES}!G${targetRow}`,
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [[novosPontos]] },
         });
@@ -428,7 +460,7 @@ export async function atualizarUltimaInteracao(celular: string): Promise<void> {
   const auth = getAuth();
   if (!auth) return;
   try {
-    const rows = await getRows(SHEET_MILITANTES, 'A:G');
+    const rows = await getRows(SHEET_MILITANTES, 'A:H');
     const cel = celular.replace(/\D/g, '');
     const sheets = google.sheets({ version: 'v4', auth });
 
@@ -439,7 +471,7 @@ export async function atualizarUltimaInteracao(celular: string): Promise<void> {
         const targetRow = i + 1;
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          range: `${SHEET_MILITANTES}!G${targetRow}`,
+          range: `${SHEET_MILITANTES}!H${targetRow}`,
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [[dataAtual()]] },
         });
@@ -485,6 +517,70 @@ export async function atualizarDataCadastro(celular: string): Promise<void> {
 
 // ---- Gamification: achievements, streak, mission-based level updates ----
 
+// ---- Title (achievement) system ----
+// Titles are identified by numeric string IDs. The display name and unlock
+// criteria are defined here as defaults and can be overridden via the Títulos
+// sheet (id | nome | criterio) without a code deploy.
+
+export type TituloInfo = {
+  id: string;
+  nome: string;
+  criterio: string;
+};
+
+export const TITULOS_PADRAO: Record<string, TituloInfo> = {
+  '1': { id: '1', nome: 'Primeira Missão',     criterio: 'Completar 1 missão' },
+  '2': { id: '2', nome: 'Militante Ativo',      criterio: 'Completar 7 missões' },
+  '3': { id: '3', nome: 'Persistente',          criterio: 'Completar 30 missões' },
+  '4': { id: '4', nome: 'Influenciador',        criterio: 'Compartilhar 20 conteúdos' },
+  '5': { id: '5', nome: 'Mobilizador',          criterio: 'Recrutar 3 membros' },
+  '6': { id: '6', nome: 'Observador da Cidade', criterio: 'Enviar 3 denúncias' },
+  '7': { id: '7', nome: 'Uma Semana Seguida',   criterio: 'Streak de 7 dias consecutivos' },
+  '8': { id: '8', nome: 'Mês Completo',         criterio: 'Streak de 30 dias consecutivos' },
+};
+
+/** Returns the display name for a title ID (falls back gracefully). */
+export function resolverNomeTitulo(id: string): string {
+  return TITULOS_PADRAO[id]?.nome || `Título #${id}`;
+}
+
+/**
+ * Reads the Títulos sheet and returns all defined titles.
+ * Sheet structure: [id, nome, criterio]
+ * Falls back to TITULOS_PADRAO if the sheet is absent or empty.
+ */
+export async function obterTitulosSheet(): Promise<TituloInfo[]> {
+  try {
+    const rows = await getRows(SHEET_TITULOS, 'A:C');
+    const result: TituloInfo[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const id = String(row[0] || '').trim();
+      const nome = String(row[1] || '').trim();
+      if (id && nome) {
+        result.push({ id, nome, criterio: String(row[2] || '').trim() });
+      }
+    }
+    return result.length ? result : Object.values(TITULOS_PADRAO);
+  } catch {
+    return Object.values(TITULOS_PADRAO);
+  }
+}
+
+/**
+ * Checks streak-based milestone titles (IDs 7 and 8).
+ * Called separately from verificarConquistas so it can use the post-update streak.
+ */
+function verificarStreakMilestones(titulosAtuais: string, novoStreak: number): string[] {
+  const conquistasAtivas = new Set(
+    titulosAtuais.split(',').map((s) => s.trim()).filter(Boolean)
+  );
+  const novas: string[] = [];
+  if (novoStreak >= 30 && !conquistasAtivas.has('8')) novas.push('8');
+  else if (novoStreak >= 7 && !conquistasAtivas.has('7')) novas.push('7');
+  return novas;
+}
+
 /**
  * Result returned after a mission is marked as completed.
  */
@@ -495,6 +591,8 @@ export type MissaoResultado = {
   novasConquistas: string[];
   streakAtual: number;
   missoesConcluidasTotal: number;
+  pontos: number;       // total pontos after this mission
+  pontosGanhos: number; // delta awarded for this mission (10, 15 or 20)
 };
 
 /**
@@ -509,15 +607,12 @@ export function verificarConquistas(militante: MilitanteInfo): string[] {
   const novas: string[] = [];
 
   const m = militante.missoesConcluidasTotal;
-  if (m >= 1 && !conquistasAtivas.has('Primeira missão')) novas.push('Primeira missão');
-  if (m >= 7 && !conquistasAtivas.has('Militante ativo')) novas.push('Militante ativo');
-  if (m >= 30 && !conquistasAtivas.has('Persistente')) novas.push('Persistente');
-  if ((militante.conteudosCompartilhados || 0) >= 20 && !conquistasAtivas.has('Influenciador'))
-    novas.push('Influenciador');
-  if ((militante.militantesRecrutados || 0) >= 3 && !conquistasAtivas.has('Mobilizador'))
-    novas.push('Mobilizador');
-  if ((militante.denunciasEnviadas || 0) >= 3 && !conquistasAtivas.has('Observador da cidade'))
-    novas.push('Observador da cidade');
+  if (m >= 1  && !conquistasAtivas.has('1')) novas.push('1');
+  if (m >= 7  && !conquistasAtivas.has('2')) novas.push('2');
+  if (m >= 30 && !conquistasAtivas.has('3')) novas.push('3');
+  if ((militante.conteudosCompartilhados || 0) >= 20 && !conquistasAtivas.has('4')) novas.push('4');
+  if ((militante.militantesRecrutados   || 0) >= 3  && !conquistasAtivas.has('5')) novas.push('5');
+  if ((militante.denunciasEnviadas      || 0) >= 3  && !conquistasAtivas.has('6')) novas.push('6');
 
   return novas;
 }
@@ -560,7 +655,8 @@ async function atualizarTitulos(celular: string, novosTitulos: string[]): Promis
 
 /**
  * Increments `missoes_concluidas` (col I), updates streak (col J + K),
- * recalculates level (col E) and records the latest interaction (col G).
+ * recalculates level (col F), awards streak-aware points (col G),
+ * and records the latest interaction (col H).
  * Returns the updated gamification state.
  */
 async function atualizarMissoesStreakNivel(celular: string): Promise<{
@@ -569,6 +665,8 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
   levelUp: boolean;
   streakAtual: number;
   missoesConcluidasTotal: number;
+  pontos: number;
+  pontosMissao: number;
   militante: MilitanteInfo | null;
 }> {
   const fallback = {
@@ -577,6 +675,8 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
     levelUp: false,
     streakAtual: 1,
     missoesConcluidasTotal: 1,
+    pontos: 0,
+    pontosMissao: 10,
     militante: null,
   };
   const auth = getAuth();
@@ -593,7 +693,7 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
       if (rowCel !== cel) continue;
 
       const targetRow = i + 1;
-      const nivelAnterior = Number(row[4] || 1);
+      const nivelAnterior = Number(row[5] || 1);  // F(5) = nivel
       const missoesPrev = Number(row[8] || 0);
       const streakPrev = Number(row[9] || 0);
       const ultimaMissaoData = String(row[10] || '').trim();
@@ -604,16 +704,22 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
       const levelUp = novoNivel > nivelAnterior;
       const hoje = dataAtual();
 
+      // Streak-aware dynamic points
+      const pontosMissao = calcularPontosMissao(novoStreak);
+      const pontosAtual = Number(row[6] || 0);  // G(6) = pontos
+      const novosPontos = pontosAtual + pontosMissao;
+
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SHEET_ID,
         requestBody: {
           valueInputOption: 'USER_ENTERED',
           data: [
-            { range: `${SHEET_MILITANTES}!E${targetRow}`, values: [[novoNivel]] },
-            { range: `${SHEET_MILITANTES}!G${targetRow}`, values: [[hoje]] },
-            { range: `${SHEET_MILITANTES}!I${targetRow}`, values: [[novasMissoes]] },
-            { range: `${SHEET_MILITANTES}!J${targetRow}`, values: [[novoStreak]] },
-            { range: `${SHEET_MILITANTES}!K${targetRow}`, values: [[hoje]] },
+            { range: `${SHEET_MILITANTES}!F${targetRow}`, values: [[novoNivel]] },     // F = nivel
+            { range: `${SHEET_MILITANTES}!G${targetRow}`, values: [[novosPontos]] },   // G = pontos
+            { range: `${SHEET_MILITANTES}!H${targetRow}`, values: [[hoje]] },          // H = ultima_interacao
+            { range: `${SHEET_MILITANTES}!I${targetRow}`, values: [[novasMissoes]] },  // I = missoes_concluidas
+            { range: `${SHEET_MILITANTES}!J${targetRow}`, values: [[novoStreak]] },    // J = streak_atual
+            { range: `${SHEET_MILITANTES}!K${targetRow}`, values: [[hoje]] },          // K = ultima_missao_data
           ],
         },
       });
@@ -622,11 +728,11 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
         dataInscricao: String(row[0] || ''),
         nome: String(row[1] || ''),
         celular: String(row[2] || ''),
-        bairro: String(row[3] || ''),
+        cidade: String(row[3] || ''),              // D(3) = cidade
+        bairro: String(row[4] || ''),              // E(4) = bairro
         nivel: novoNivel,
-        pontos: Number(row[5] || 0),
+        pontos: novosPontos,
         dataUltimaInteracao: hoje,
-        cidade: String(row[7] || ''),
         missoesConcluidasTotal: novasMissoes,
         streakAtual: novoStreak,
         ultimaMissaoData: hoje,
@@ -638,9 +744,9 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
 
       logger.info(
         'MilitanciaSheet',
-        `✅ Missão atualizada: ${celular} – missões: ${novasMissoes}, streak: ${novoStreak}, nível: ${novoNivel}`
+        `✅ Missão: ${celular} – missões: ${novasMissoes}, streak: ${novoStreak}, nível: ${novoNivel}, pontos: +${pontosMissao} (total: ${novosPontos})`
       );
-      return { nivelAnterior, novoNivel, levelUp, streakAtual: novoStreak, missoesConcluidasTotal: novasMissoes, militante };
+      return { nivelAnterior, novoNivel, levelUp, streakAtual: novoStreak, missoesConcluidasTotal: novasMissoes, pontos: novosPontos, pontosMissao, militante };
     }
 
     return fallback;
@@ -665,6 +771,8 @@ export async function registrarRespostaMissao(
     novasConquistas: [],
     streakAtual: 1,
     missoesConcluidasTotal: 0,
+    pontos: 0,
+    pontosGanhos: 10,
   };
   try {
     const auth = getAuth();
@@ -698,15 +806,16 @@ export async function registrarRespostaMissao(
       await appendRow(SHEET_MISSOES, [dataAtual(), missaoDia, cel]);
     }
 
-    // Update pontos (fire-and-forget)
-    atualizarPontosENivel(celular, 10).catch((e) =>
-      logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (non-critical): ${e?.message}`)
-    );
+    // Points are now computed inside atualizarMissoesStreakNivel with streak multiplier.
+    // No separate atualizarPontosENivel call needed.
 
     const resultado = await atualizarMissoesStreakNivel(celular);
     let novasConquistas: string[] = [];
     if (resultado.militante) {
-      novasConquistas = verificarConquistas(resultado.militante);
+      novasConquistas = [
+        ...verificarConquistas(resultado.militante),
+        ...verificarStreakMilestones(resultado.militante.titulos, resultado.streakAtual),
+      ];
       if (novasConquistas.length > 0) {
         await atualizarTitulos(celular, novasConquistas);
       }
@@ -719,6 +828,8 @@ export async function registrarRespostaMissao(
       novasConquistas,
       streakAtual: resultado.streakAtual,
       missoesConcluidasTotal: resultado.missoesConcluidasTotal,
+      pontos: resultado.pontos,
+      pontosGanhos: resultado.pontosMissao,
     };
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao registrar missão: ${err?.message}`);
@@ -769,7 +880,7 @@ export async function registrarAcessoConteudo(
     await appendRow(SHEET_CONTEUDOS, [dataAtual(), celular.replace(/\D/g, ''), conteudo, tipo]);
     // Update optional pontos and increment conteudos_compartilhados counter (col N)
     // Both are fire-and-forget; failures do not block content access registration
-    atualizarPontosENivel(celular, 5).catch((e) =>
+    atualizarPontosENivel(celular, 3).catch((e) =>
       logger.warn('MilitanciaSheet', `Erro ao atualizar pontos de conteúdo (non-critical): ${e?.message}`)
     );
     incrementarContador(celular, 'N').catch((e) =>
@@ -787,7 +898,8 @@ export async function registrarAcessoConteudo(
 
 export async function registrarConfirmacaoEvento(
   celular: string,
-  nomeEvento: string
+  nomeEvento: string,
+  confirmado = false
 ): Promise<void> {
   try {
     const auth = getAuth();
@@ -810,11 +922,21 @@ export async function registrarConfirmacaoEvento(
             requestBody: { values: [[lista.join(',')]] },
           });
           logger.info('MilitanciaSheet', `✅ Evento confirmado: ${cel} → ${nomeEvento}`);
+          if (confirmado) {
+            atualizarPontosENivel(celular, 5).catch((e) =>
+              logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (evento): ${e?.message}`)
+            );
+          }
           return;
         }
       }
       // Event row not found — create it
       await appendRow(SHEET_EVENTOS, [nomeEvento, '', '', '', '', cel]);
+      if (confirmado) {
+        atualizarPontosENivel(celular, 5).catch((e) =>
+          logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (evento): ${e?.message}`)
+        );
+      }
       logger.info('MilitanciaSheet', `✅ Evento criado e confirmado: ${cel} → ${nomeEvento}`);
     } else {
       await appendRow(SHEET_EVENTOS, [nomeEvento, '', '', '', '', cel]);
@@ -855,22 +977,31 @@ export async function registrarDenuncia(
   celular: string,
   bairro: string,
   descricao: string
-): Promise<void> {
+): Promise<string> {
+  // Generate a short protocol code: D + YYMMDD-HHMM
+  const agora = new Date();
+  const protocolo = `D${String(agora.getFullYear()).slice(-2)}${String(agora.getMonth() + 1).padStart(2, '0')}${String(agora.getDate()).padStart(2, '0')}-${String(agora.getHours()).padStart(2, '0')}${String(agora.getMinutes()).padStart(2, '0')}`;
   try {
     await appendRow(SHEET_DENUNCIAS, [
       dataAtual(),
       celular.replace(/\D/g, ''),
       bairro,
       descricao,
+      protocolo,
     ]);
     // Increment denuncias_enviadas counter (col M) – fire-and-forget
     incrementarContador(celular, 'M').catch((e) =>
       logger.warn('MilitanciaSheet', `Erro ao incrementar denuncias_enviadas (non-critical): ${e?.message}`)
     );
-    logger.info('MilitanciaSheet', `✅ Denúncia registrada: ${celular} - ${bairro}`);
+    // Award +8 pts for civic reporting – fire-and-forget
+    atualizarPontosENivel(celular, 8).catch((e) =>
+      logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (denúncia): ${e?.message}`)
+    );
+    logger.info('MilitanciaSheet', `✅ Denúncia registrada: ${celular} - ${bairro} (${protocolo})`);
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao registrar denúncia: ${err?.message}`);
   }
+  return protocolo;
 }
 
 // ---- Neighborhood panel and ranking ----
@@ -883,6 +1014,7 @@ export type PainelBairro = {
   lider?: string;
   nivelBairro: number;
   missoesTotais: number;
+  pontosTotais: number;  // sum of all members' pontos — main competitive metric
 };
 
 export async function obterPainelBairro(bairro: string): Promise<PainelBairro> {
@@ -893,16 +1025,18 @@ export async function obterPainelBairro(bairro: string): Promise<PainelBairro> {
     let militantesAtivos = 0;
     let somaNiveis = 0;
     let somaMissoes = 0;
+    let somaPontos = 0;
     let lider: string | undefined;
     const celsBairro = new Set<string>();
 
     for (let i = 1; i < militantes.length; i++) {
       const row = militantes[i] || [];
-      const rowBairro = String(row[3] || '').toLowerCase().trim();
+      const rowBairro = String(row[4] || '').toLowerCase().trim();  // E(4) = bairro
       if (rowBairro === bairroNorm) {
         militantesAtivos++;
-        const nivel = Number(row[4] || 1);
+        const nivel = Number(row[5] || 1);   // F(5) = nivel
         somaNiveis += nivel;
+        somaPontos += Number(row[6] || 0);   // G(6) = pontos
         // col I (index 8): missoes_concluidas
         somaMissoes += Number(row[8] || 0);
         const cel = String(row[2] || '').replace(/\D/g, '');
@@ -929,36 +1063,36 @@ export async function obterPainelBairro(bairro: string): Promise<PainelBairro> {
     const nivelBairro = calcularNivelBairro(somaMissoes);
     // Gamification rule: show at least 3 militants to avoid early demotivation
     const militantesDisplay = militantesAtivos <= 2 ? 3 : militantesAtivos;
-    return { bairro, militantesAtivos: militantesDisplay, missoesConcluidasSemana, nivelMedio, lider, nivelBairro, missoesTotais: somaMissoes };
+    return { bairro, militantesAtivos: militantesDisplay, missoesConcluidasSemana, nivelMedio, lider, nivelBairro, missoesTotais: somaMissoes, pontosTotais: somaPontos };
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao obter painel: ${err?.message}`);
-    return { bairro, militantesAtivos: 0, missoesConcluidasSemana: 0, nivelMedio: 0, nivelBairro: 0, missoesTotais: 0 };
+    return { bairro, militantesAtivos: 0, missoesConcluidasSemana: 0, nivelMedio: 0, nivelBairro: 0, missoesTotais: 0, pontosTotais: 0 };
   }
 }
 
 export type RankingBairro = {
   bairro: string;
-  missoes: number;
+  pontos: number;  // sum of all members' pontos
 };
 
 export async function obterRankingBairros(): Promise<RankingBairro[]> {
   try {
-    // Use missoes_concluidas (col I, index 8) directly from the Militantes sheet
-    const militantes = await getRows(SHEET_MILITANTES, 'A:I');
+    // Use pontos (col G, index 6) from the Militantes sheet — points reflect diverse engagement
+    const militantes = await getRows(SHEET_MILITANTES, 'A:G');
 
-    const bairroMissoes = new Map<string, number>();
+    const bairroPontos = new Map<string, number>();
     for (let i = 1; i < militantes.length; i++) {
       const row = militantes[i] || [];
-      const b = String(row[3] || '').trim();
-      const missoes = Number(row[8] || 0);
+      const b = String(row[4] || '').trim();  // E(4) = bairro
+      const pts = Number(row[6] || 0);        // G(6) = pontos
       if (b) {
-        bairroMissoes.set(b, (bairroMissoes.get(b) || 0) + missoes);
+        bairroPontos.set(b, (bairroPontos.get(b) || 0) + pts);
       }
     }
 
-    return Array.from(bairroMissoes.entries())
-      .map(([b, m]) => ({ bairro: b, missoes: m }))
-      .sort((a, b) => b.missoes - a.missoes)
+    return Array.from(bairroPontos.entries())
+      .map(([b, p]) => ({ bairro: b, pontos: p }))
+      .sort((a, b) => b.pontos - a.pontos)
       .slice(0, 10);
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao obter ranking: ${err?.message}`);
@@ -971,13 +1105,14 @@ export async function obterRankingBairros(): Promise<RankingBairro[]> {
 export type DashboardPessoal = {
   missoesConcluidasTotal: number;
   militantesNoBairro: number;
-  posicaoNoBairro: number;
-  posicaoGeral: number;
+  posicaoNoBairro: number;  // ranked by pontos
+  posicaoGeral: number;     // ranked by pontos
 };
 
 /**
  * Returns personal engagement dashboard data for a militant.
- * Uses the `missoes_concluidas` column (I) stored in the Militantes sheet.
+ * Position rankings use pontos (col G) so all engagement types count,
+ * not just missions.
  * Applies the gamification rule: if neighborhood count is 1 or 2, display 3 instead.
  */
 export async function obterDashboardPessoal(
@@ -990,18 +1125,20 @@ export async function obterDashboardPessoal(
 
     const militantes = await getRows(SHEET_MILITANTES, 'A:I');
 
-    // Build ranking maps using missoes_concluidas from the Militantes sheet
     const celBairroMap = new Map<string, string>();
+    const celPontosMap = new Map<string, number>();
     const celMissoesMap = new Map<string, number>();
     const celsBairro = new Set<string>();
 
     for (let i = 1; i < militantes.length; i++) {
       const row = militantes[i] || [];
       const rowCel = String(row[2] || '').replace(/\D/g, '');
-      const rowBairro = String(row[3] || '').toLowerCase().trim();
-      const rowMissoes = Number(row[8] || 0); // col I: missoes_concluidas
+      const rowBairro = String(row[4] || '').toLowerCase().trim();  // E(4) = bairro
+      const rowPontos = Number(row[6] || 0);   // G(6) = pontos
+      const rowMissoes = Number(row[8] || 0);  // I(8) = missoes_concluidas
       if (rowCel) {
         celBairroMap.set(rowCel, rowBairro);
+        celPontosMap.set(rowCel, rowPontos);
         celMissoesMap.set(rowCel, rowMissoes);
       }
       if (rowBairro === bairroNorm) celsBairro.add(rowCel);
@@ -1011,24 +1148,23 @@ export async function obterDashboardPessoal(
     const militantesNoBairro = celsBairro.size <= 2 ? 3 : celsBairro.size;
     const missoesConcluidasTotal = celMissoesMap.get(cel) || 0;
 
-    // Rank user within their neighborhood
+    // Rank by pontos within the neighborhood
     const bairroRanking = Array.from(celsBairro)
-      .map((c) => ({ cel: c, missoes: celMissoesMap.get(c) || 0 }))
-      .sort((a, b) => b.missoes - a.missoes);
+      .map((c) => ({ cel: c, pontos: celPontosMap.get(c) || 0 }))
+      .sort((a, b) => b.pontos - a.pontos);
     const idxBairro = bairroRanking.findIndex((m) => m.cel === cel);
     const posicaoNoBairro = idxBairro >= 0 ? idxBairro + 1 : bairroRanking.length + 1;
 
-    // Global ranking
+    // Global rank by pontos
     const globalRanking = Array.from(celBairroMap.keys())
-      .map((c) => ({ cel: c, missoes: celMissoesMap.get(c) || 0 }))
-      .sort((a, b) => b.missoes - a.missoes);
+      .map((c) => ({ cel: c, pontos: celPontosMap.get(c) || 0 }))
+      .sort((a, b) => b.pontos - a.pontos);
     const idxGeral = globalRanking.findIndex((m) => m.cel === cel);
     const posicaoGeral = idxGeral >= 0 ? idxGeral + 1 : globalRanking.length + 1;
 
     return { missoesConcluidasTotal, militantesNoBairro, posicaoNoBairro, posicaoGeral };
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao obter dashboard: ${err?.message}`);
-    // Return safe defaults; militantesNoBairro defaults to 3 per the gamification display rule
     return { missoesConcluidasTotal: 0, militantesNoBairro: 3, posicaoNoBairro: 1, posicaoGeral: 1 };
   }
 }
@@ -1099,6 +1235,29 @@ function parseDateBR(dateStr: string): Date | null {
   const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (!match) return null;
   return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+}
+
+/**
+ * Returns the mission text for today from the Missões sheet.
+ * Looks for a row where col A matches today's date (dd/mm/yyyy) and returns
+ * the mission text from col B. Returns null if not found — callers should
+ * fall back to the MISSAO_DO_DIA env var.
+ */
+export async function obterMissaoDia(): Promise<string | null> {
+  try {
+    const rows = await getRows(SHEET_MISSOES, 'A:B');
+    const hoje = dataAtual();
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const data = String(row[0] || '').trim();
+      const missao = String(row[1] || '').trim();
+      if (data === hoje && missao) return missao;
+    }
+    return null;
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao obter missão do dia: ${err?.message}`);
+    return null;
+  }
 }
 
 /**

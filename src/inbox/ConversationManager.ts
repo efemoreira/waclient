@@ -57,7 +57,6 @@ export interface Conversation {
     | 'lideranca_disponibilidade'
     | 'denuncia_bairro'
     | 'denuncia_descricao'
-    | 'denuncia_foto'
     | 'painel_bairro';
   militanciaData?: {
     cadastroIniciado?: boolean;
@@ -67,6 +66,7 @@ export interface Conversation {
     area?: string;
     descricao?: string;
     evento?: string;
+    missao?: string;
   };
 }
 
