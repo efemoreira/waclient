@@ -290,7 +290,7 @@ Digite *menu* para continuar.`,
 🎯 ${params.missoesConcluidasTotal} missões concluídas
 🔥 Sequência: *${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}*
 
-🏥 Bairro *${params.bairro}*: ${ordinal(params.posicaoNoBairro)} lugar (${params.militantesNoBairro} militantes)
+� Bairro *${params.bairro}*: ${ordinal(params.posicaoNoBairro)} lugar (${params.militantesNoBairro} militantes)
 🌐 Posição geral: *${ordinal(params.posicaoGeral)}*`;
 
     if (prox && prox.missoesRestantes > 0) {

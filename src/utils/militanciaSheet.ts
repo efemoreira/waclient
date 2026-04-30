@@ -931,7 +931,17 @@ export async function registrarRespostaMissao(
   }
 }
 
-// ---- Conteúdos tab (columns: data, telefone, conteudo_acessado, tipo) ----
+// ---- Conteúdos tab (columns: data_publicacao, titulo, link, tipo, acessos) ----
+// Access-log rows written by the bot use the legacy format: [data, telefone, conteudo_acessado, tipo]
+// where col B contains a phone number. Catalog rows (added by admins) have col B = titulo (text).
+// isCatalogRow() distinguishes them by checking whether col B looks like a phone number.
+function isCatalogRow(row: any[]): boolean {
+  const col1 = String(row[1] || '').trim();
+  if (!col1) return false;
+  // Access-log rows have col B = phone (10-13 digits after stripping non-digits)
+  const digits = col1.replace(/\D/g, '');
+  return !(digits.length >= 10 && digits.length <= 13 && digits === col1.replace(/[^\d]/g, ''));
+}
 
 /**
  * Increments a numeric counter column (e.g. 'M' for denuncias_enviadas) in the Militantes sheet.
@@ -1283,41 +1293,26 @@ export type ConteudoInfo = {
 
 /**
  * Returns the most recently published content from the Conteúdos sheet.
- * The sheet has two kinds of rows:
- *   - Catalog rows (added by admins): column B (telefone) is empty.
- *     Format: [data, '', titulo, link?, tipo?]
- *   - Access-log rows (appended when a user views content): column B is a phone number.
- *     Format: [data, telefone, conteudo_acessado, tipo]
- * Catalog rows take priority; the function searches from the bottom for the most recent one.
- * Falls back to access-log rows if no catalog entries exist.
+ * Catalog rows (added by admins): [data_publicacao, titulo, link, tipo, acessos]
+ * Access-log rows (written by bot): [data, telefone, conteudo_acessado, tipo]  ← legacy, col B = phone
  */
 export async function obterUltimoConteudo(filtroTipo?: string): Promise<ConteudoInfo | null> {
   try {
     const rows = await getRows(SHEET_CONTEUDOS, 'A:E');
-    // Search from the bottom for a catalog entry (row with empty telefone and non-empty conteudo)
+    // Search from the bottom for the most recent catalog entry
     for (let i = rows.length - 1; i >= 1; i--) {
       const row = rows[i] || [];
-      const telefone = String(row[1] || '').trim();
-      const conteudo = String(row[2] || '').trim();
-      const tipo = String(row[4] || '').trim();
-      if (!telefone && conteudo) {
-        if (filtroTipo && tipo.toLowerCase() !== filtroTipo.toLowerCase()) continue;
-        return {
-          titulo: conteudo,
-          link: String(row[3] || '').trim() || undefined,
-          tipo: tipo || undefined,
-        };
-      }
-    }
-    // When filtering by tipo, do not fall back to access-log rows
-    if (filtroTipo) return null;
-    // Fall back to last access-log row with non-empty conteudo
-    for (let i = rows.length - 1; i >= 1; i--) {
-      const row = rows[i] || [];
-      const conteudo = String(row[2] || '').trim();
-      if (conteudo) {
-        return { titulo: conteudo };
-      }
+      if (!isCatalogRow(row)) continue;
+      const titulo = String(row[1] || '').trim();
+      const link   = String(row[2] || '').trim();
+      const tipo   = String(row[3] || '').trim();
+      if (!titulo) continue;
+      if (filtroTipo && tipo.toLowerCase() !== filtroTipo.toLowerCase()) continue;
+      return {
+        titulo,
+        link: link || undefined,
+        tipo: tipo || undefined,
+      };
     }
     return null;
   } catch (err: any) {
@@ -1477,14 +1472,14 @@ export async function obterUltimosConteudosPorTipo(): Promise<ConteudoInfo[]> {
     // Iterate bottom-to-top so first match per tipo = most recent
     for (let i = rows.length - 1; i >= 1; i--) {
       const row = rows[i] || [];
-      const telefone = String(row[1] || '').trim();
-      const conteudo = String(row[2] || '').trim();
-      if (telefone || !conteudo) continue; // skip access-log rows and empty rows
-
-      const tipo = String(row[4] || '').trim().toLowerCase();
+      if (!isCatalogRow(row)) continue; // skip access-log rows and empty rows
+      const titulo = String(row[1] || '').trim();
+      if (!titulo) continue;
+      const link = String(row[2] || '').trim();
+      const tipo = String(row[3] || '').trim().toLowerCase();
       const info: ConteudoInfo = {
-        titulo: conteudo,
-        link: String(row[3] || '').trim() || undefined,
+        titulo,
+        link: link || undefined,
         tipo: tipo || undefined,
       };
 
