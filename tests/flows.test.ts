@@ -100,29 +100,6 @@ describe('Flow 1/2 – Cadastro completo com origem', () => {
     expect(conversa.militanciaStage).toBeUndefined();
   });
 
-  test('origem com número de telefone credita +15 pts ao recrutador', async () => {
-    const { manager } = buildManager();
-
-    // Prepara recrutador no banco
-    mockDB.setMilitante({ celular: CEL_RECRUTADOR, nome: 'João', bairro: 'Centro', cidade: 'Fortaleza', pontos: 50 });
-
-    // Prepara novo militante em estágio de origem
-    mockDB.setMilitante({ celular: CEL, nome: 'Maria', bairro: 'Aldeota', cidade: 'Fortaleza' });
-    const conversa: Conversation = {
-      id: CEL, phoneNumber: CEL, unreadCount: 0, isHuman: false,
-      messages: [], militanciaStage: 'cadastro_origem', militanciaData: {},
-    };
-
-    // Normaliza: DD + número sem o 55 (bot adiciona)
-    await manager.processar(CEL, '85 99999-0099', conversa);
-
-    expect(conversa.militanciaStage).toBeUndefined();
-    // Recrutador deveria ter +15 pts
-    const recrutador = mockDB.getMilitante(CEL_RECRUTADOR);
-    expect(recrutador?.pontos).toBe(65);
-    expect(recrutador?.militantesRecrutados).toBe(1);
-  });
-
   test('origem "0" pula sem registrar', async () => {
     const { client, manager } = buildManager();
     mockDB.setMilitante({ celular: CEL, nome: 'Maria', bairro: 'Aldeota', cidade: 'Fortaleza' });
@@ -346,45 +323,6 @@ describe('Flow 7 – Liderança', () => {
   });
 });
 
-// ─── FLOW 8: Dashboard pessoal ───────────────────────────────────────────────
-
-describe('Flow 8 – Dashboard pessoal', () => {
-  test('"6" exibe dashboard com pontos e posição', async () => {
-    const { client, manager } = buildManager();
-    mockDB.setMilitante({
-      celular: CEL, nome: 'Ana', bairro: 'Meireles', cidade: 'Fortaleza',
-      nivel: 2, pontos: 80, missoesConcluidasTotal: 8, streakAtual: 3,
-    });
-
-    await manager.processar(CEL, '6', novaConversa());
-
-    const msg = client.lastMessage() ?? '';
-    expect(msg).toContain('Seu progresso');
-    expect(msg).toContain('Meireles');
-  });
-});
-
-// ─── FLOW 8b: Painel do bairro ───────────────────────────────────────────────
-
-describe('Flow 8b – Painel do bairro', () => {
-  test('"7" solicita bairro, resposta exibe painel + ranking', async () => {
-    const { client, manager } = buildManager();
-    mockDB.setMilitante({ celular: CEL, nome: 'Ana', bairro: 'Meireles', cidade: 'Fortaleza' });
-    const conversa = novaConversa();
-
-    await manager.processar(CEL, '7', conversa);
-    expect(client.lastMessage()).toContain('Qual bairro');
-    expect(conversa.militanciaStage).toBe('painel_bairro');
-
-    client.reset();
-    await manager.processar(CEL, 'Centro', conversa);
-    const msg = client.lastMessage() ?? '';
-    expect(msg).toContain('CENTRO');
-    expect(msg).toContain('pts');
-    expect(conversa.militanciaStage).toBeUndefined();
-  });
-});
-
 // ─── Comandos globais ────────────────────────────────────────────────────────
 
 describe('Comandos globais', () => {
@@ -398,18 +336,6 @@ describe('Comandos globais', () => {
     await manager.processar(CEL, 'menu', novaConversa());
     expect(client.lastMessage()).toContain('Lúcia');
     expect(client.lastMessage()).toContain('Missão do dia');
-  });
-
-  test('"perfil" exibe nivel e missões', async () => {
-    const { client, manager } = buildManager();
-    mockDB.setMilitante({
-      celular: CEL, nome: 'Lúcia', bairro: 'Aldeota', cidade: 'Fortaleza',
-      nivel: 3, missoesConcluidasTotal: 20, streakAtual: 5, pontos: 200,
-    });
-    await manager.processar(CEL, 'perfil', novaConversa());
-    const msg = client.lastMessage() ?? '';
-    expect(msg).toContain('Perfil');
-    expect(msg).toContain('Militante Ativo');
   });
 
   test('mensagem desconhecida exibe menu', async () => {

@@ -83,7 +83,8 @@ function militanteComMissoes(missoes: number, extras: Partial<MilitanteInfo> = {
     bairro: 'Centro', cidade: 'Fortaleza', nivel: calcularNivel(missoes),
     pontos: missoes * 10, dataUltimaInteracao: '', missoesConcluidasTotal: missoes,
     streakAtual: 1, ultimaMissaoData: '', titulos: '',
-    denunciasEnviadas: 0, conteudosCompartilhados: 0, militantesRecrutados: 0,
+    denunciasEnviadas: 0, militantesRecrutados: 0,
+    eventosConfirmados: 0, posicao: 0,
     ...extras,
   };
 }
@@ -108,13 +109,6 @@ describe('verificarConquistas', () => {
   test('não duplica título já conquistado', () => {
     const conquistas = verificarConquistas(militanteComMissoes(1, { titulos: '1' }));
     expect(conquistas).not.toContain('1');
-  });
-
-  test('20 conteúdos compartilhados → título 4 (Porta-Voz)', () => {
-    const conquistas = verificarConquistas(
-      militanteComMissoes(1, { conteudosCompartilhados: 20, titulos: '1' })
-    );
-    expect(conquistas).toContain('4');
   });
 
   test('3 militantes recrutados → título 5 (Articulador)', () => {
@@ -169,16 +163,6 @@ describe('verificarConquistas', () => {
   test('180 missões desbloqueia título 13 (Veterano da Causa)', () => {
     const c = verificarConquistas(militanteComMissoes(180, { titulos: '1,2,9,3,10,11,12' }));
     expect(c).toContain('13');
-  });
-
-  test('40 conteúdos → título 17 (Porta-Voz Prata)', () => {
-    const c = verificarConquistas(militanteComMissoes(1, { conteudosCompartilhados: 40, titulos: '1,4' }));
-    expect(c).toContain('17');
-  });
-
-  test('60 conteúdos → título 18 (Porta-Voz Ouro)', () => {
-    const c = verificarConquistas(militanteComMissoes(1, { conteudosCompartilhados: 60, titulos: '1,4,17' }));
-    expect(c).toContain('18');
   });
 
   test('7 recrutados → título 19 (Articulador Prata)', () => {

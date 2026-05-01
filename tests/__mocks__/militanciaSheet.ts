@@ -3,7 +3,7 @@
  * Todos os dados vivem em memória. Os testes manipulam `mockDB` diretamente.
  */
 
-import type { MilitanteInfo, MissaoResultado } from '../../src/utils/militanciaSheet';
+import type { MilitanteInfo, MissaoResultado, ConquistaDefinicao } from '../../src/utils/militanciaSheet';
 
 // Re-exporta os tipos reais
 export type { MilitanteInfo, MissaoResultado };
@@ -115,8 +115,9 @@ function mockMilitanteBase(celular: string): MockMilitante {
     ultimaMissaoData: '',
     titulos: '',
     denunciasEnviadas: 0,
-    conteudosCompartilhados: 0,
     militantesRecrutados: 0,
+    eventosConfirmados: 0,
+    posicao: 0,
   };
 }
 
@@ -166,16 +167,17 @@ export async function atualizarPontosENivel(celular: string, pts: number): Promi
 
 export async function registrarOrigem(celular: string, origem: string): Promise<void> {
   _ultimaOrigem = { celular, origem };
-  const digits = origem.replace(/\D/g, '');
-  const isPhone = digits.length >= 10 && digits.length <= 13;
-  if (isPhone) {
-    const recruiter = `55${digits}`.slice(-13);
-    const m = _militantes.get(recruiter) ?? _militantes.get(digits);
-    if (m) {
-      _militantes.set(m.celular, {
-        ...m,
-        militantesRecrutados: m.militantesRecrutados + 1,
-        pontos: m.pontos + 15,
+  // Aceita #42 ou 42 (posição de membro) → credita recrutador
+  const posMatch = origem.match(/^#?(\d{1,5})$/);
+  if (posMatch) {
+    const pos = parseInt(posMatch[1], 10);
+    let recrutador: MockMilitante | undefined;
+    _militantes.forEach((m) => { if (m.posicao === pos) recrutador = m; });
+    if (recrutador) {
+      _militantes.set(recrutador.celular, {
+        ...recrutador,
+        militantesRecrutados: recrutador.militantesRecrutados + 1,
+        pontos: recrutador.pontos + 15,
       });
     }
   }
@@ -211,11 +213,21 @@ export async function registrarRespostaMissao(
   });
   // Conquistas por streak (IDs 7 e 8) — chamadas separadamente como no código real
   const conquistasStreak = verificarStreakMilestones(m.titulos, novoStreak);
-  const novasConquistas = [...conquistasMissao, ...conquistasStreak];
+  const novasConquistaIds = [...conquistasMissao, ...conquistasStreak];
+  const novasConquistas: ConquistaDefinicao[] = novasConquistaIds.map((id) => ({
+    id,
+    nome: resolverNomeTitulo(id),
+    descricao: '',
+    emoji: '🎖️',
+    tipoGatilho: 'missoes' as ConquistaDefinicao['tipoGatilho'],
+    valorGatilho: 0,
+    ativo: true,
+    ordem: 0,
+  }));
 
   const novosTitulos = [
     ...m.titulos.split(',').filter(Boolean),
-    ...novasConquistas,
+    ...novasConquistaIds,
   ].join(',');
 
   _militantes.set(celular, {
@@ -363,11 +375,6 @@ export function verificarConquistas(m: MilitanteInfo): string[] {
   if (mis >= 120 && !ativos.has('12')) novas.push('12');
   if (mis >= 180 && !ativos.has('13')) novas.push('13');
 
-  const c = m.conteudosCompartilhados || 0;
-  if (c >= 20 && !ativos.has('4'))  novas.push('4');
-  if (c >= 40 && !ativos.has('17')) novas.push('17');
-  if (c >= 60 && !ativos.has('18')) novas.push('18');
-
   const r = m.militantesRecrutados || 0;
   if (r >= 3  && !ativos.has('5'))  novas.push('5');
   if (r >= 7  && !ativos.has('19')) novas.push('19');
@@ -389,6 +396,16 @@ export function verificarConquistas(m: MilitanteInfo): string[] {
  * Verifica conquistas por streak (IDs 7, 14, 8, 15, 16).
  * Chamada separadamente de verificarConquistas, como no código real.
  */
+export async function verificarERegistrarConquistas(
+  _celular: string
+): Promise<ConquistaDefinicao[]> {
+  return [];
+}
+
+export async function obterConquistas(): Promise<ConquistaDefinicao[]> {
+  return [];
+}
+
 export function verificarStreakMilestones(titulosAtuais: string, novoStreak: number): string[] {
   const ativos = new Set(titulosAtuais.split(',').map((s) => s.trim()).filter(Boolean));
   const novas: string[] = [];

@@ -144,7 +144,7 @@ export class MilitanciaManager {
             conversa.militanciaData = {};
             await this.client.sendMessage(
               celular,
-              MESSAGES_MILITANCIA.MENU_PERSONALIZADO(atualizado.nome)
+              MESSAGES_MILITANCIA.MENU_PERSONALIZADO(atualizado.nome, atualizado.posicao)
             );
             return true;
           }
@@ -426,7 +426,7 @@ export class MilitanciaManager {
   ): Promise<boolean> {
     // Global commands
     if (['menu', 'ajuda', 'help', 'inicio', 'início', 'voltar'].includes(textoNorm)) {
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome, militante.posicao));
       return false;
     }
 
@@ -522,7 +522,7 @@ export class MilitanciaManager {
 
     // Unrecognized - show personalized menu
     this.log(`⚠️ Comando não reconhecido: "${texto.substring(0, 50)}"`);
-    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
+    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome, militante.posicao));
     return false;
   }
 

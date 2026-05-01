@@ -29,7 +29,7 @@ O bot de militância é um módulo do **waclient**, sistema serverless no Vercel
 - Engajar com missões diárias, pontuação, níveis e conquistas (data-driven).
 - Registrar denúncias, confirmações de eventos e acessos a conteúdos.
 - Mapear interesse em liderança.
-- Rastrear recrutamento por número de membro (`#42`) ou telefone.
+- Rastrear recrutamento por número de membro (`#42`) ou texto livre (rede social).
 
 ```
 WhatsApp Cloud API
@@ -168,9 +168,9 @@ Conquistas hardcoded em `verificarConquistas()` + milestones de streak em `verif
 | 3 | ≥ 250 |
 | 4 | ≥ 400 |
 
-### Número de Membro (`posicao`, col U)
+### Número de Membro (`posicao`, col R)
 
-Cada militante recebe um número sequencial **no momento em que conclui o cadastro** (nome + bairro + cidade preenchidos). É exibido no perfil como `🔢 Membro #42` e pode ser usado no recrutamento: ao informar `#42` no campo de origem, o sistema resolve o telefone do recrutador e credita os pontos.
+Cada militante recebe um número sequencial **no momento em que conclui o cadastro** (nome + bairro + cidade preenchidos). É exibido no menu como `🔢 Membro #42` e pode ser usado no recrutamento: ao informar `#42` no campo de origem, o sistema resolve o telefone do recrutador e credita os pontos.
 
 > **Nota:** o número só é atribuído em `atualizarDataCadastro()`, que é chamado quando a cidade é salva. Contatos que nunca completam o cadastro não recebem número.
 
@@ -192,7 +192,7 @@ Cada militante recebe um número sequencial **no momento em que conclui o cadast
 | **Conquistas após denúncia** | `incrementarContador('M')` é awaited antes de `verificarERegistrarConquistas` | ✅ |
 | **Ranking de bairros** | Lê E:G (bairro, nivel, pontos), agrupa por bairro, ordena por soma de pontos. Cache 5 min | ✅ |
 | **Dashboard pessoal** | Posição no bairro e geral por pontos. Social proof: exibe ≥3 mesmo com menos | ✅ |
-| **Recrutamento por #N ou telefone** | `registrarOrigem` resolve posicao → phone, credita O+15pts ao recrutador | ✅ |
+| **Recrutamento por #N** | `registrarOrigem` resolve posicao → phone via col R, credita O+15pts ao recrutador | ✅ |
 | **Conquistas data-driven** | Aba `conquistas` com TTL 1h. Fallback para 24 títulos hardcoded se aba vazia | ✅ |
 | **Número de membro (#42)** | Atribuído apenas ao concluir cadastro (nome+bairro+cidade). Exibido no PERFIL e CADASTRO_SUCESSO | ✅ corrigido |
 
@@ -276,16 +276,16 @@ src/
 
 | Função | Descrição |
 |--------|-----------|
-| `buscarMilitante(celular)` | Lê `A:U`, retorna `MilitanteInfo` ou `null`. Quando há duplicatas, prefere a linha incompleta (scoreMilitante) |
-| `buscarMilitantePorPosicao(posicao)` | Busca por col U. Usado no recrutamento por `#42` |
+| `buscarMilitante(celular)` | Lê `A:R`, retorna `MilitanteInfo` ou `null`. Quando há duplicatas, prefere a linha incompleta (scoreMilitante) |
+| `buscarMilitantePorPosicao(posicao)` | Busca por col R. Usado no recrutamento por `#42` |
 | `isCadastroCompleto(militante)` | Retorna `true` se `nome`, `bairro` e `cidade` estão preenchidos |
-| `registrarContato(celular)` | Idempotente — só insere se telefone não existe. Atribui `posicao` (col U) |
+| `registrarContato(celular)` | Idempotente — só insere se telefone não existe |
 | `registrarMilitante(nome, celular, bairro, cidade)` | Insere linha completa com `posicao` |
 | `contarMilitantes()` | Conta linhas com `nome` preenchido. Fallback para `posicao` quando col U está vazia |
 | `atualizarCamposMilitante(celular, campos)` | Atualiza `nome` (B), `cidade` (D) ou `bairro` (E) sem duplicar linha |
-| `atualizarDataCadastro(celular)` | Escreve `dataAtual()` em col P |
+| `atualizarDataCadastro(celular)` | Escreve `dataAtual()` em col O (`data_cadastro`); atribui número sequencial de membro em col R (`posicao`) |
 | `atualizarUltimaInteracao(celular)` | Escreve `dataAtual()` em col H |
-| `registrarOrigem(celular, origem)` | Aceita `#42`, telefone (10–13 dígitos) ou texto livre. Salva col Q; salva col S (`recrutadoPor`) quando for telefone ou posição resolvida |
+| `registrarOrigem(celular, origem)` | Aceita `#42` ou número de posição (1–5 dígitos) — resolve o recrutador e credita +15 pts + incrementa col N. Aceita texto livre (rede social) — salva em col P. **Não aceita telefone.** |
 
 **Gamificação**
 
@@ -334,10 +334,10 @@ src/
 | `WELCOME_NEW_USER` | string | Pede nome completo |
 | `PEDIR_BAIRRO` | string | Pede bairro/distrito |
 | `PEDIR_CIDADE` | string | Pede cidade |
-| `PEDIR_ORIGEM` | string | Aceita `#42`, telefone ou rede social. `0` para pular |
+| `PEDIR_ORIGEM` | string | Aceita `#42` (posição de membro) ou rede social. `0` para pular. **Não aceita mais telefone** |
 | `CADASTRO_SUCESSO(nome, posicao)` | function | Boas-vindas + número de membro + instrução de recrutamento + menu |
 | `ERRO_CADASTRO` | string | Erro genérico de salvamento |
-| `MENU_PERSONALIZADO(nome)` | function | Menu 1–5 sem dica de perfil |
+| `MENU_PERSONALIZADO(nome, posicao?)` | function | Menu 1–5 com `🔢 Membro #N` quando `posicao` fornecida |
 | `MENU` | string | Menu 1–5 sem nome (fallback e stage default) |
 | `MISSAO(texto)` | function | Envia missão com instruções `Já fiz` / `Ainda não` |
 | `MISSAO_CONCLUIDA(streak, pontos, pontosGanhos)` | function | Confirma com delta, bônus streak e motivação |
@@ -384,18 +384,15 @@ src/
 | K | 10 | `ultima_missao_data` | string dd/mm/aaaa | Data da última missão |
 | L | 11 | `titulos` | string CSV | IDs ou slugs separados por vírgula |
 | M | 12 | `denuncias_enviadas` | number | Total de denúncias |
-| N | 13 | `conteudos_compartilhados` | number | Total de conteúdos acessados |
-| O | 14 | `militantes_recrutados` | number | Total de indicados |
-| P | 15 | `data_cadastro` | string dd/mm/aaaa | Data em que nome+bairro+cidade foram concluídos |
-| Q | 16 | `origem` | string | `#42 (Nome)`, telefone ou rede social |
-| R | 17 | `eventosConfirmados` | number | Total de confirmações de evento com "sim" |
-| S | 18 | `recrutadoPor` | string | Telefone do recrutador (separado de origem) |
-| T | 19 | `ativo` | string `true`/`false` | Flag de militante ativo |
-| U | 20 | `posicao` | number | Número sequencial de membro (ex: 42) |
+| N | 13 | `militantes_recrutados` | number | Total de indicados |
+| O | 14 | `data_cadastro` | string dd/mm/aaaa | Data em que nome+bairro+cidade foram concluídos |
+| P | 15 | `origem` | string | `#42 (Nome)` ou rede social |
+| Q | 16 | `eventosConfirmados` | number | Total de confirmações de evento com "sim" |
+| R | 17 | `posicao` | number | Número sequencial de membro (ex: 42) |
 
 **Cabeçalho (linha 1) obrigatório:**
 ```
-data_inscricao | nome | telefone | cidade | bairro | nivel | pontos | ultima_interacao | missoes_concluidas | streak_atual | ultima_missao_data | titulos | denuncias_enviadas | conteudos_compartilhados | militantes_recrutados | data_cadastro | origem | eventosConfirmados | recrutadoPor | ativo | posicao
+data_inscricao | nome | telefone | cidade | bairro | nivel | pontos | ultima_interacao | missoes_concluidas | streak_atual | ultima_missao_data | titulos | denuncias_enviadas | militantes_recrutados | data_cadastro | origem | eventosConfirmados | posicao
 ```
 
 ---
@@ -521,9 +518,16 @@ Cabeçalho na linha 1: `id | nome | descricao | emoji | tipo_gatilho | valor_gat
 
 Sem essa aba populada, o sistema usa os **24 títulos hardcoded legados** da lista TITULOS_PADRAO — funciona, mas não tem emojis personalizados nem série de eventos.
 
-### 2. Adicionar cabeçalho da coluna U na aba `Militantes`
+### 2. Verificar cabeçalho da aba `Militantes` (18 colunas A–R)
 
-Linha 1, coluna U: `posicao`. Militantes existentes ficam com célula vazia — o bot lê como `0` e usa `contarMilitantes()` como fallback no `CADASTRO_SUCESSO`.
+A planilha deve ter exatamente 18 colunas. Se havia colunas N (`conteudos_compartilhados`), S (`recrutadoPor`) ou T (`ativo`) e foram deletadas, o layout atual é:
+
+```
+A=data_inscricao, B=nome, C=telefone, D=cidade, E=bairro, F=nivel, G=pontos,
+H=ultima_interacao, I=missoes_concluidas, J=streak_atual, K=ultima_missao_data,
+L=titulos, M=denuncias_enviadas, N=militantes_recrutados, O=data_cadastro,
+P=origem, Q=eventosConfirmados, R=posicao
+```
 
 ### 3. Inserir missões (uma linha por dia)
 
@@ -554,12 +558,9 @@ export type MilitanteInfo = {
   ultimaMissaoData: string;
   titulos: string;                  // CSV de IDs ou slugs
   denunciasEnviadas: number;
-  conteudosCompartilhados: number;
   militantesRecrutados: number;
-  eventosConfirmados: number;       // col R
-  recrutadoPor: string;             // col S
-  ativo: boolean;                   // col T
-  posicao: number;                  // col U — número sequencial de membro
+  eventosConfirmados: number;       // col Q
+  posicao: number;                  // col R — número sequencial de membro
 };
 ```
 
@@ -597,14 +598,13 @@ export type MissaoResultado = {
 
 ```typescript
 conversa.militanciaStage?:
-  | 'cadastro_origem'           // aguarda recrutador (#42, telefone ou rede social)
+  | 'cadastro_origem'           // aguarda recrutador (#42 ou rede social)
   | 'missao_resposta'           // aguarda "já fiz" ou "ainda não"
   | 'evento_confirmacao'        // aguarda "1/sim" ou "2/talvez"
   | 'lideranca_area'            // aguarda opção 1–4 de contribuição
   | 'lideranca_disponibilidade' // legado (backward-compat — registra disponibilidade)
   | 'denuncia_bairro'           // aguarda nome do bairro
   | 'denuncia_descricao'        // aguarda descrição do problema
-  | 'painel_bairro'             // aguarda nome do bairro para o painel
 ```
 
 **Stages limpos automaticamente:** `cadastro_nome`, `cadastro_bairro`, `cadastro_cidade` — quando encontrados, o bot os apaga e deriva o estado da planilha.
@@ -649,9 +649,8 @@ Próximas mensagens (estado derivado da planilha):
                  → stage: 'cadastro_origem' → PEDIR_ORIGEM
 
   stage 'cadastro_origem':
-    #42 ou dígitos (1–5) → buscarMilitantePorPosicao() → credita recrutador, salva Q e S
-    telefone (10–13 dígitos) → credita recrutador, salva Q e S
-    texto livre → salva só col Q
+    #42 ou dígitos (1–5) → buscarMilitantePorPosicao() → credita recrutador (+15 pts, col N), salva col P
+    texto livre (rede social) → salva só col P
     0 / pular → pula
     → CADASTRO_SUCESSO(nome, posicao_do_militante_ou_contarMilitantes())
 ```
@@ -755,40 +754,16 @@ registrarInteresseLideranca(nome, celular, bairro, area, '')
 Bot → LIDERANCA_REGISTRADA
 ```
 
-### Flow 7 — Dashboard e Painel
-
-```
-"6" / "dashboard" / "painel" / "meu painel":
-    obterDashboardPessoal(celular, bairro)
-    Bot → DASHBOARD(nome, nivel, pontos, missoes, streak, posicaoBairro, posicaoGeral)
-    Não muta conversa (retorna false)
-
-"perfil" / "pontos" / "nivel":
-    Resolve titulos (IDs/slugs → nomes via resolverNomeTitulo)
-    Bot → PERFIL(nome, bairro, nivel+emoji, pontos, missoes, streak, titulos, #posicao, proximo_nivel)
-    Não muta conversa (retorna false)
-
-"7" / "painel do bairro" / "painel bairro" / "meu bairro" / "ver bairro":
-    Bot → PAINEL_BAIRRO_PROMPT
-    stage: 'painel_bairro'
-    Usuário envia bairro:
-    enviarPainelBairro() → Promise.all([obterPainelBairro, obterRankingBairros])
-    Bot → PAINEL_BAIRRO + "\n\n" + PAINEL_RANKING + "\n\nDigite *menu* para voltar."
-```
-
-### Comandos Globais (usuário cadastrado)
+### Flow 7 — Comandos Globais (usuário cadastrado)
 
 | Comando(s) | Ação | Muta estado? |
 |-----------|------|:---:|
 | `menu`, `ajuda`, `help`, `inicio`, `início`, `voltar` | MENU_PERSONALIZADO | não |
-| `perfil`, `meu perfil`, `pontos`, `nivel`, `nível` | PERFIL com #posicao | não |
 | `1`, `missao`, `missão`, `missao de hoje`, `missão de hoje` | Missão do dia | sim |
 | `2`, `eventos`, `evento`, `proximos eventos` | Próximos eventos (até 3) | sim |
 | `3`, `conteudo`, `conteúdo`, `conteudos`, `conteúdos`, `novo conteudo`, `novo conteúdo` | Conteúdos | não |
 | `4`, `denuncia`, `denúncia`, `enviar denuncia`, `enviar denúncia` | Inicia denúncia | sim |
 | `5`, `lideranca`, `liderança`, `responsabilidade`, `quero liderar`, `quero ajudar`, `assumir responsabilidade` | Liderança | sim |
-| `6`, `dashboard`, `painel`, `meu painel` | Dashboard pessoal | não |
-| `7`, `painel do bairro`, `painel bairro`, `meu bairro`, `ver bairro` | Painel do bairro | sim |
 | qualquer outro | MENU_PERSONALIZADO | não |
 
 ---
@@ -845,9 +820,7 @@ A flag `conversa.militanciaData.cadastroIniciado` é usada para separar o moment
 | `batchUpdate` 6 colunas na missão | 6 chamadas → 1 |
 | Cache de ranking de bairros (5 min) | Evita releitura de toda aba por usuário |
 | Cache de conquistas (1h) | Evita leitura da aba `conquistas` a cada mensagem |
-| `obterRankingBairros` lê só `E:G` | Menos dados transferidos |
-| `obterDashboardPessoal` lê só `C:I` | Menos dados transferidos |
-| `incrementarContador('M')` é `awaited` na denúncia | Garante valor atualizado antes da verificação de conquistas |
+| Colunas M e N são `awaited` em denúncias e recrutamento | Garante valor atualizado antes de verificar conquistas |
 | Pontos de evento, conteúdo e recrutamento são fire-and-forget | Não bloqueia resposta ao usuário |
 
 ### Fallback de Conquistas

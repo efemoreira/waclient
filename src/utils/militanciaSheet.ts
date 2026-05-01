@@ -102,14 +102,11 @@ async function getRows(sheetName: string, range: string): Promise<string[][]> {
 // K (10): ultima_missao_data     [gamification]
 // L (11): titulos                [gamification]
 // M (12): denuncias_enviadas     [gamification]
-// N (13): (não usado — reservado)
-// O (14): militantes_recrutados  [gamification]
-// P (15): data_cadastro
-// Q (16): origem                  [quem convidou ou qual rede social]
-// R (17): eventosConfirmados      [gamification — Fase 2]
-// S (18): (não usado — reservado)
-// T (19): (não usado — reservado)
-// U (20): posicao                 [número sequencial de membro, ex: 42]
+// N (13): militantes_recrutados  [gamification]
+// O (14): data_cadastro
+// P (15): origem                  [quem convidou ou qual rede social]
+// Q (16): eventosConfirmados      [gamification]
+// R (17): posicao                 [número sequencial de membro, ex: 42]
 
 export type MilitanteInfo = {
   dataInscricao: string;
@@ -162,11 +159,11 @@ function parseMilitanteRow(row: string[]): MilitanteInfo {
     ultimaMissaoData: String(row[10] || ''),
     titulos: String(row[11] || ''),
     denunciasEnviadas: Number(row[12] || 0),
-    militantesRecrutados: Number(row[14] || 0),
-    // Fase 2 — coluna R(17)
-    eventosConfirmados: Number(row[17] || 0),
-    // Fase 3 — coluna U(20)
-    posicao: Number(row[20] || 0),
+    militantesRecrutados: Number(row[13] || 0),
+    // coluna Q(16)
+    eventosConfirmados: Number(row[16] || 0),
+    // coluna R(17)
+    posicao: Number(row[17] || 0),  // número sequencial de membro (ex: 42)
   };
 }
 
@@ -190,7 +187,7 @@ export function isCadastroCompleto(militante: MilitanteInfo): boolean {
 
 export async function buscarMilitante(celular: string): Promise<MilitanteInfo | null> {
   try {
-    const rows = await getRows(SHEET_MILITANTES, 'A:U');
+    const rows = await getRows(SHEET_MILITANTES, 'A:R');
     let bestRow: string[] | null = null;
     let bestScore = -1;
 
@@ -235,14 +232,11 @@ export async function registrarMilitante(
       '',          // K: ultima_missao_data
       '',          // L: titulos
       0,           // M: denuncias_enviadas
-      '',          // N: (não usado)
-      0,           // O: militantes_recrutados
-      '',          // P: data_cadastro
-      '',          // Q: origem
-      0,           // R: eventosConfirmados
-      '',          // S: (não usado)
-      '',          // T: (não usado)
-      posicao,     // U: posicao (número sequencial de membro)
+      0,           // N: militantes_recrutados
+      '',          // O: data_cadastro
+      '',          // P: origem
+      0,           // Q: eventosConfirmados
+      posicao,     // R: posicao (número sequencial de membro)
     ]);
     logger.info('MilitanciaSheet', `✅ Militante registrado: ${nome} (${celular}) membro #${posicao}`);
     return true;
@@ -268,7 +262,7 @@ export async function registrarContato(celular: string): Promise<boolean> {
       }
     }
 
-    // posicao (col U) is NOT assigned here — only assigned when registration completes
+    // posicao (col R) is NOT assigned here — only assigned when registration completes
     // via atualizarDataCadastro(), to avoid ghost numbers from contacts who never registered.
     await appendRow(SHEET_MILITANTES, [
       dataAtual(), // A: data_inscricao
@@ -284,14 +278,11 @@ export async function registrarContato(celular: string): Promise<boolean> {
       '',          // K: ultima_missao_data
       '',          // L: titulos
       0,           // M: denuncias_enviadas
-      '',          // N: (não usado)
-      0,           // O: militantes_recrutados
-      '',          // P: data_cadastro
-      '',          // Q: origem
-      0,           // R: eventosConfirmados
-      '',          // S: (não usado)
-      '',          // T: (não usado)
-      '',          // U: posicao (empty — assigned only on registration completion)
+      0,           // N: militantes_recrutados
+      '',          // O: data_cadastro
+      '',          // P: origem
+      0,           // Q: eventosConfirmados
+      '',          // R: posicao (empty — assigned only on registration completion)
     ]);
     logger.info('MilitanciaSheet', `📞 Contato registrado: ${celular}`);
     return true;
@@ -516,8 +507,8 @@ export async function atualizarUltimaInteracao(celular: string): Promise<void> {
  * Persists registration completion date and assigns the sequential member number.
  * Called when nome + bairro + cidade are all filled.
  * Convention:
- * - P (data_cadastro): date when registration was completed.
- * - U (posicao): sequential member number — assigned here (NOT on first contact).
+ * - O (data_cadastro): date when registration was completed.
+ * - R (posicao): sequential member number — assigned here (NOT on first contact).
  *   Only rows with nome filled count as "completed" for the numbering sequence.
  */
 export async function atualizarDataCadastro(celular: string): Promise<void> {
@@ -525,8 +516,8 @@ export async function atualizarDataCadastro(celular: string): Promise<void> {
   if (!auth) return;
   try {
     const sheets = google.sheets({ version: 'v4', auth });
-    // Read A:U so we can check current posicao and count completed members in one call
-    const rows = await getRows(SHEET_MILITANTES, 'A:U');
+    // Read A:R so we can check current posicao and count completed members in one call
+    const rows = await getRows(SHEET_MILITANTES, 'A:R');
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i] || [];
@@ -534,17 +525,17 @@ export async function atualizarDataCadastro(celular: string): Promise<void> {
       if (!telefonesIguais(rowCel, celular)) continue;
 
       const targetRow = i + 1;
-      const posicaoAtual = Number(row[20] || 0); // U(20) = posicao
+      const posicaoAtual = Number(row[17] || 0); // R(17) = posicao
 
       const batchData: Array<{ range: string; values: (string | number)[][] }> = [
-        { range: `${SHEET_MILITANTES}!P${targetRow}`, values: [[dataAtual()]] },
+        { range: `${SHEET_MILITANTES}!O${targetRow}`, values: [[dataAtual()]] },
       ];
 
       // Assign posicao only if not yet set — counts members whose nome is filled
       // (nome is already written before this call, so the count includes the current member)
       if (!posicaoAtual) {
         const completosCount = rows.slice(1).filter((r) => String(r[1] || '').trim()).length;
-        batchData.push({ range: `${SHEET_MILITANTES}!U${targetRow}`, values: [[completosCount]] });
+        batchData.push({ range: `${SHEET_MILITANTES}!R${targetRow}`, values: [[completosCount]] });
         logger.info('MilitanciaSheet', `🔢 Posição atribuída: ${celular} → membro #${completosCount}`);
       }
 
@@ -561,33 +552,29 @@ export async function atualizarDataCadastro(celular: string): Promise<void> {
 
 /**
  * Registers the referral source for a newly registered militant.
- * - If `origem` looks like a Brazilian phone number (10–13 digits), normalizes it,
- *   increments the recruiter's militantes_recrutados counter (col O) and awards +15 pts.
  * - If `origem` looks like a member position number ('#42' or just '42' when 1–5 digits),
  *   resolves it to the recruiter's phone via buscarMilitantePorPosicao() and credits accordingly.
  * - Otherwise saves the text as-is (e.g. 'Instagram', 'Facebook').
- * Always stores the result in column Q of the militant's row.
+ * Always stores the result in column P of the militant's row.
+ * Note: phone numbers are NOT accepted as recruiter identification — use member number (#42).
  */
 export async function registrarOrigem(celular: string, origem: string): Promise<void> {
   try {
     const origemTrim = origem.trim();
-    // Detect position number: '#42', '# 42', or plain '42' (1–5 digits, not a phone)
+    // Detect position number: '#42', '# 42', or plain '42' (1–5 digits)
     const posicaoMatch = origemTrim.match(/^#?\s*(\d{1,5})$/);
-    const digits = origemTrim.replace(/\D/g, '');
-    const isPhone = !posicaoMatch && digits.length >= 10 && digits.length <= 13;
     const isPosicao = !!posicaoMatch;
 
     let origemParaSalvar = origemTrim;
-    let recrutadorPhone: string | undefined;
 
     if (isPosicao) {
       const numPosicao = Number(posicaoMatch![1]);
       const recrutador = await buscarMilitantePorPosicao(numPosicao);
       if (recrutador) {
-        recrutadorPhone = recrutador.celular;
+        const recrutadorPhone = recrutador.celular;
         origemParaSalvar = `#${numPosicao} (${recrutador.nome || recrutadorPhone})`;
         // Credit recruiter: await increment so conquistas check below sees updated count
-        await incrementarContador(recrutadorPhone, 'O').catch(() => {});
+        await incrementarContador(recrutadorPhone, 'N').catch(() => {});
         atualizarPontosENivel(recrutadorPhone, 15).catch(() => {});
         // Check recruiter achievements (Articulador title etc.)
         verificarERegistrarConquistas(recrutadorPhone).catch(() => {});
@@ -596,15 +583,6 @@ export async function registrarOrigem(celular: string, origem: string): Promise<
         origemParaSalvar = `#${numPosicao}`;
         logger.warn('MilitanciaSheet', `Posição #${numPosicao} não encontrada na planilha`);
       }
-    } else if (isPhone) {
-      const phoneCompleto = digits.startsWith('55') && digits.length >= 12 ? digits : `55${digits}`;
-      recrutadorPhone = phoneCompleto;
-      origemParaSalvar = phoneCompleto;
-      // Credit recruiter: await increment so conquistas check below sees updated count
-      await incrementarContador(phoneCompleto, 'O').catch(() => {});
-      atualizarPontosENivel(phoneCompleto, 15).catch(() => {});
-      // Check recruiter achievements (Articulador title etc.)
-      verificarERegistrarConquistas(phoneCompleto).catch(() => {});
     }
 
     const auth = getAuth();
@@ -615,7 +593,7 @@ export async function registrarOrigem(celular: string, origem: string): Promise<
       if (telefonesIguais(String(rows[i]?.[2] || ''), celular)) {
         const rowNum = i + 1;
         const batchData: Array<{ range: string; values: string[][] }> = [
-          { range: `${SHEET_MILITANTES}!Q${rowNum}`, values: [[origemParaSalvar]] }, // Q = origem
+          { range: `${SHEET_MILITANTES}!P${rowNum}`, values: [[origemParaSalvar]] }, // P = origem
         ];
         await sheets.spreadsheets.values.batchUpdate({
           spreadsheetId: SHEET_ID,
@@ -635,10 +613,10 @@ export async function registrarOrigem(celular: string, origem: string): Promise<
  */
 export async function buscarMilitantePorPosicao(posicao: number): Promise<MilitanteInfo | null> {
   try {
-    const rows = await getRows(SHEET_MILITANTES, 'A:U');
+    const rows = await getRows(SHEET_MILITANTES, 'A:R');
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i] || [];
-      if (Number(row[20] || 0) === posicao) {
+      if (Number(row[17] || 0) === posicao) {
         return parseMilitanteRow(row);
       }
     }
@@ -1062,9 +1040,9 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
         ultimaMissaoData: hoje,
         titulos: String(row[11] || ''),
         denunciasEnviadas: Number(row[12] || 0),
-        militantesRecrutados: Number(row[14] || 0),
-        eventosConfirmados: Number(row[17] || 0),  // R(17)
-        posicao: Number(row[20] || 0),             // U(20)
+        militantesRecrutados: Number(row[13] || 0),
+        eventosConfirmados: Number(row[16] || 0),  // Q(16)
+        posicao: Number(row[17] || 0),             // R(17)
       };
 
       logger.info(
@@ -1272,7 +1250,7 @@ export async function registrarConfirmacaoEvento(
               logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (evento): ${e?.message}`)
             );
             // Awaited so verificarERegistrarConquistas (called by the stage) sees the updated R value
-            await incrementarContador(celular, 'R').catch((e) =>
+            await incrementarContador(celular, 'Q').catch((e) =>
               logger.warn('MilitanciaSheet', `Erro ao incrementar eventosConfirmados: ${e?.message}`)
             );
           }
@@ -1285,8 +1263,8 @@ export async function registrarConfirmacaoEvento(
         atualizarPontosENivel(celular, 5).catch((e) =>
           logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (evento): ${e?.message}`)
         );
-        // Awaited so verificarERegistrarConquistas (called by the stage) sees the updated R value
-        await incrementarContador(celular, 'R').catch((e) =>
+        // Awaited so verificarERegistrarConquistas (called by the stage) sees the updated Q value
+        await incrementarContador(celular, 'Q').catch((e) =>
           logger.warn('MilitanciaSheet', `Erro ao incrementar eventosConfirmados: ${e?.message}`)
         );
       }

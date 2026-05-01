@@ -73,7 +73,7 @@ Em qual *cidade* você mora?`,
 Quem te trouxe para o movimento?
 
 � Se foi indicação de alguém, envie o *número de membro* da pessoa (ex: *#42*)
-📞 Ou envie o WhatsApp com DD (ex: *85999990001*)
+
 🌐 Se veio pelas redes sociais, informe qual (ex: *Instagram*, *Facebook*, *TikTok*)
 
 _Digite *0* para pular._`,
@@ -85,12 +85,14 @@ Você é o *${posicao}º membro* da nossa rede. Cada pessoa faz diferença! 💪
 🔢 *Seu número de membro: #${posicao}*
 Compartilhe para recrutar amigos — quem entrar informando seu número te credita pontos! 🌟
 
-${MESSAGES_MILITANCIA.MENU_PERSONALIZADO(nome)}`,
+${MESSAGES_MILITANCIA.MENU_PERSONALIZADO(nome, posicao)}`,
 
   ERRO_CADASTRO: `⚠️ Não consegui salvar. Por favor, tente enviar novamente.`,
 
   // Menu principal (personalizado para usuário cadastrado)
-  MENU_PERSONALIZADO: (nome: string) => `👋 Olá, *${nome}*!
+  MENU_PERSONALIZADO: (nome: string, posicao?: number) => {
+    const membroStr = posicao ? `\n🔢 *Membro #${posicao}*` : '';
+    return `👋 Olá, *${nome}*!${membroStr}
 
 O que você quer fazer hoje?
 
@@ -98,7 +100,8 @@ O que você quer fazer hoje?
 2️⃣ Próximos eventos
 3️⃣ Novo conteúdo
 4️⃣ Fazer uma denúncia
-5️⃣ Quero contribuir mais`,
+5️⃣ Quero contribuir mais`;
+  },
 
   // Menu principal (sem nome, para compatibilidade e casos de uso genérico)
   MENU: `✊ *Central da Militância*
