@@ -1060,8 +1060,84 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
 }
 
 // ---- Missões tab (columns: data, missao, concluiram) ----
-// One row per daily mission. 'concluiram' stores a comma-separated list
-// of phone numbers of militants who confirmed completion.
+// One row per daily mission. 'concluiram' stores a JSON array of phone
+// number strings (e.g. ["5585999990001","5585999990002"]) so it can
+// be queried as a table. Legacy rows may still use comma-separated format.
+
+/**
+ * Parses a phone array from the sheet — handles both JSON (new format)
+ * and comma-separated (legacy format).
+ */
+function parsePhoneArray(raw: string): string[] {
+  const s = raw.trim();
+  if (!s) return [];
+  if (s.startsWith('[')) {
+    try { return JSON.parse(s) as string[]; } catch {}
+  }
+  return s.split(',').map((t) => t.trim().replace(/\D/g, '')).filter(Boolean);
+}
+
+/**
+ * Verifica se o militante já concluiu a missão de hoje.
+ * Retorna true se o telefone estiver em 'concluiram' da linha de hoje.
+ */
+export async function verificarMissaoJaConcluida(celular: string): Promise<boolean> {
+  try {
+    const auth = getAuth();
+    if (!auth) return false;
+    const rows = await getRows(SHEET_MISSOES, 'A:C');
+    const hoje = dataAtual();
+    const cel = celular.replace(/\D/g, '');
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (String(row[0] || '').trim() === hoje) {
+        return parsePhoneArray(String(row[2] || '')).includes(cel);
+      }
+    }
+    return false;
+  } catch { return false; }
+}
+
+/**
+ * Verifica se o militante já acessou um conteúdo específico.
+ * Retorna true se o telefone estiver em 'acessos' da linha correspondente.
+ */
+export async function verificarConteudoJaAcessado(celular: string, titulo: string): Promise<boolean> {
+  try {
+    const auth = getAuth();
+    if (!auth) return false;
+    const rows = await getRows(SHEET_CONTEUDOS, 'A:E');
+    const cel = celular.replace(/\D/g, '');
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (!isCatalogRow(row)) continue;
+      if (String(row[1] || '').trim() === titulo) {
+        return parsePhoneArray(String(row[4] || '')).includes(cel);
+      }
+    }
+    return false;
+  } catch { return false; }
+}
+
+/**
+ * Verifica se o militante já confirmou presença em um evento específico.
+ * Retorna true se o telefone estiver em 'confirmacoes'.
+ */
+export async function verificarEventoJaConfirmado(celular: string, nomeEvento: string): Promise<boolean> {
+  try {
+    const auth = getAuth();
+    if (!auth) return false;
+    const rows = await getRows(SHEET_EVENTOS, 'A:F');
+    const cel = celular.replace(/\D/g, '');
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (String(row[0] || '').trim() === nomeEvento) {
+        return parsePhoneArray(String(row[5] || '')).includes(cel);
+      }
+    }
+    return false;
+  } catch { return false; }
+}
 
 export async function registrarRespostaMissao(
   celular: string,
@@ -1091,13 +1167,13 @@ export async function registrarRespostaMissao(
         const rowMissao = String(row[1] || '').trim();
         if (rowData === hoje && rowMissao === missaoDia) {
           const jaRegistrados = String(row[2] || '').trim();
-          const lista = jaRegistrados ? jaRegistrados.split(',').map((t) => t.trim()) : [];
+          const lista = parsePhoneArray(jaRegistrados);
           if (!lista.includes(cel)) lista.push(cel);
           await sheets.spreadsheets.values.update({
             spreadsheetId: SHEET_ID,
             range: `${SHEET_MISSOES}!C${i + 1}`,
             valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [[lista.join(',')]] },
+            requestBody: { values: [[JSON.stringify(lista)]] },
           });
           logger.info('MilitanciaSheet', `✅ Missão: ${cel} adicionado a concluiram`);
           break;
@@ -1192,24 +1268,33 @@ export async function registrarAcessoConteudo(
         if (!isCatalogRow(row)) continue;
         const titulo = String(row[1] || '').trim();
         if (!titulo || titulo !== conteudo) continue;
-        // Append phone to col E (acessos) — comma-separated, no duplicates
+        // Append phone to col E (acessos) — JSON array, no duplicates
         const jaRegistrados = String(row[4] || '').trim();
-        const lista = jaRegistrados ? jaRegistrados.split(',').map((t) => t.trim()) : [];
-        if (!lista.includes(cel)) lista.push(cel);
+        const lista = parsePhoneArray(jaRegistrados);
+        const jaNaLista = lista.includes(cel);
+        if (!jaNaLista) lista.push(cel);
         await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
           range: `${SHEET_CONTEUDOS}!E${i + 1}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[lista.join(',')]] },
+          requestBody: { values: [[JSON.stringify(lista)]] },
         });
-        logger.info('MilitanciaSheet', `✅ Conteúdo acessado: ${cel} → ${conteudo}`);
+        // Award +3 pts only on first access
+        if (!jaNaLista) {
+          atualizarPontosENivel(celular, 3).catch((e) =>
+            logger.warn('MilitanciaSheet', `Erro ao atualizar pontos de conteúdo (non-critical): ${e?.message}`)
+          );
+        }
+        logger.info('MilitanciaSheet', `✅ Conteúdo acessado: ${cel} → ${conteudo} (novo: ${!jaNaLista})`);
         break;
       }
     }
-    // Award +3 pts — fire-and-forget
-    atualizarPontosENivel(celular, 3).catch((e) =>
-      logger.warn('MilitanciaSheet', `Erro ao atualizar pontos de conteúdo (non-critical): ${e?.message}`)
-    );
+    // If no auth, still try to award points (no dedup possible offline)
+    if (!auth) {
+      atualizarPontosENivel(celular, 3).catch((e) =>
+        logger.warn('MilitanciaSheet', `Erro ao atualizar pontos de conteúdo (non-critical): ${e?.message}`)
+      );
+    }
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao registrar conteúdo: ${err?.message}`);
   }
@@ -1236,13 +1321,13 @@ export async function registrarConfirmacaoEvento(
         const rowNome = String(row[0] || '').trim();
         if (rowNome === nomeEvento) {
           const jaRegistrados = String(row[5] || '').trim();
-          const lista = jaRegistrados ? jaRegistrados.split(',').map((t) => t.trim()) : [];
+          const lista = parsePhoneArray(jaRegistrados);
           if (!lista.includes(cel)) lista.push(cel);
           await sheets.spreadsheets.values.update({
             spreadsheetId: SHEET_ID,
             range: `${SHEET_EVENTOS}!F${i + 1}`,
             valueInputOption: 'USER_ENTERED',
-            requestBody: { values: [[lista.join(',')]] },
+            requestBody: { values: [[JSON.stringify(lista)]] },
           });
           logger.info('MilitanciaSheet', `✅ Evento confirmado: ${cel} → ${nomeEvento}`);
           if (confirmado) {
@@ -1394,7 +1479,7 @@ export async function obterPainelBairro(bairro: string): Promise<PainelBairro> {
       // Count individual completions from bairro members in col C
       const concluiram = String(row[2] || '');
       if (!concluiram.trim()) continue;
-      const phones = concluiram.split(',').map((t) => t.trim().replace(/\D/g, '')).filter(Boolean);
+      const phones = parsePhoneArray(concluiram);
       for (const phone of phones) {
         if (celsBairro.has(phone)) missoesConcluidasSemana++;
       }

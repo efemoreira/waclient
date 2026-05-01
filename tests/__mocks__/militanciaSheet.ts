@@ -406,6 +406,17 @@ export async function obterConquistas(): Promise<ConquistaDefinicao[]> {
   return [];
 }
 
+// Always return false in tests (no duplicate guards by default)
+export async function verificarMissaoJaConcluida(_celular: string): Promise<boolean> {
+  return false;
+}
+export async function verificarConteudoJaAcessado(_celular: string, _titulo: string): Promise<boolean> {
+  return false;
+}
+export async function verificarEventoJaConfirmado(_celular: string, _nomeEvento: string): Promise<boolean> {
+  return false;
+}
+
 export function verificarStreakMilestones(titulosAtuais: string, novoStreak: number): string[] {
   const ativos = new Set(titulosAtuais.split(',').map((s) => s.trim()).filter(Boolean));
   const novas: string[] = [];

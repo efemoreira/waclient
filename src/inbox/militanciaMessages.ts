@@ -167,6 +167,12 @@ Quando fizer, acesse *1 – Missão do dia* para registrar e ganhar seus pontos.
 
 Digite *menu* para continuar.`,
 
+  MISSAO_JA_FEITA: `✅ *Você já registrou a missão de hoje!*
+
+Volte amanhã para a próxima missão. 🎯
+
+Digite *menu* para ver outras opções.`,
+
   // 2 - Eventos
   EVENTOS: (evento: EventoInfo) => {
     let msg = `📅 *Próximos Eventos*\n\n*${evento.nome}*`;
@@ -186,7 +192,17 @@ Digite *menu* para continuar.`,
       ? `✅ *Presença confirmada!* +5 pontos 🎉\n\nNos vemos lá!\n\nDigite *menu* para continuar.`
       : `👍 Registrado como *talvez*.\n\nFique atento — avisaremos sobre o evento.\n\nDigite *menu* para continuar.`,
 
+  EVENTO_JA_CONFIRMADO: (nomeEvento: string) =>
+    `✅ Você já confirmou presença em *${nomeEvento}*.
+
+Nos vemos lá! 🎉
+
+Digite *menu* para continuar.`,
+
   // 3 - Conteúdo
+  CONTEUDO_JA_ACESSADO: (titulo: string) =>
+    `👀 Você já acessou *${titulo}* anteriormente.\n\nDigite *menu* para ver outras opções.`,
+
   CONTEUDO: (conteudoTexto: string) => `📢 *Novo Conteúdo*
 
 ${conteudoTexto}

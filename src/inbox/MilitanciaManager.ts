@@ -38,6 +38,9 @@ import {
   registrarInteresseLideranca,
   registrarDenuncia,
   registrarOrigem,
+  verificarMissaoJaConcluida,
+  verificarConteudoJaAcessado,
+  verificarEventoJaConfirmado,
   obterUltimoConteudo,
   obterProximoEvento,
   obterProximosEventos,
@@ -438,6 +441,12 @@ export class MilitanciaManager {
         await this.client.sendMessage(celular, 'A missão de hoje ainda não foi configurada. Tente novamente mais tarde.\n\nDigite *menu* para ver outras opções.');
         return false;
       }
+      // Guard: don't let the user register the same mission twice
+      const jaConcluiu = await verificarMissaoJaConcluida(celular);
+      if (jaConcluiu) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MISSAO_JA_FEITA);
+        return false;
+      }
       conversa.militanciaStage = 'missao_resposta';
       conversa.militanciaData = { missao: missaoTexto };
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MISSAO(missaoTexto));
@@ -452,6 +461,16 @@ export class MilitanciaManager {
       if (!eventos.length) {
         await this.client.sendMessage(celular, 'Não há eventos próximos cadastrados no momento.\n\nDigite *menu* para ver outras opções.');
         return true;
+      }
+      // Guard: check if user already confirmed the first event
+      const jaConfirmou = await verificarEventoJaConfirmado(celular, eventos[0].nome);
+      if (jaConfirmou) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTO_JA_CONFIRMADO(eventos[0].nome));
+        // Show remaining events without the confirmation prompt
+        for (let i = 1; i < eventos.length; i++) {
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(eventos[i]));
+        }
+        return false;
       }
       // First event uses EVENTOS (includes confirmation prompt)
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTOS(eventos[0]));
@@ -471,8 +490,13 @@ export class MilitanciaManager {
       const conteudos = await obterUltimosConteudosPorTipo();
       if (conteudos.length) {
         for (const c of conteudos) {
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO(c));
-          registrarAcessoConteudo(celular, c.titulo, c.tipo ?? '').catch(() => {});
+          const jaAcessou = await verificarConteudoJaAcessado(celular, c.titulo);
+          if (jaAcessou) {
+            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CONTEUDO_JA_ACESSADO(c.titulo));
+          } else {
+            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO(c));
+            registrarAcessoConteudo(celular, c.titulo, c.tipo ?? '').catch(() => {});
+          }
         }
       } else {
         // Fallback to env var
