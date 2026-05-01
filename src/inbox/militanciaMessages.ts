@@ -3,7 +3,7 @@
  * Central de Mobilização da Militância
  */
 
-import type { ConteudoInfo, EventoInfo } from '../utils/militanciaSheet';
+import type { ConteudoInfo, EventoInfo, ConquistaDefinicao } from '../utils/militanciaSheet';
 
 /**
  * Returns an ordinal suffix string for a rank number (Portuguese style).
@@ -22,11 +22,11 @@ function proximoNivel(
   missoesAtuais: number
 ): { nome: string; missoesRestantes: number } | null {
   const thresholds: Record<number, { missoes: number; nome: string }> = {
-    1: { missoes: 5, nome: 'Militante' },
-    2: { missoes: 15, nome: 'Militante Ativo' },
-    3: { missoes: 40, nome: 'Mobilizador' },
-    4: { missoes: 80, nome: 'Líder de Bairro' },
-    5: { missoes: 150, nome: 'Coordenador' },
+    1: { missoes: 5,   nome: 'Apoiador ✊' },
+    2: { missoes: 15,  nome: 'Ativista 🔴' },
+    3: { missoes: 40,  nome: 'Militante ⚡' },
+    4: { missoes: 80,  nome: 'Espartano 🦱' },
+    5: { missoes: 150, nome: 'Missionário 🌟' },
   };
   const prox = thresholds[nivelAtual];
   if (!prox) return null;
@@ -36,19 +36,19 @@ function proximoNivel(
 
 export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
-  WELCOME_FIRST_CONTACT: `✊ Olá! Bem-vindo ao canal de *Felipe Moreira*.
+  WELCOME_FIRST_CONTACT: `👋 Ola! Esse é o canal direto de *Felipe Moreira*.
 
-Sua participação transforma a cidade. Cada ação conta!
+Sua participação aqui ajuda a transformar nosso país.
 
 O que você quer fazer?
 
-1️⃣ Entrar para a rede
+1️⃣ Participar da missão
 2️⃣ Ver conteúdos e eventos`,
 
   // ---- Segundo contato (retornou, ainda não cadastrado) ----
   WELCOME_SECOND_CONTACT: `👋 De volta por aqui!
 
-Você está a um passo de entrar para a rede — vale concluir!
+Você está a um passo de participar da missão — vale concluir!
 
 1️⃣ Concluir meu cadastro
 2️⃣ Ver novidades e eventos`,
@@ -91,7 +91,7 @@ Qual é o seu *nome completo*?`,
 
   PEDIR_BAIRRO: `👍 Ótimo!
 
-Em qual *bairro* você mora?`,
+Em qual *bairro ou distrito* você mora?`,
 
   PEDIR_CIDADE: `📍 Quase lá!
 
@@ -101,7 +101,8 @@ Em qual *cidade* você mora?`,
 
 Quem te trouxe para o movimento?
 
-📞 Se foi indicação de alguém, envie o número com DD (ex: *85 99999-0001*)
+� Se foi indicação de alguém, envie o *número de membro* da pessoa (ex: *#42*)
+📞 Ou envie o WhatsApp com DD (ex: *85999990001*)
 🌐 Se veio pelas redes sociais, informe qual (ex: *Instagram*, *Facebook*, *TikTok*)
 
 _Digite *0* para pular._`,
@@ -109,6 +110,9 @@ _Digite *0* para pular._`,
   CADASTRO_SUCESSO: (nome: string, posicao: number) => `🎉 *Bem-vindo ao movimento, ${nome}!*
 
 Você é o *${posicao}º membro* da nossa rede. Cada pessoa faz diferença! 💪
+
+🔢 *Seu número de membro: #${posicao}*
+Compartilhe para recrutar amigos — quem entrar informando seu número te credita pontos! 🌟
 
 ${MESSAGES_MILITANCIA.MENU_PERSONALIZADO(nome)}`,
 
@@ -180,9 +184,13 @@ Já concluiu?
 
 Cada missão cumprida constrói um futuro melhor. Continue! 💪`,
 
-  CONQUISTA_DESBLOQUEADA: (nomeConquista: string, missoesTotal: number) => {
+  CONQUISTA_DESBLOQUEADA: (conquista: Pick<ConquistaDefinicao, 'nome' | 'emoji' | 'descricao'>, missoesTotal: number) => {
     const gram = missoesTotal === 1 ? 'missão' : 'missões';
-    return `🎖️ *Conquista desbloqueada!*\n\n*${nomeConquista}*\n\n${missoesTotal} ${gram} no seu histórico. Siga em frente! 💪`;
+    let msg = `${conquista.emoji} *Conquista desbloqueada!*\n\n*${conquista.nome}*`;
+    if (conquista.descricao) msg += `\n_${conquista.descricao}_`;
+    if (missoesTotal > 0) msg += `\n\n${missoesTotal} ${gram} no seu histórico. Siga em frente! 💪`;
+    else msg += `\n\nParabéns pela conquista! 💪`;
+    return msg;
   },
 
   MISSAO_PENDENTE: `⏳ *Missão pendente.*
@@ -355,11 +363,13 @@ Digite *menu* para continuar.`,
     missoesConcluidasTotal: number;
     streakAtual: number;
     titulos: string;
+    posicao?: number;
   }) => {
     const prox = proximoNivel(params.nivel, params.missoesConcluidasTotal);
+    const membroStr = params.posicao ? `  |  🔢 Membro #${params.posicao}` : '';
     let msg = `⭐ *Seu Perfil*
 
-👤 *${params.nome}*  |  📍 ${params.bairro}
+👤 *${params.nome}*  |  📍 ${params.bairro}${membroStr}
 🎖️ Nível ${params.nivel}: *${params.nomeNivel}*
 💰 *${params.pontos} pts*
 🎯 ${params.missoesConcluidasTotal} missões  ·  🔥 ${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}`;
@@ -373,12 +383,12 @@ Digite *menu* para continuar.`,
     }
 
     msg += `\n\n*Níveis:*
-• 1 – Simpatizante: 0 missões
-• 2 – Militante: 5 missões
-• 3 – Militante Ativo: 15 missões
-• 4 – Mobilizador: 40 missões
-• 5 – Líder de Bairro: 80 missões
-• 6 – Coordenador: 150 missões`;
+• 1 – Novato 🌱: 0 missões
+• 2 – Apoiador ✊: 5 missões
+• 3 – Ativista 🔴: 15 missões
+• 4 – Militante ⚡: 40 missões
+• 5 – Espartano 🦱: 80 missões
+• 6 – Missionário 🌟: 150 missões`;
 
     return msg;
   },

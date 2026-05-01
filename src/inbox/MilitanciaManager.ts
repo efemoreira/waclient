@@ -50,8 +50,10 @@ import {
   resolverNomeTitulo,
   obterDashboardPessoal,
   nomeDoNivel,
+  verificarERegistrarConquistas,
   type MilitanteInfo,
   type MissaoResultado,
+  type ConquistaDefinicao,
 } from '../utils/militanciaSheet';
 import { MESSAGES_MILITANCIA } from './militanciaMessages';
 import type { Conversation } from './ConversationManager';
@@ -269,10 +271,10 @@ export class MilitanciaManager {
           registrarOrigem(celular, origemTexto).catch(() => {});
         }
         const militantePos = await buscarMilitante(celular);
-        const posicao = await contarMilitantes();
+        const posicaoMembro = militantePos?.posicao || (await contarMilitantes());
         await this.client.sendMessage(
           celular,
-          MESSAGES_MILITANCIA.CADASTRO_SUCESSO(militantePos?.nome || '', posicao)
+          MESSAGES_MILITANCIA.CADASTRO_SUCESSO(militantePos?.nome || '', posicaoMembro)
         );
         return true;
       }
@@ -297,11 +299,11 @@ export class MilitanciaManager {
               MESSAGES_MILITANCIA.NIVEL_SUBIU(nomeDoNivel(resultado.novoNivel))
             );
           }
-          // Achievement notifications (IDs resolved to display names)
-          for (const id of resultado.novasConquistas) {
+          // Achievement notifications
+          for (const conquista of resultado.novasConquistas) {
             await this.client.sendMessage(
               celular,
-              MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(resolverNomeTitulo(id), resultado.missoesConcluidasTotal)
+              MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, resultado.missoesConcluidasTotal)
             );
           }
         } else {
@@ -320,6 +322,16 @@ export class MilitanciaManager {
         conversa.militanciaStage = undefined;
         conversa.militanciaData = {};
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTO_CONFIRMADO(confirmacao));
+        // Verificar conquistas de eventos após confirmação
+        if (confirmacao === 'sim') {
+          const novasConquistas = await verificarERegistrarConquistas(celular);
+          for (const conquista of novasConquistas) {
+            await this.client.sendMessage(
+              celular,
+              MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, 0)
+            );
+          }
+        }
         return true;
       }
 
@@ -377,6 +389,14 @@ export class MilitanciaManager {
         conversa.militanciaStage = undefined;
         conversa.militanciaData = {};
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.DENUNCIA_REGISTRADA(protocolo));
+        // Verificar conquistas de denúncias (registrarDenuncia já awaita o incremento do contador)
+        const novasConquistasDenuncia = await verificarERegistrarConquistas(celular);
+        for (const conquista of novasConquistasDenuncia) {
+          await this.client.sendMessage(
+            celular,
+            MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, 0)
+          );
+        }
         return true;
       }
 
@@ -444,6 +464,7 @@ export class MilitanciaManager {
           missoesConcluidasTotal: militante.missoesConcluidasTotal,
           streakAtual: militante.streakAtual,
           titulos: titulosNomes,
+          posicao: militante.posicao || undefined,
         })
       );
       return false;
