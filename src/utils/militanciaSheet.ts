@@ -274,7 +274,8 @@ export async function registrarContato(celular: string): Promise<boolean> {
       }
     }
 
-    const posicao = Math.max(0, rows.length - 1) + 1; // rows[0] = header
+    // posicao (col U) is NOT assigned here — only assigned when registration completes
+    // via atualizarDataCadastro(), to avoid ghost numbers from contacts who never registered.
     await appendRow(SHEET_MILITANTES, [
       dataAtual(), // A: data_inscricao
       '',          // B: nome (empty – not yet registered)
@@ -296,9 +297,9 @@ export async function registrarContato(celular: string): Promise<boolean> {
       0,           // R: eventosConfirmados
       '',          // S: recrutadoPor
       'true',      // T: ativo
-      posicao,     // U: posicao (número sequencial de membro)
+      '',          // U: posicao (empty — assigned only on registration completion)
     ]);
-    logger.info('MilitanciaSheet', `📞 Contato registrado: ${celular} (membro #${posicao})`);
+    logger.info('MilitanciaSheet', `📞 Contato registrado: ${celular}`);
     return true;
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao registrar contato: ${err?.message}`);
@@ -518,17 +519,20 @@ export async function atualizarUltimaInteracao(celular: string): Promise<void> {
 }
 
 /**
- * Persists registration completion date for a militant.
- * Convention used here:
- * - A (data_inscricao) stores first contact date.
- * - P (data_cadastro) stores the date when nome+bairro+cidade were completed.
+ * Persists registration completion date and assigns the sequential member number.
+ * Called when nome + bairro + cidade are all filled.
+ * Convention:
+ * - P (data_cadastro): date when registration was completed.
+ * - U (posicao): sequential member number — assigned here (NOT on first contact).
+ *   Only rows with nome filled count as "completed" for the numbering sequence.
  */
 export async function atualizarDataCadastro(celular: string): Promise<void> {
   const auth = getAuth();
   if (!auth) return;
   try {
-    const rows = await getRows(SHEET_MILITANTES, 'A:P');
     const sheets = google.sheets({ version: 'v4', auth });
+    // Read A:U so we can check current posicao and count completed members in one call
+    const rows = await getRows(SHEET_MILITANTES, 'A:U');
 
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i] || [];
@@ -536,11 +540,23 @@ export async function atualizarDataCadastro(celular: string): Promise<void> {
       if (!telefonesIguais(rowCel, celular)) continue;
 
       const targetRow = i + 1;
-      await sheets.spreadsheets.values.update({
+      const posicaoAtual = Number(row[20] || 0); // U(20) = posicao
+
+      const batchData: Array<{ range: string; values: (string | number)[][] }> = [
+        { range: `${SHEET_MILITANTES}!P${targetRow}`, values: [[dataAtual()]] },
+      ];
+
+      // Assign posicao only if not yet set — counts members whose nome is filled
+      // (nome is already written before this call, so the count includes the current member)
+      if (!posicaoAtual) {
+        const completosCount = rows.slice(1).filter((r) => String(r[1] || '').trim()).length;
+        batchData.push({ range: `${SHEET_MILITANTES}!U${targetRow}`, values: [[completosCount]] });
+        logger.info('MilitanciaSheet', `🔢 Posição atribuída: ${celular} → membro #${completosCount}`);
+      }
+
+      await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SHEET_ID,
-        range: `${SHEET_MILITANTES}!P${targetRow}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: { values: [[dataAtual()]] },
+        requestBody: { valueInputOption: 'USER_ENTERED', data: batchData },
       });
       return;
     }
@@ -576,9 +592,11 @@ export async function registrarOrigem(celular: string, origem: string): Promise<
       if (recrutador) {
         recrutadorPhone = recrutador.celular;
         origemParaSalvar = `#${numPosicao} (${recrutador.nome || recrutadorPhone})`;
-        // Credit recruiter (fire-and-forget)
-        incrementarContador(recrutadorPhone, 'O').catch(() => {});
+        // Credit recruiter: await increment so conquistas check below sees updated count
+        await incrementarContador(recrutadorPhone, 'O').catch(() => {});
         atualizarPontosENivel(recrutadorPhone, 15).catch(() => {});
+        // Check recruiter achievements (Articulador title etc.)
+        verificarERegistrarConquistas(recrutadorPhone).catch(() => {});
         logger.info('MilitanciaSheet', `🔗 Recrutamento via posição #${numPosicao} → ${recrutadorPhone}`);
       } else {
         origemParaSalvar = `#${numPosicao}`;
@@ -588,9 +606,11 @@ export async function registrarOrigem(celular: string, origem: string): Promise<
       const phoneCompleto = digits.startsWith('55') && digits.length >= 12 ? digits : `55${digits}`;
       recrutadorPhone = phoneCompleto;
       origemParaSalvar = phoneCompleto;
-      // Credit recruiter (fire-and-forget)
-      incrementarContador(phoneCompleto, 'O').catch(() => {});
+      // Credit recruiter: await increment so conquistas check below sees updated count
+      await incrementarContador(phoneCompleto, 'O').catch(() => {});
       atualizarPontosENivel(phoneCompleto, 15).catch(() => {});
+      // Check recruiter achievements (Articulador title etc.)
+      verificarERegistrarConquistas(phoneCompleto).catch(() => {});
     }
 
     const auth = getAuth();
@@ -1251,8 +1271,8 @@ export async function registrarConfirmacaoEvento(
             atualizarPontosENivel(celular, 5).catch((e) =>
               logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (evento): ${e?.message}`)
             );
-            // Incrementa eventosConfirmados (col R) para desbloquear conquistas de eventos
-            incrementarContador(celular, 'R').catch((e) =>
+            // Awaited so verificarERegistrarConquistas (called by the stage) sees the updated R value
+            await incrementarContador(celular, 'R').catch((e) =>
               logger.warn('MilitanciaSheet', `Erro ao incrementar eventosConfirmados: ${e?.message}`)
             );
           }
@@ -1265,7 +1285,8 @@ export async function registrarConfirmacaoEvento(
         atualizarPontosENivel(celular, 5).catch((e) =>
           logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (evento): ${e?.message}`)
         );
-        incrementarContador(celular, 'R').catch((e) =>
+        // Awaited so verificarERegistrarConquistas (called by the stage) sees the updated R value
+        await incrementarContador(celular, 'R').catch((e) =>
           logger.warn('MilitanciaSheet', `Erro ao incrementar eventosConfirmados: ${e?.message}`)
         );
       }
@@ -1377,17 +1398,27 @@ export async function obterPainelBairro(bairro: string): Promise<PainelBairro> {
       }
     }
 
-    const missoes = await getRows(SHEET_MISSOES, 'A:E');
+    // Read Missões A:C: col A=data, col B=missao, col C=concluiram (CSV of phones)
+    // Count completions from bairro members in the last 7 days.
+    // Bug fix: previous code checked col D (status) which was never written, always 0.
+    const missoes = await getRows(SHEET_MISSOES, 'A:C');
     let missoesConcluidasSemana = 0;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const seteDiasAtras = new Date(hoje);
+    seteDiasAtras.setDate(hoje.getDate() - 7);
 
     for (let i = 1; i < missoes.length; i++) {
       const row = missoes[i] || [];
-      const status = String(row[3] || '');
-      if (isConcluido(status)) {
-        const celMissao = String(row[1] || '').replace(/\D/g, '');
-        if (celsBairro.has(celMissao)) {
-          missoesConcluidasSemana++;
-        }
+      // Filter to last 7 days
+      const dataRow = parseDateBR(String(row[0] || '').trim());
+      if (dataRow && dataRow < seteDiasAtras) continue;
+      // Count individual completions from bairro members in col C
+      const concluiram = String(row[2] || '');
+      if (!concluiram.trim()) continue;
+      const phones = concluiram.split(',').map((t) => t.trim().replace(/\D/g, '')).filter(Boolean);
+      for (const phone of phones) {
+        if (celsBairro.has(phone)) missoesConcluidasSemana++;
       }
     }
 

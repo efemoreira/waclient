@@ -205,7 +205,8 @@ export class MilitanciaManager {
       }
       const ok = await atualizarCamposMilitante(celular, { cidade: texto.trim() });
       if (ok) {
-        atualizarDataCadastro(celular).catch(() => {});
+        // Awaited so posicao (membro #N) is assigned before CADASTRO_SUCESSO is sent
+        await atualizarDataCadastro(celular).catch(() => {});
         conversa.militanciaStage = 'cadastro_origem';
         conversa.militanciaData = {};
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_ORIGEM);
@@ -521,6 +522,13 @@ export class MilitanciaManager {
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CONTEUDO(conteudoTexto));
         registrarAcessoConteudo(celular, conteudoTexto, conteudoTipo).catch(() => {});
       }
+      // Check achievements after content access (Porta-Voz title requires 20 shares)
+      // Fire-and-forget: doesn't block the response
+      verificarERegistrarConquistas(celular).then(async (novas) => {
+        for (const conquista of novas) {
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, 0));
+        }
+      }).catch(() => {});
       return false;
     }
 

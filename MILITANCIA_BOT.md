@@ -10,13 +10,14 @@
 
 1. [Visão Geral](#visão-geral)
 2. [Sistema de Gamificação](#sistema-de-gamificação)
-3. [Código – Arquivos e Responsabilidades](#código--arquivos-e-responsabilidades)
-4. [Planilhas Google Sheets](#planilhas-google-sheets)
-5. [O que precisa ser feito nas Planilhas](#o-que-precisa-ser-feito-nas-planilhas)
-6. [Estruturas de Dados](#estruturas-de-dados)
-7. [Flows de Mensagens](#flows-de-mensagens)
-8. [Variáveis de Ambiente](#variáveis-de-ambiente)
-9. [Observações Técnicas](#observações-técnicas)
+3. [Análise de Gamificação](#análise-de-gamificação)
+4. [Código – Arquivos e Responsabilidades](#código--arquivos-e-responsabilidades)
+5. [Planilhas Google Sheets](#planilhas-google-sheets)
+6. [O que precisa ser feito nas Planilhas](#o-que-precisa-ser-feito-nas-planilhas)
+7. [Estruturas de Dados](#estruturas-de-dados)
+8. [Flows de Mensagens](#flows-de-mensagens)
+9. [Variáveis de Ambiente](#variáveis-de-ambiente)
+10. [Observações Técnicas](#observações-técnicas)
 
 ---
 
@@ -170,7 +171,75 @@ Conquistas hardcoded em `verificarConquistas()` + milestones de streak em `verif
 
 ### Número de Membro (`posicao`, col U)
 
-Cada militante recebe um número sequencial no momento do primeiro contato. É exibido no perfil como `🔢 Membro #42` e pode ser usado no recrutamento: ao informar `#42` no campo de origem, o sistema resolve o telefone do recrutador e credita os pontos.
+Cada militante recebe um número sequencial **no momento em que conclui o cadastro** (nome + bairro + cidade preenchidos). É exibido no perfil como `🔢 Membro #42` e pode ser usado no recrutamento: ao informar `#42` no campo de origem, o sistema resolve o telefone do recrutador e credita os pontos.
+
+> **Nota:** o número só é atribuído em `atualizarDataCadastro()`, que é chamado quando a cidade é salva. Contatos que nunca completam o cadastro não recebem número.
+
+---
+
+## Análise de Gamificação
+
+> Estudo completo do que existe, do que funciona, do que estava quebrado e do que pode ser melhorado.
+
+### O que funciona corretamente
+
+| Mecanismo | Como funciona | Status |
+|-----------|--------------|--------|
+| **Pontos** | Acumulados por missão (10–20), evento (+5), denúncia (+8), conteúdo (+3), recrutamento (+15 ao recrutador) | ✅ |
+| **Streak diário** | `isOntem()` verifica a data da última missão. Bônus de +5 pts no streak ≥7, +10 no streak ≥30 | ✅ |
+| **Níveis por missões** | 6 níveis, thresholds: 5/15/40/80/150. Calcula e persiste em batchUpdate | ✅ |
+| **Notificação de level-up** | `NIVEL_SUBIU` enviado imediatamente após `atualizarMissoesStreakNivel` | ✅ |
+| **Conquistas após missão** | `verificarERegistrarConquistas` chamado após `registrarRespostaMissao` com militante já atualizado | ✅ |
+| **Conquistas após denúncia** | `incrementarContador('M')` é awaited antes de `verificarERegistrarConquistas` | ✅ |
+| **Ranking de bairros** | Lê E:G (bairro, nivel, pontos), agrupa por bairro, ordena por soma de pontos. Cache 5 min | ✅ |
+| **Dashboard pessoal** | Posição no bairro e geral por pontos. Social proof: exibe ≥3 mesmo com menos | ✅ |
+| **Recrutamento por #N ou telefone** | `registrarOrigem` resolve posicao → phone, credita O+15pts ao recrutador | ✅ |
+| **Conquistas data-driven** | Aba `conquistas` com TTL 1h. Fallback para 24 títulos hardcoded se aba vazia | ✅ |
+| **Número de membro (#42)** | Atribuído apenas ao concluir cadastro (nome+bairro+cidade). Exibido no PERFIL e CADASTRO_SUCESSO | ✅ corrigido |
+
+### Bugs corrigidos nesta versão
+
+| Bug | Causa | Correção |
+|-----|-------|---------|
+| **Número de membro atribuído no primeiro contato** | `registrarContato()` calculava e salvava posicao em col U para qualquer pessoa que mandasse uma mensagem, sem ter completado o cadastro | `registrarContato()` não atribui mais posicao. `atualizarDataCadastro()` (chamada quando nome+bairro+cidade estão completos) agora atribui o número sequencial e é `awaited` (não fire-and-forget) |
+| **`missoesConcluidasSemana` sempre zero no painel do bairro** | `obterPainelBairro()` lia col D da aba Missões para verificar status "concluído", mas col D nunca é escrita por nenhuma função | Corrigido para ler col C (`concluiram` = CSV de telefones) e contar completações dos membros do bairro nos últimos 7 dias |
+| **Conquistas de conteúdo nunca disparavam** | Após o militante acessar conteúdo (opção 3), `verificarERegistrarConquistas` nunca era chamado | Adicionado check de conquistas fire-and-forget após registrar acesso a conteúdo em `processarMenuOuComando` |
+| **Conquistas de recrutamento nunca disparavam** | `registrarOrigem()` creditava +15 pts e incrementava col O para o recrutador, mas `verificarERegistrarConquistas` nunca era chamado para ele | Adicionado `verificarERegistrarConquistas(recrutadorPhone)` após crédito. O incremento de col O também passou a ser `awaited` para que o check veja o valor atualizado |
+| **Conquistas de eventos com race condition** | `incrementarContador('R')` era fire-and-forget em `registrarConfirmacaoEvento()`, mas `verificarERegistrarConquistas` era chamado logo depois no stage — podendo ler o valor antigo de col R | `incrementarContador(celular, 'R')` agora é awaited dentro de `registrarConfirmacaoEvento()` |
+
+### O que não deveria estar sendo usado
+
+| Item | Motivo |
+|------|--------|
+| **`PEDIR_FOTO_DENUNCIA`** | Mensagem definida em `militanciaMessages.ts` mas nunca enviada. Não existe stage `denuncia_foto`. Foto de denúncia não é processada pelo bot — gera expectativa falsa se enviada manualmente |
+| **`COMANDO_NAO_RECONHECIDO`** | Definido mas nunca chamado. O fallback de comando desconhecido usa `MENU_PERSONALIZADO`, que é mais útil |
+| **Stage `lideranca_disponibilidade`** | Backward-compat only. O fluxo novo vai direto de `lideranca_area` para `LIDERANCA_REGISTRADA` sem coletar disponibilidade. A coluna F da aba Liderança nunca é preenchida para usuários novos |
+| **`obterTitulosSheet()`** | Função exportada que lê a aba `Títulos`. Nunca chamada em `MilitanciaManager` nem em nenhum outro arquivo ativo. O sistema de títulos usa `TITULOS_PADRAO` (hardcoded) como fallback, não essa função |
+| **Nível baseado só em missões** | O campo `nivel` (col F) só avança por missões concluídas. Usuários que fazem muitas denúncias, confirmam eventos e recrutam acumulam pontos mas ficam no nível 1 para sempre se não fizerem missões. Isso cria uma percepção de "nível" irrelevante para quem não faz missões diárias |
+
+### Mecanismos sub-utilizados (funcionam mas poderiam fazer mais)
+
+| Mecanismo | Situação atual | Oportunidade |
+|-----------|---------------|--------------|
+| **`eventosConfirmados` (col R)** | Incrementado e verificado para conquistas. Mas o bot não envia confirmação após conquista de evento (a notificação vai no próximo acesso) | Enviar notificação de conquista logo após confirmação — já implementado, mas depende de conquistas configuradas na aba `conquistas` |
+| **`conteudosCompartilhados` (col N)** | Incrementado. Conquistas agora verificadas após acesso (bug corrigido). Mas o contador cresce mesmo que a conquista não esteja configurada na aba | Criar conquistas na aba `conquistas` para os marcos: 20, 40, 60 conteúdos |
+| **`militantesRecrutados` (col O)** | Incrementado e conquistas agora verificadas (bug corrigido). Mas o recrutador não recebe notificação quando alguém usa seu código | Difícil sem um canal de notificação proativo, mas já funciona no nível de conquistas |
+| **Painel do bairro** | Mostra militantes ativos, pontos, nível do bairro, líder. Mas `missoesConcluidasSemana` era sempre 0 (bug corrigido) | Com o bug corrigido, o painel agora mostra completações reais dos últimos 7 dias |
+| **Conquistas data-driven** | Sistema completo implementado com cache 1h. Mas se a aba `conquistas` estiver vazia, cai no fallback hardcoded sem emojis personalizados nem descrições | Preencher a aba `conquistas` com as 24 conquistas do TITULOS_PADRAO + customizações |
+
+### O que poderia ser adicionado profissionalmente
+
+> Estas sugestões NÃO estão implementadas. São recomendações baseadas em gamificação comprovada para aplicações de mobilização cívica.
+
+| Mecanismo | Impacto | Complexidade |
+|-----------|---------|-------------|
+| **Bônus de onboarding** | Concluir o cadastro dá +20 pts e título "Recruta" imediatamente, criando primeira experiência de recompensa | Baixa |
+| **Missão semanal coletiva** | Meta do bairro: "100 missões até domingo". Todos os membros do bairro veem o progresso. Cria senso de propósito coletivo | Média |
+| **Nível baseado em engajamento total** | Nível atual = missões. Proposta: pontos gerais determinam o nível (missão ainda vale mais). Quem só faz denúncias avança | Média |
+| **Lembretes de streak** | Se o militante fez missão ontem mas ainda não fez hoje (consulta a col K), enviar lembrete às 20h | Alta (requer cron job / scheduler) |
+| **Quadro de honra mensal** | Top 3 por pontos do mês. Enviado para todos no 1º dia do mês seguinte | Alta (requer cron + broadcast) |
+| **Conquista por tempo de cadastro** | "Veterano" para quem está ativo há 30/90/180 dias. Incentiva retenção de longo prazo | Baixa |
+| **Compartilhamento do resultado** | MISSAO_CONCLUIDA poderia sugerir "compartilhe seu progresso: Sou Militante ⚡ #42" | Baixa |
 
 ---
 

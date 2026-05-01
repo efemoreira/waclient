@@ -116,25 +116,13 @@ export async function buscarMilitantePorPosicao(posicao: number): Promise<Milita
 
 ---
 
-## 8. `isConcluido()` em `obterPainelBairro` — lê coluna D que nunca é escrita
+## 8. `isConcluido()` em `obterPainelBairro` — **CORRIGIDO**
 
-**Arquivo:** `src/utils/militanciaSheet.ts`
+**Status:** ✅ Corrigido em maio/2026.
 
-```typescript
-// em obterPainelBairro():
-const missoesConcluidasSemana = rows.filter(row => isConcluido(row[3])).length;
-// row[3] = coluna D da aba Missões
-```
+**Era:** `obterPainelBairro()` lia col D da aba Missões para status "concluído", mas col D nunca era escrita. `missoesConcluidasSemana` era sempre 0.
 
-**O problema:** a aba `Missões` tem as colunas:
-
-| A | B | C |
-|---|---|---|
-| data | missao | concluiram (CSV de telefones) |
-
-A função `registrarRespostaMissao()` só escreve em col C (`concluiram`). A col D nunca é escrita por nenhuma função do sistema. Portanto, `missoesConcluidasSemana` **sempre retorna 0** no painel do bairro.
-
-**Para corrigir:** a lógica deveria contar linhas onde o telefone do bairro está na col C (`concluiram`), não verificar uma col D de status. Alternativa: criar col D com status explícito e escrevê-la em `registrarRespostaMissao()`.
+**Correção:** a função agora lê col C (`concluiram` = CSV de telefones), filtra pelos membros do bairro e filtra para os últimos 7 dias via `parseDateBR`.
 
 ---
 
