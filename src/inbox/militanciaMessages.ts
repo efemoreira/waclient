@@ -5,35 +5,6 @@
 
 import type { ConteudoInfo, EventoInfo, ConquistaDefinicao } from '../utils/militanciaSheet';
 
-/**
- * Returns an ordinal suffix string for a rank number (Portuguese style).
- * e.g. 1 → "1º", 2 → "2º"
- */
-function ordinal(n: number): string {
-  return `${n}º`;
-}
-
-/**
- * Calculates the next level name and remaining missions.
- * Returns null if the militant is already at maximum level.
- */
-function proximoNivel(
-  nivelAtual: number,
-  missoesAtuais: number
-): { nome: string; missoesRestantes: number } | null {
-  const thresholds: Record<number, { missoes: number; nome: string }> = {
-    1: { missoes: 5,   nome: 'Apoiador ✊' },
-    2: { missoes: 15,  nome: 'Ativista 🔴' },
-    3: { missoes: 40,  nome: 'Militante ⚡' },
-    4: { missoes: 80,  nome: 'Espartano 🦱' },
-    5: { missoes: 150, nome: 'Missionário 🌟' },
-  };
-  const prox = thresholds[nivelAtual];
-  if (!prox) return null;
-  const missoesRestantes = Math.max(0, prox.missoes - missoesAtuais);
-  return { nome: prox.nome, missoesRestantes };
-}
-
 export const MESSAGES_MILITANCIA = {
   // ---- Primeiro contato (usuário não cadastrado, primeira mensagem) ----
   WELCOME_FIRST_CONTACT: `👋 Ola! Esse é o canal direto de *Felipe Moreira*.
@@ -127,11 +98,7 @@ O que você quer fazer hoje?
 2️⃣ Próximos eventos
 3️⃣ Novo conteúdo
 4️⃣ Fazer uma denúncia
-5️⃣ Quero contribuir mais
-6️⃣ Meu painel
-7️⃣ Painel do bairro
-
-_Digite *perfil* para ver seus pontos e conquistas._`,
+5️⃣ Quero contribuir mais`,
 
   // Menu principal (sem nome, para compatibilidade e casos de uso genérico)
   MENU: `✊ *Central da Militância*
@@ -142,9 +109,7 @@ O que você quer fazer?
 2️⃣ Próximos eventos
 3️⃣ Novo conteúdo
 4️⃣ Fazer uma denúncia
-5️⃣ Quero contribuir mais
-6️⃣ Meu painel
-7️⃣ Painel do bairro`,
+5️⃣ Quero contribuir mais`,
 
   // 1 - Missão do dia
   MISSAO: (missaoTexto: string) => `🚀 *MISSÃO DE HOJE*
@@ -154,8 +119,8 @@ ${missaoTexto}
 ---
 Já concluiu?
 
-✅ *Já fiz* — para registrar como concluída
-⏳ *Ainda não* — para registrar e voltar depois`,
+1️⃣ *Sim, fiz!* — para registrar como concluída
+2️⃣ *Ainda não* — para registrar e voltar depois`,
 
 
   MISSAO_CONCLUIDA: (streakAtual: number, pontos: number, pontosGanhos: number) => {
@@ -209,7 +174,7 @@ Digite *menu* para continuar.`,
       if (evento.hora) msg += ` às ${evento.hora}`;
     }
     if (evento.local) msg += `\n📍 ${evento.local}`;
-    msg += `\n\n---\nVocê vai?\n\n*1* – Sim, estarei lá! ✅\n*2* – Talvez 🤔`;
+    msg += `\n\n---\nVocê vai?\n\n1️⃣ Sim, estarei lá! ✅\n2️⃣ Talvez 🤔`;
     return msg;
   },
 
@@ -257,7 +222,9 @@ Você é o tipo de pessoa que faz o movimento crescer. Como quer contribuir?`,
   LIDERANCA_OPCOES: `1️⃣ Fazer uma doação financeira
 2️⃣ Organizar reuniões no meu bairro
 3️⃣ Oferecer minha experiência profissional
-4️⃣ Participar de pesquisas e estratégia`,
+4️⃣ Participar de pesquisas e estratégia
+
+_Não está nas opções? Escreva o que você quer fazer! Qualquer contribuição é bem-vinda 💚_`,
 
   // Keep for backward compatibility (existing code that imports LIDERANCA_MENU will still compile)
   LIDERANCA_MENU: `🙏 Obrigado por ajudar!
@@ -275,123 +242,6 @@ Entraremos em contato em breve para alinhar os próximos passos.
 Obrigado por querer fazer mais pelo movimento! 💪
 
 Digite *menu* para continuar.`,
-
-  // 6 - Dashboard
-  DASHBOARD: (params: {
-    nome: string;
-    nivel: number;
-    nomeNivel: string;
-    pontos: number;
-    missoesConcluidasTotal: number;
-    militantesNoBairro: number;
-    posicaoNoBairro: number;
-    posicaoGeral: number;
-    streakAtual: number;
-    bairro: string;
-  }) => {
-    const prox = proximoNivel(params.nivel, params.missoesConcluidasTotal);
-    let msg = `📊 *Seu progresso*
-
-👤 *${params.nome}*
-🎖️ Nível: *${params.nomeNivel}*
-💰 *${params.pontos} pts*
-🎯 ${params.missoesConcluidasTotal} missões concluídas
-🔥 Sequência: *${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}*
-
-� Bairro *${params.bairro}*: ${ordinal(params.posicaoNoBairro)} lugar (${params.militantesNoBairro} militantes)
-🌐 Posição geral: *${ordinal(params.posicaoGeral)}*`;
-
-    if (prox && prox.missoesRestantes > 0) {
-      msg += `\n\n⬆️ Próximo: *${prox.nome}*\nFaltam ${prox.missoesRestantes} missões`;
-    }
-
-    msg += `\n\nDigite *menu* para continuar.`;
-    return msg;
-  },
-
-  DASHBOARD_ERRO: `⚠️ Não foi possível carregar o painel. Tente novamente.
-
-Digite *menu* para continuar.`,
-
-  PAINEL_BAIRRO_PROMPT: `📍 *Painel do Bairro*
-
-Qual bairro você quer consultar?
-
-_Pode ser o seu ou qualquer outro da cidade._`,
-
-  // Painel do bairro
-  PAINEL_BAIRRO: (params: {
-    bairro: string;
-    militantesAtivos: number;
-    missoesConcluidasSemana: number;
-    nivelMedio: number;
-    lider?: string;
-    nivelBairro: number;
-    missoesTotais: number;
-    pontosTotais: number;
-  }) => `🏡 *PAINEL DO BAIRRO – ${params.bairro.toUpperCase()}*
-
-📊 Nível do bairro: *${params.nivelBairro}* · ⭐ *${params.pontosTotais} pts*
-🎯 Missões totais: ${params.missoesTotais}
-
-👥 Militantes ativos: ${params.militantesAtivos}
-📅 Missões essa semana: ${params.missoesConcluidasSemana}
-🏆 Nível médio: ${params.nivelMedio}${params.lider ? `\n👑 Líder responsável: ${params.lider}` : ''}
-
----
-🏆 *Ranking Geral de Bairros:*`,
-
-  PAINEL_RANKING: (ranking: Array<{ bairro: string; pontos: number }>) => {
-    if (!ranking.length) return 'Nenhum dado disponível ainda.';
-    const medalhas = ['🥇', '🥈', '🥉'];
-    return ranking
-      .map((r, i) => `${medalhas[i] || `${i + 1}º`} ${r.bairro} – ${r.pontos} pts`)
-      .join('\n');
-  },
-
-  PAINEL_ERRO: `⚠️ Não foi possível carregar o painel do bairro. Tente novamente.
-
-Digite *menu* para continuar.`,
-
-  // Perfil do militante
-  PERFIL: (params: {
-    nome: string;
-    bairro: string;
-    nivel: number;
-    nomeNivel: string;
-    pontos: number;
-    missoesConcluidasTotal: number;
-    streakAtual: number;
-    titulos: string;
-    posicao?: number;
-  }) => {
-    const prox = proximoNivel(params.nivel, params.missoesConcluidasTotal);
-    const membroStr = params.posicao ? `  |  🔢 Membro #${params.posicao}` : '';
-    let msg = `⭐ *Seu Perfil*
-
-👤 *${params.nome}*  |  📍 ${params.bairro}${membroStr}
-🎖️ Nível ${params.nivel}: *${params.nomeNivel}*
-💰 *${params.pontos} pts*
-🎯 ${params.missoesConcluidasTotal} missões  ·  🔥 ${params.streakAtual} ${params.streakAtual === 1 ? 'dia' : 'dias'}`;
-
-    if (params.titulos) {
-      msg += `\n\n🏅 *Conquistas:*\n${params.titulos}`;
-    }
-
-    if (prox && prox.missoesRestantes > 0) {
-      msg += `\n\n⬆️ Próximo: *${prox.nome}*\nFaltam ${prox.missoesRestantes} missões`;
-    }
-
-    msg += `\n\n*Níveis:*
-• 1 – Novato 🌱: 0 missões
-• 2 – Apoiador ✊: 5 missões
-• 3 – Ativista 🔴: 15 missões
-• 4 – Militante ⚡: 40 missões
-• 5 – Espartano 🦱: 80 missões
-• 6 – Missionário 🌟: 150 missões`;
-
-    return msg;
-  },
 
   // Fallback
   COMANDO_NAO_RECONHECIDO: `🤔 Não entendi essa mensagem.

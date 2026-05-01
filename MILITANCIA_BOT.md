@@ -29,7 +29,6 @@ O bot de militância é um módulo do **waclient**, sistema serverless no Vercel
 - Engajar com missões diárias, pontuação, níveis e conquistas (data-driven).
 - Registrar denúncias, confirmações de eventos e acessos a conteúdos.
 - Mapear interesse em liderança.
-- Exibir rankings por bairro e dashboard pessoal.
 - Rastrear recrutamento por número de membro (`#42`) ou telefone.
 
 ```
@@ -263,13 +262,11 @@ src/
 | `processar(celular, texto, conversa)` | public async | Ponto de entrada — deriva estado e roteia |
 | `processarStage(...)` | private async | Switch para cada stage ativo |
 | `processarMenuOuComando(...)` | private async | Interpreta comandos de usuário cadastrado |
-| `enviarDashboard(celular, militante)` | private async | Monta e envia dashboard pessoal |
-| `enviarPainelBairro(celular, bairro)` | private async | Monta e envia painel coletivo |
 | `enviarConteudoEEvento(celular)` | private async | Envia conteúdo + evento para não-cadastrados |
 | `detectarRespostaMissao(textoNorm)` | private | Retorna `'concluído'` ou `'pendente'` |
 | `isSaudacao(textoNorm)` | private static | Detecta saudações que reiniciam o fluxo |
 
-**Palavras reconhecidas como missão concluída:** `já fiz`, `já`, `fiz`, `concluído`, `feito`, `ok`, `✅`, `sim` (e qualquer texto que comece com essas palavras).
+**Palavras reconhecidas como missão concluída:** `1`, `já fiz`, `já`, `fiz`, `concluído`, `feito`, `ok`, `✅`, `sim` (e qualquer texto que comece com essas palavras).
 
 **Saudações reconhecidas (reiniciam o fluxo de cadastro):** `ola`, `oi`, `hello`, `hi`, `hey`, `bom dia`, `boa tarde`, `boa noite`, `inicio`, `iniciar`, `comecar`, `recomecar`, `reiniciar`, `voltar`.
 
@@ -318,7 +315,7 @@ src/
 
 | Função | Descrição |
 |--------|-----------|
-| `registrarAcessoConteudo(celular, conteudo, tipo)` | Append em Conteúdos + fire-and-forget: +3 pts, incrementa col N |
+| `registrarAcessoConteudo(celular, conteudo, tipo)` | Localiza a linha do conteúdo na aba Conteúdos e adiciona o telefone em col E (acessos) com vírgula — sem criar nova linha. Fire-and-forget: +3 pts |
 | `registrarConfirmacaoEvento(celular, nomeEvento, confirmado)` | Atualiza col F (confirmacoes) em Eventos + se `confirmado=true`: +5 pts (fire-and-forget) + incrementa col R (eventosConfirmados, fire-and-forget) |
 | `registrarDenuncia(celular, bairro, descricao)` | Append em Denúncias + **awaita** `incrementarContador('M')` + fire-and-forget +8 pts. Retorna protocolo `D260501-1435` |
 | `registrarInteresseLideranca(nome, celular, bairro, area, disponibilidade)` | Append em Liderança |
@@ -327,9 +324,6 @@ src/
 | `obterProximosEventos(limite)` | Retorna até N eventos futuros ordenados por data |
 | `obterUltimoConteudo(filtroTipo?)` | Último item catalog da aba Conteúdos, com filtro opcional |
 | `obterUltimosConteudosPorTipo()` | Um item por tipo distinto (bottom-to-top = mais recente por tipo) |
-| `obterDashboardPessoal(celular, bairro)` | Lê `C:I`, retorna `posicaoNoBairro` e `posicaoGeral` por pontos |
-| `obterPainelBairro(bairro)` | Agrega dados do bairro: militantes, missões, pontos, nível, líder |
-| `obterRankingBairros()` | Lê `E:G`, agrupa por bairro, ordena por pontos. Cache 5 min. Top 10 |
 
 ### `militanciaMessages.ts` — Templates
 
@@ -343,14 +337,14 @@ src/
 | `PEDIR_ORIGEM` | string | Aceita `#42`, telefone ou rede social. `0` para pular |
 | `CADASTRO_SUCESSO(nome, posicao)` | function | Boas-vindas + número de membro + instrução de recrutamento + menu |
 | `ERRO_CADASTRO` | string | Erro genérico de salvamento |
-| `MENU_PERSONALIZADO(nome)` | function | Menu 1–7 + dica de `perfil` |
-| `MENU` | string | Menu 1–7 sem nome (fallback e stage default) |
+| `MENU_PERSONALIZADO(nome)` | function | Menu 1–5 sem dica de perfil |
+| `MENU` | string | Menu 1–5 sem nome (fallback e stage default) |
 | `MISSAO(texto)` | function | Envia missão com instruções `Já fiz` / `Ainda não` |
 | `MISSAO_CONCLUIDA(streak, pontos, pontosGanhos)` | function | Confirma com delta, bônus streak e motivação |
 | `MISSAO_PENDENTE` | string | Confirma pendência |
 | `NIVEL_SUBIU(nomeNivel)` | function | Notificação de level-up |
 | `CONQUISTA_DESBLOQUEADA(conquista, missoesTotal)` | function | Usa `conquista.emoji`, `conquista.nome`, `conquista.descricao` |
-| `EVENTOS(evento)` | function | Primeiro evento + prompt de confirmação (Sim/Talvez) |
+| `EVENTOS(evento)` | function | Primeiro evento + prompt de confirmação (1️⃣ Sim / 2️⃣ Talvez) |
 | `MOSTRAR_EVENTO(evento)` | function | Evento sem prompt (2º e 3º eventos) |
 | `EVENTO_CONFIRMADO('sim'\|'talvez')` | function | Resposta à confirmação |
 | `CONTEUDO(texto)` | function | Fallback quando env var é usado |
@@ -361,17 +355,10 @@ src/
 | `PEDIR_FOTO_DENUNCIA` | string | Existe no código mas **não é enviado em nenhum flow ativo** |
 | `DENUNCIA_REGISTRADA(protocolo)` | function | Confirma com protocolo |
 | `LIDERANCA_AGRADECIMENTO` | string | Agradece interesse |
-| `LIDERANCA_OPCOES` | string | 4 opções de contribuição |
+| `LIDERANCA_OPCOES` | string | 4 opções de contribuição + nota de texto livre |
 | `LIDERANCA_MENU` | string | **Legado** — mantido para compatibilidade, não é enviado |
 | `PEDIR_DISPONIBILIDADE` | string | **Legado** — mantido para compatibilidade, só usado em stage `lideranca_disponibilidade` (backward-compat) |
 | `LIDERANCA_REGISTRADA` | string | Confirma registro |
-| `DASHBOARD(params)` | function | Dashboard pessoal: nível, pontos, missões, streak, posição |
-| `DASHBOARD_ERRO` | string | Erro no dashboard |
-| `PAINEL_BAIRRO_PROMPT` | string | Pede qual bairro consultar |
-| `PAINEL_BAIRRO(params)` | function | Dados coletivos do bairro |
-| `PAINEL_RANKING(ranking)` | function | Top-10 bairros com medalhas |
-| `PAINEL_ERRO` | string | Erro no painel |
-| `PERFIL(params)` | function | Perfil: nível+emoji, pontos, missões, streak, conquistas, `#posicao`, próximo nível, lista de níveis |
 | `COMANDO_NAO_RECONHECIDO` | string | Definido mas **não é usado** — comandos não reconhecidos mostram `MENU_PERSONALIZADO` |
 
 ---

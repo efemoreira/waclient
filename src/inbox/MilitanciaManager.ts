@@ -17,7 +17,6 @@
  *    lideranca_area       → registra área de interesse em liderança
  *    denuncia_bairro      → coleta bairro da denúncia
  *    denuncia_descricao   → coleta descrição e finaliza denúncia
- *    painel_bairro        → coleta bairro e exibe ranking
  *
  *  Todos os dados são gravados no Google Sheets via militanciaSheet.ts
  */
@@ -39,16 +38,12 @@ import {
   registrarInteresseLideranca,
   registrarDenuncia,
   registrarOrigem,
-  obterPainelBairro,
-  obterRankingBairros,
   obterUltimoConteudo,
   obterProximoEvento,
   obterProximosEventos,
   obterUltimosConteudosPorTipo,
   obterMissaoDia,
   contarMilitantes,
-  resolverNomeTitulo,
-  obterDashboardPessoal,
   nomeDoNivel,
   verificarERegistrarConquistas,
   type MilitanteInfo,
@@ -401,15 +396,6 @@ export class MilitanciaManager {
         return true;
       }
 
-      // ---- Neighborhood panel bairro input ----
-      case 'painel_bairro': {
-        const bairro = texto.trim();
-        conversa.militanciaStage = undefined;
-        conversa.militanciaData = {};
-        await this.enviarPainelBairro(celular, bairro);
-        return true;
-      }
-
       default:
         conversa.militanciaStage = undefined;
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU);
@@ -422,17 +408,15 @@ export class MilitanciaManager {
    *
    * Comandos globais (funcionam em qualquer momento):
    *   menu / ajuda / voltar → exibe o menu principal personalizado
-   *   perfil / pontos / nível → exibe o perfil do militante com pontuação
    *
    * Opções do menu:
    *   1 → Missão do dia
    *   2 → Próximos eventos
    *   3 → Novo conteúdo
-   *   4 → Quero liderar
-   *   5 → Painel do bairro
-   *   6 → Fazer denúncia
-   *   dashboard → Estatísticas pessoais detalhadas
+   *   4 → Fazer uma denúncia
+   *   5 → Quero contribuir mais (liderança)
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async processarMenuOuComando(
     celular: string,
     texto: string,
@@ -443,31 +427,6 @@ export class MilitanciaManager {
     // Global commands
     if (['menu', 'ajuda', 'help', 'inicio', 'início', 'voltar'].includes(textoNorm)) {
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
-      return false;
-    }
-
-    if (['perfil', 'meu perfil', 'pontos', 'nivel', 'nível'].includes(textoNorm)) {
-      // Resolve title IDs to display names for PERFIL message
-      const titulosNomes = (militante.titulos || '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((id) => resolverNomeTitulo(id))
-        .join(', ');
-      await this.client.sendMessage(
-        celular,
-        MESSAGES_MILITANCIA.PERFIL({
-          nome: militante.nome,
-          bairro: militante.bairro,
-          nivel: militante.nivel,
-          nomeNivel: nomeDoNivel(militante.nivel),
-          pontos: militante.pontos,
-          missoesConcluidasTotal: militante.missoesConcluidasTotal,
-          streakAtual: militante.streakAtual,
-          titulos: titulosNomes,
-          posicao: militante.posicao || undefined,
-        })
-      );
       return false;
     }
 
@@ -561,71 +520,10 @@ export class MilitanciaManager {
       return true;
     }
 
-    // Option 6 - Painel pessoal (dashboard)
-    if (
-      ['6', 'dashboard', 'painel', 'meu painel'].includes(textoNorm)
-    ) {
-      await this.enviarDashboard(celular, militante);
-      return false;
-    }
-
-    // Option 7 - Painel do bairro
-    if (
-      ['7', 'painel do bairro', 'painel bairro', 'meu bairro', 'ver bairro'].includes(textoNorm)
-    ) {
-      conversa.militanciaStage = 'painel_bairro';
-      conversa.militanciaData = {};
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PAINEL_BAIRRO_PROMPT);
-      return true;
-    }
-
     // Unrecognized - show personalized menu
     this.log(`⚠️ Comando não reconhecido: "${texto.substring(0, 50)}"`);
     await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
     return false;
-  }
-
-  /**
-   * Fetch and send personal dashboard data
-   */
-  private async enviarDashboard(celular: string, militante: MilitanteInfo): Promise<void> {
-    try {
-      const dashboard = await obterDashboardPessoal(celular, militante.bairro);
-      const msg = MESSAGES_MILITANCIA.DASHBOARD({
-        nome: militante.nome,
-        nivel: militante.nivel,
-        nomeNivel: nomeDoNivel(militante.nivel),
-        pontos: militante.pontos,
-        missoesConcluidasTotal: militante.missoesConcluidasTotal,
-        militantesNoBairro: dashboard.militantesNoBairro,
-        posicaoNoBairro: dashboard.posicaoNoBairro,
-        posicaoGeral: dashboard.posicaoGeral,
-        streakAtual: militante.streakAtual,
-        bairro: militante.bairro,
-      });
-      await this.client.sendMessage(celular, msg);
-    } catch (err: any) {
-      this.log(`❌ Erro ao obter dashboard: ${err?.message}`);
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.DASHBOARD_ERRO);
-    }
-  }
-
-  /**
-   * Fetch and send neighborhood panel data
-   */
-  private async enviarPainelBairro(celular: string, bairro: string): Promise<void> {
-    try {
-      const [painel, ranking] = await Promise.all([
-        obterPainelBairro(bairro),
-        obterRankingBairros(),
-      ]);
-      const painelMsg = MESSAGES_MILITANCIA.PAINEL_BAIRRO(painel);
-      const rankingMsg = MESSAGES_MILITANCIA.PAINEL_RANKING(ranking);
-      await this.client.sendMessage(celular, `${painelMsg}\n\n${rankingMsg}\n\nDigite *menu* para voltar.`);
-    } catch (err: any) {
-      this.log(`❌ Erro ao obter painel: ${err?.message}`);
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PAINEL_ERRO);
-    }
   }
 
   /**
@@ -664,7 +562,7 @@ export class MilitanciaManager {
    * Detect whether a mission response means "completed" or "pending"
    */
   private detectarRespostaMissao(textoNorm: string): 'concluído' | 'pendente' {
-    const concluidos = ['ja fiz', 'ja', 'fiz', 'concluido', 'concluído', 'feito', 'ok', '✅', 'sim'];
+    const concluidos = ['1', 'ja fiz', 'ja', 'fiz', 'concluido', 'concluído', 'feito', 'ok', '✅', 'sim'];
     if (concluidos.some((c) => textoNorm === c || textoNorm.startsWith(c))) {
       return 'concluído';
     }
