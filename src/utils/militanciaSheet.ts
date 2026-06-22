@@ -107,6 +107,12 @@ async function getRows(sheetName: string, range: string): Promise<string[][]> {
 // P (15): origem                  [quem convidou ou qual rede social]
 // Q (16): eventosConfirmados      [gamification]
 // R (17): posicao                 [número sequencial de membro, ex: 42]
+// S (18): consentimentoLgpd       [v1: "sim - <data>" quando o usuário autoriza]
+//
+// Nota v1: as colunas de gamificação (F, G, J, K, L, M, N, Q, R) ficam paradas —
+// nada na militância chama mais as funções que as escrevem/exibem. A coluna I
+// foi reaproveitada para guardar o CSV de ids de missões concluídas em vez de
+// um contador.
 
 export type MilitanteInfo = {
   dataInscricao: string;
@@ -118,6 +124,7 @@ export type MilitanteInfo = {
   pontos: number;
   dataUltimaInteracao: string;
   missoesConcluidasTotal: number;
+  missoesConcluidasIds: string[];
   streakAtual: number;
   ultimaMissaoData: string;
   titulos: string;
@@ -127,6 +134,8 @@ export type MilitanteInfo = {
   eventosConfirmados: number;
   // Fase 3 — coluna U
   posicao: number;  // número sequencial de membro (ex: 42)
+  // v1 — coluna S
+  consentimentoLgpd: boolean;
 };
 
 function normalizarTelefone(celular: string): string {
@@ -145,6 +154,10 @@ function telefonesIguais(a: string, b: string): boolean {
 }
 
 function parseMilitanteRow(row: string[]): MilitanteInfo {
+  const missoesConcluidasIds = String(row[8] || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
   return {
     dataInscricao: String(row[0] || ''),
     nome: String(row[1] || ''),
@@ -154,7 +167,8 @@ function parseMilitanteRow(row: string[]): MilitanteInfo {
     nivel: Number(row[5] || 1),
     pontos: Number(row[6] || 0),
     dataUltimaInteracao: String(row[7] || ''),
-    missoesConcluidasTotal: Number(row[8] || 0),
+    missoesConcluidasTotal: missoesConcluidasIds.length,
+    missoesConcluidasIds,
     streakAtual: Number(row[9] || 0),
     ultimaMissaoData: String(row[10] || ''),
     titulos: String(row[11] || ''),
@@ -164,6 +178,8 @@ function parseMilitanteRow(row: string[]): MilitanteInfo {
     eventosConfirmados: Number(row[16] || 0),
     // coluna R(17)
     posicao: Number(row[17] || 0),  // número sequencial de membro (ex: 42)
+    // coluna S(18)
+    consentimentoLgpd: !!String(row[18] || '').trim(),
   };
 }
 
@@ -187,7 +203,7 @@ export function isCadastroCompleto(militante: MilitanteInfo): boolean {
 
 export async function buscarMilitante(celular: string): Promise<MilitanteInfo | null> {
   try {
-    const rows = await getRows(SHEET_MILITANTES, 'A:R');
+    const rows = await getRows(SHEET_MILITANTES, 'A:S');
     let bestRow: string[] | null = null;
     let bestScore = -1;
 
@@ -551,40 +567,14 @@ export async function atualizarDataCadastro(celular: string): Promise<void> {
 }
 
 /**
- * Registers the referral source for a newly registered militant.
- * - If `origem` looks like a member position number ('#42' or just '42' when 1–5 digits),
- *   resolves it to the recruiter's phone via buscarMilitantePorPosicao() and credits accordingly.
- * - Otherwise saves the text as-is (e.g. 'Instagram', 'Facebook').
- * Always stores the result in column P of the militant's row.
- * Note: phone numbers are NOT accepted as recruiter identification — use member number (#42).
+ * v1: grava quem indicou o militante na coluna P, sem lookup de posição de
+ * membro nem crédito de pontos ao recrutador (gamificação parada). Aceita
+ * tanto texto livre/rede social quanto um telefone em números puros (ex: via
+ * link "VimPelo_<telefone>" ou digitado diretamente pelo usuário).
  */
 export async function registrarOrigem(celular: string, origem: string): Promise<void> {
   try {
-    const origemTrim = origem.trim();
-    // Detect position number: '#42', '# 42', or plain '42' (1–5 digits)
-    const posicaoMatch = origemTrim.match(/^#?\s*(\d{1,5})$/);
-    const isPosicao = !!posicaoMatch;
-
-    let origemParaSalvar = origemTrim;
-
-    if (isPosicao) {
-      const numPosicao = Number(posicaoMatch![1]);
-      const recrutador = await buscarMilitantePorPosicao(numPosicao);
-      if (recrutador) {
-        const recrutadorPhone = recrutador.celular;
-        origemParaSalvar = `#${numPosicao} (${recrutador.nome || recrutadorPhone})`;
-        // Credit recruiter: await increment so conquistas check below sees updated count
-        await incrementarContador(recrutadorPhone, 'N').catch(() => {});
-        atualizarPontosENivel(recrutadorPhone, 15).catch(() => {});
-        // Check recruiter achievements (Articulador title etc.)
-        verificarERegistrarConquistas(recrutadorPhone).catch(() => {});
-        logger.info('MilitanciaSheet', `🔗 Recrutamento via posição #${numPosicao} → ${recrutadorPhone}`);
-      } else {
-        origemParaSalvar = `#${numPosicao}`;
-        logger.warn('MilitanciaSheet', `Posição #${numPosicao} não encontrada na planilha`);
-      }
-    }
-
+    const origemParaSalvar = origem.trim();
     const auth = getAuth();
     if (!auth) return;
     const sheets = google.sheets({ version: 'v4', auth });
@@ -592,18 +582,103 @@ export async function registrarOrigem(celular: string, origem: string): Promise<
     for (let i = 1; i < rows.length; i++) {
       if (telefonesIguais(String(rows[i]?.[2] || ''), celular)) {
         const rowNum = i + 1;
-        const batchData: Array<{ range: string; values: string[][] }> = [
-          { range: `${SHEET_MILITANTES}!P${rowNum}`, values: [[origemParaSalvar]] }, // P = origem
-        ];
-        await sheets.spreadsheets.values.batchUpdate({
+        await sheets.spreadsheets.values.update({
           spreadsheetId: SHEET_ID,
-          requestBody: { valueInputOption: 'USER_ENTERED', data: batchData },
+          range: `${SHEET_MILITANTES}!P${rowNum}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[origemParaSalvar]] },
         });
         return;
       }
     }
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao registrar origem: ${err?.message}`);
+  }
+}
+
+/**
+ * v1: grava o consentimento LGPD do militante na coluna S. Só é chamado
+ * quando o usuário responde "Sim, eu autorizo" ao consentimento.
+ */
+export async function registrarConsentimentoLgpd(celular: string): Promise<void> {
+  try {
+    const auth = getAuth();
+    if (!auth) return;
+    const sheets = google.sheets({ version: 'v4', auth });
+    const rows = await getRows(SHEET_MILITANTES, 'A:C');
+    for (let i = 1; i < rows.length; i++) {
+      if (telefonesIguais(String(rows[i]?.[2] || ''), celular)) {
+        const rowNum = i + 1;
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SHEET_ID,
+          range: `${SHEET_MILITANTES}!S${rowNum}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[`sim - ${dataAtual()}`]] },
+        });
+        return;
+      }
+    }
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao registrar consentimento LGPD: ${err?.message}`);
+  }
+}
+
+/**
+ * v1: marca a missão (pelo id vindo do JSON) como concluída para o militante,
+ * acrescentando o id ao CSV guardado na coluna I. Não calcula pontos, nível
+ * nem streak — isso ficou parado nesta versão.
+ */
+export async function registrarMissaoConcluida(celular: string, missaoId: string): Promise<void> {
+  try {
+    const auth = getAuth();
+    if (!auth) return;
+    const sheets = google.sheets({ version: 'v4', auth });
+    const rows = await getRows(SHEET_MILITANTES, 'A:I');
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (telefonesIguais(String(row[2] || ''), celular)) {
+        const idsAtuais = String(row[8] || '')
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean);
+        if (idsAtuais.includes(missaoId)) return;
+        idsAtuais.push(missaoId);
+        const rowNum = i + 1;
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SHEET_ID,
+          range: `${SHEET_MILITANTES}!I${rowNum}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: { values: [[idsAtuais.join(',')]] },
+        });
+        return;
+      }
+    }
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao registrar missão concluída: ${err?.message}`);
+  }
+}
+
+/**
+ * v1: verifica se o militante já concluiu a missão (pelo id) checando o CSV
+ * guardado na coluna I, em vez de ler a aba "Missões".
+ */
+export async function verificarMissaoConcluida(celular: string, missaoId: string): Promise<boolean> {
+  try {
+    const rows = await getRows(SHEET_MILITANTES, 'A:I');
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      if (telefonesIguais(String(row[2] || ''), celular)) {
+        const idsAtuais = String(row[8] || '')
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean);
+        return idsAtuais.includes(missaoId);
+      }
+    }
+    return false;
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao verificar missão concluída: ${err?.message}`);
+    return false;
   }
 }
 
@@ -1043,6 +1118,8 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
         militantesRecrutados: Number(row[13] || 0),
         eventosConfirmados: Number(row[16] || 0),  // Q(16)
         posicao: Number(row[17] || 0),             // R(17)
+        missoesConcluidasIds: [],
+        consentimentoLgpd: !!String(row[18] || '').trim(),
       };
 
       logger.info(
@@ -1405,14 +1482,7 @@ export async function registrarDenuncia(
       descricao,
       protocolo,
     ]);
-    // Increment denuncias_enviadas counter (col M) — awaited so achievement check sees updated value
-    await incrementarContador(celular, 'M').catch((e) =>
-      logger.warn('MilitanciaSheet', `Erro ao incrementar denuncias_enviadas (non-critical): ${e?.message}`)
-    );
-    // Award +8 pts for civic reporting – fire-and-forget
-    atualizarPontosENivel(celular, 8).catch((e) =>
-      logger.warn('MilitanciaSheet', `Erro ao atualizar pontos (denúncia): ${e?.message}`)
-    );
+    // v1: gamificação parada — não incrementa denuncias_enviadas nem premia pontos.
     logger.info('MilitanciaSheet', `✅ Denúncia registrada: ${celular} - ${bairro} (${protocolo})`);
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao registrar denúncia: ${err?.message}`);

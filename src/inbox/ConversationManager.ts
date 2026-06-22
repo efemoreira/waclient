@@ -51,23 +51,20 @@ export interface Conversation {
   isHuman: boolean;
   messages: MessageRecord[];
   militanciaStage?:
+    | 'lgpd_consentimento'
     | 'missao_resposta'
-    | 'evento_confirmacao'
     | 'lideranca_area'
-    | 'lideranca_disponibilidade'
     | 'denuncia_bairro'
     | 'denuncia_descricao'
-    | 'painel_bairro'
     | 'cadastro_origem';
   militanciaData?: {
     cadastroIniciado?: boolean;
     nome?: string;
     bairro?: string;
     cidade?: string;
-    area?: string;
     descricao?: string;
-    evento?: string;
-    missao?: string;
+    missao?: { id: string };
+    recrutadoPor?: string;
   };
 }
 

@@ -1,0 +1,52 @@
+{
+  "missaoAtual": {
+    "id": "missao-001",
+    "texto": "Compartilhe o último vídeo do Delegado Huggo no seu status do WhatsApp e marque 3 amigos no comentário."
+  },
+  "publicacoes": [
+    {
+      "rede": "Instagram",
+      "link": "https://instagram.com/delegadohuggo",
+      "texto": "Fizemos uma visita surpresa ao posto de saúde do bairro Bom Jardim. Confira os bastidores na última publicação.",
+      "data": "20/06/2026"
+    },
+    {
+      "rede": "Facebook",
+      "link": "https://facebook.com/delegadohuggo",
+      "texto": "Live de ontem sobre segurança pública já passou de 50 mil visualizações. Assista na íntegra e compartilhe.",
+      "data": "19/06/2026"
+    },
+    {
+      "rede": "YouTube",
+      "link": "https://youtube.com/@delegadohuggo",
+      "texto": "Novo vídeo no ar: 'Os 5 problemas mais urgentes do nosso estado, segundo você'.",
+      "data": "18/06/2026"
+    },
+    {
+      "rede": "TikTok",
+      "link": "https://tiktok.com/@delegadohuggo",
+      "texto": "Bastidores da caminhada no Centro de Fortaleza, com direito a bate-papo com moradores.",
+      "data": "17/06/2026"
+    }
+  ],
+  "eventos": [
+    {
+      "data": "25/06/2026",
+      "hora": "19:00",
+      "local": "Praça do Ferreira, Fortaleza",
+      "texto": "Caminhada com o Delegado Huggo pelo centro da cidade. Venha de camisa do movimento!"
+    },
+    {
+      "data": "29/06/2026",
+      "hora": "09:00",
+      "local": "Associação de Moradores do Bom Jardim",
+      "texto": "Reunião aberta com lideranças comunitárias para ouvir as demandas do bairro."
+    },
+    {
+      "data": "05/07/2026",
+      "hora": "18:30",
+      "local": "Centro de Convenções do Ceará",
+      "texto": "Grande encontro estadual da militância — confirme presença com sua coordenação local."
+    }
+  ]
+}

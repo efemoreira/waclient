@@ -1,30 +1,36 @@
 /**
  * MilitanciaManager
  * ──────────────────────────────────────────────────────────────────────────────
- * Contém toda a lógica de conversa do bot de militância política.
+ * Contém toda a lógica de conversa do bot do Comando Digital do Delegado Huggo.
  *
  * É chamado pelo ConversationManager para cada mensagem recebida.
  * Retorna `true` se o estado da conversa mudou e precisa ser persistido.
+ * Retorna `false` quando só enviou uma resposta sem mudar o estado (ex: menu).
  *
  * Fluxos suportados:
  * ─────────────────
  *  Cadastro (orientado pela planilha):
- *    Novo contato → pergunta nome → pergunta bairro → pergunta cidade → pergunta origem → menu
+ *    Novo contato → consentimento LGPD → nome → bairro → cidade → origem → menu
  *
  *  Fluxos multi-passo (via militanciaStage na conversa):
+ *    lgpd_consentimento   → coleta autorização LGPD antes do cadastro
  *    missao_resposta      → registra resposta da missão do dia
- *    evento_confirmacao   → registra confirmação de presença
- *    lideranca_area       → registra área de interesse em liderança
- *    denuncia_bairro      → coleta bairro da denúncia
+ *    lideranca_area       → registra área de interesse em contribuir
+ *    denuncia_bairro       → coleta bairro da denúncia
  *    denuncia_descricao   → coleta descrição e finaliza denúncia
  *
- *  Todos os dados são gravados no Google Sheets via militanciaSheet.ts
+ *  v1: missão, eventos e publicações vêm de um JSON hardcoded
+ *  (src/data/militanciaConteudo.json), não mais da planilha. Apenas dados de
+ *  pessoas (cadastro, denúncia, liderança) continuam no Google Sheets.
+ *  Gamificação (pontos, nível, streak, conquistas, ranking) fica parada nesta
+ *  versão — o código continua existindo em militanciaSheet.ts, só não é mais
+ *  chamado por aqui.
  */
 
 import { WhatsApp } from '../wabapi';
+import { InlineKeyboard } from '../wabapi';
 import { normalizarTexto } from '../utils/text-normalizer';
 import { logger } from '../utils/logger';
-import { config } from '../config';
 import {
   buscarMilitante,
   isCadastroCompleto,
@@ -32,29 +38,23 @@ import {
   atualizarCamposMilitante,
   atualizarDataCadastro,
   atualizarUltimaInteracao,
-  registrarRespostaMissao,
-  registrarAcessoConteudo,
-  registrarConfirmacaoEvento,
+  registrarOrigem,
+  registrarConsentimentoLgpd,
+  registrarMissaoConcluida,
+  verificarMissaoConcluida,
   registrarInteresseLideranca,
   registrarDenuncia,
-  registrarOrigem,
-  verificarMissaoJaConcluida,
-  verificarConteudoJaAcessado,
-  verificarEventoJaConfirmado,
-  obterUltimoConteudo,
-  obterProximoEvento,
-  obterProximosEventos,
-  obterUltimosConteudosPorTipo,
-  obterMissaoDia,
-  contarMilitantes,
-  nomeDoNivel,
-  verificarERegistrarConquistas,
   type MilitanteInfo,
-  type MissaoResultado,
-  type ConquistaDefinicao,
 } from '../utils/militanciaSheet';
+import {
+  obterMissaoAtual,
+  obterPublicacoesRecentes,
+  obterProximosEventos,
+} from '../data/militanciaConteudo';
 import { MESSAGES_MILITANCIA } from './militanciaMessages';
 import type { Conversation } from './ConversationManager';
+
+const REGEX_VIM_PELO = /VimPelo_(\d+)/i;
 
 export class MilitanciaManager {
   private client: WhatsApp;
@@ -73,19 +73,6 @@ export class MilitanciaManager {
    * Muta o objeto `conversa` quando o state muda (ex: avança um stage).
    * Retorna `true` quando o estado foi alterado e precisa ser persistido no Redis.
    * Retorna `false` quando só enviou uma resposta sem mudar o estado (ex: menu).
-   *
-   * Ordem de verificação:
-   *   1. Se existe um stage ativo → delega para processarStage()
-   *   2. Se militante cadastrado → delega para processarMenuOuComando()
-   *   3. Se cadastro incompleto → coleta o campo que falta (nome/bairro/cidade)
-   *   4. Se telefone não existe na planilha → registra contato novo
-   *
-   * Estado de cadastro é derivado da planilha (não de flags locais):
-   *   - telefone NÃO está na planilha  → salva contato + mostra boas-vindas
-   *   - nome vazio                     → coleta nome
-   *   - nome preenchido, bairro vazio  → coleta bairro
-   *   - nome+bairro, cidade vazia      → coleta cidade
-   *   - tudo preenchido                → menu principal
    */
   async processar(celular: string, texto: string, conversa: Conversation): Promise<boolean> {
     // Guard: se a conversa está em modo humano, o operador responde manualmente — bot fica em silêncio.
@@ -96,9 +83,6 @@ export class MilitanciaManager {
     const isOpcao2 = ['2', 'novidades', 'acompanhar'].includes(textoNorm);
     conversa.militanciaData = conversa.militanciaData || {};
 
-    // Continua fluxos multi-passo que ainda precisam de stage tracking (missão, evento, liderança...).
-    // Stages de cadastro são ignorados propositalmente: o cadastro é derivado da planilha,
-    // não de um stage salvo localmente (isso evita inconsistências após re-deploys).
     if (conversa.militanciaStage) {
       if (['cadastro_nome', 'cadastro_bairro', 'cadastro_cidade'].includes(conversa.militanciaStage)) {
         // Stages legados de cadastro: limpa e deixa cair no fluxo derivado da planilha
@@ -121,36 +105,13 @@ export class MilitanciaManager {
     if (militante) {
       const cadastroIniciado = conversa.militanciaData.cadastroIniciado === true;
 
-      // Step 2: ask for explicit decision before collecting registration fields
       if (!cadastroIniciado) {
         if (isOpcao2) {
           await this.enviarConteudoEEvento(celular);
           return true;
         }
         if (isOpcao1) {
-          conversa.militanciaData.cadastroIniciado = true;
-          if (!militante.nome?.trim()) {
-            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
-            return true;
-          }
-          if (!militante.bairro?.trim()) {
-            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_BAIRRO);
-            return true;
-          }
-          if (!militante.cidade?.trim()) {
-            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_CIDADE);
-            return true;
-          }
-          // Defensive fallback if profile became complete between reads
-          const atualizado = await buscarMilitante(celular);
-          if (atualizado && isCadastroCompleto(atualizado)) {
-            conversa.militanciaData = {};
-            await this.client.sendMessage(
-              celular,
-              MESSAGES_MILITANCIA.MENU_PERSONALIZADO(atualizado.nome, atualizado.posicao)
-            );
-            return true;
-          }
+          return await this.iniciarLgpdOuCadastro(celular, militante, conversa);
         }
 
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_SECOND_CONTACT);
@@ -158,7 +119,6 @@ export class MilitanciaManager {
       }
 
       if (!militante.nome?.trim()) {
-        // If user greets or repeats option 1, re-prompt for name.
         if (isOpcao1 || MilitanciaManager.isSaudacao(textoNorm)) {
           await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
           return true;
@@ -203,11 +163,19 @@ export class MilitanciaManager {
       }
       const ok = await atualizarCamposMilitante(celular, { cidade: texto.trim() });
       if (ok) {
-        // Awaited so posicao (membro #N) is assigned before CADASTRO_SUCESSO is sent
+        // Awaited so a próxima etapa só roda depois do cadastro salvo
         await atualizarDataCadastro(celular).catch(() => {});
-        conversa.militanciaStage = 'cadastro_origem';
-        conversa.militanciaData = {};
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_ORIGEM);
+        const recrutadoPor = conversa.militanciaData.recrutadoPor;
+        if (recrutadoPor) {
+          conversa.militanciaStage = undefined;
+          conversa.militanciaData = {};
+          registrarOrigem(celular, recrutadoPor).catch(() => {});
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CADASTRO_SUCESSO(texto.trim()));
+        } else {
+          conversa.militanciaStage = 'cadastro_origem';
+          conversa.militanciaData = {};
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PEDIR_ORIGEM);
+        }
       } else {
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.ERRO_CADASTRO);
       }
@@ -219,10 +187,23 @@ export class MilitanciaManager {
       this.log(`⚠️ Erro ao registrar contato no primeiro acesso: ${err?.message}`);
       return false;
     });
-    await this.client.sendMessage(
-      celular,
-      contatoOk ? MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT : MESSAGES_MILITANCIA.ERRO_CADASTRO
-    );
+
+    if (!contatoOk) {
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.ERRO_CADASTRO);
+      return true;
+    }
+
+    // Atalho: a primeira mensagem pode vir no formato "VimPelo_<telefone>",
+    // preenchido automaticamente pelo link de recrutamento. Quando detectado,
+    // pula a tela de boas-vindas e vai direto para o consentimento LGPD.
+    const vimPeloMatch = texto.match(REGEX_VIM_PELO);
+    if (vimPeloMatch) {
+      conversa.militanciaData.recrutadoPor = vimPeloMatch[1];
+      const militanteNovo = await buscarMilitante(celular);
+      return await this.iniciarLgpdOuCadastro(celular, militanteNovo, conversa);
+    }
+
+    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_FIRST_CONTACT);
     return true;
   }
 
@@ -241,16 +222,36 @@ export class MilitanciaManager {
   }
 
   /**
+   * Inicia o cadastro: se o consentimento LGPD ainda não foi dado, pede
+   * primeiro; caso já tenha sido dado (ex: usuário que recomeçou), segue
+   * direto para a coleta de nome.
+   */
+  private async iniciarLgpdOuCadastro(
+    celular: string,
+    militante: MilitanteInfo | null,
+    conversa: Conversation
+  ): Promise<boolean> {
+    conversa.militanciaData = conversa.militanciaData || {};
+    conversa.militanciaData.cadastroIniciado = true;
+
+    if (militante?.consentimentoLgpd) {
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
+      return true;
+    }
+
+    conversa.militanciaStage = 'lgpd_consentimento';
+    const keyboard = new InlineKeyboard([
+      MESSAGES_MILITANCIA.LGPD_BOTAO_SIM,
+      MESSAGES_MILITANCIA.LGPD_BOTAO_NAO,
+    ]);
+    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.LGPD_CONSENTIMENTO, {
+      replyMarkup: keyboard,
+    });
+    return true;
+  }
+
+  /**
    * Processa a mensagem quando há um fluxo multi-passo ativo (stage).
-   *
-   * Cada case corresponde a uma etapa de um fluxo que precisa de mais de uma
-   * resposta do usuário. O stage é salvo na conversa entre mensagens.
-   *
-   * Exemplo de fluxo de denúncia:
-   *   Bot: "Qual o bairro?" → stage = 'denuncia_bairro'
-   *   Usuário: "Centro"     → stage = 'denuncia_descricao'
-   *   Bot: "Qual o problema?"
-   *   Usuário: "Buraco na rua" → stage = undefined → grava na planilha
    */
   private async processarStage(
     celular: string,
@@ -261,6 +262,20 @@ export class MilitanciaManager {
     conversa.militanciaData = conversa.militanciaData || {};
 
     switch (conversa.militanciaStage) {
+      // ---- LGPD consent step ----
+      case 'lgpd_consentimento': {
+        conversa.militanciaStage = undefined;
+        const autorizou = textoNorm.includes('autorizo') && !textoNorm.includes('nao autorizo') && !textoNorm.startsWith('nao');
+        if (autorizou) {
+          registrarConsentimentoLgpd(celular).catch(() => {});
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.WELCOME_NEW_USER);
+        } else {
+          conversa.militanciaData = {};
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.LGPD_RECUSADO);
+        }
+        return true;
+      }
+
       // ---- Registration origin step ----
       case 'cadastro_origem': {
         const origemTexto = texto.trim();
@@ -270,77 +285,35 @@ export class MilitanciaManager {
           registrarOrigem(celular, origemTexto).catch(() => {});
         }
         const militantePos = await buscarMilitante(celular);
-        const posicaoMembro = militantePos?.posicao || (await contarMilitantes());
         await this.client.sendMessage(
           celular,
-          MESSAGES_MILITANCIA.CADASTRO_SUCESSO(militantePos?.nome || '', posicaoMembro)
+          MESSAGES_MILITANCIA.CADASTRO_SUCESSO(militantePos?.nome || '')
         );
         return true;
       }
 
       // ---- Mission response ----
       case 'missao_resposta': {
-        const missaoDia = conversa.militanciaData?.missao || config.militancia.missaoDia;
+        const missao = conversa.militanciaData?.missao;
         const fezMissao = this.detectarRespostaMissao(textoNorm) === 'concluído';
         conversa.militanciaStage = undefined;
 
-        if (fezMissao) {
-          const resultado: MissaoResultado = await registrarRespostaMissao(celular, missaoDia);
-          // Base confirmation with streak and points
-          await this.client.sendMessage(
-            celular,
-            MESSAGES_MILITANCIA.MISSAO_CONCLUIDA(resultado.streakAtual, resultado.pontos, resultado.pontosGanhos)
-          );
-          // Level-up notification
-          if (resultado.levelUp) {
-            await this.client.sendMessage(
-              celular,
-              MESSAGES_MILITANCIA.NIVEL_SUBIU(nomeDoNivel(resultado.novoNivel))
-            );
-          }
-          // Achievement notifications
-          for (const conquista of resultado.novasConquistas) {
-            await this.client.sendMessage(
-              celular,
-              MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, resultado.missoesConcluidasTotal)
-            );
-          }
+        if (fezMissao && missao?.id) {
+          await registrarMissaoConcluida(celular, missao.id);
+          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MISSAO_CONCLUIDA);
         } else {
           await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MISSAO_PENDENTE);
         }
         return true;
       }
 
-      // ---- Event confirmation ----
-      case 'evento_confirmacao': {
-        const nomeEvento = conversa.militanciaData?.evento || config.militancia.proximosEventos;
-        const confirmacao: 'sim' | 'talvez' = ['1', 'sim', 'vou', 'vou sim', 'sim vou'].some((k) => textoNorm.includes(k))
-          ? 'sim'
-          : 'talvez';
-        await registrarConfirmacaoEvento(celular, nomeEvento, confirmacao === 'sim');
-        conversa.militanciaStage = undefined;
-        conversa.militanciaData = {};
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTO_CONFIRMADO(confirmacao));
-        // Verificar conquistas de eventos após confirmação
-        if (confirmacao === 'sim') {
-          const novasConquistas = await verificarERegistrarConquistas(celular);
-          for (const conquista of novasConquistas) {
-            await this.client.sendMessage(
-              celular,
-              MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, 0)
-            );
-          }
-        }
-        return true;
-      }
-
-      // ---- Leadership / responsibility flow ----
+      // ---- Leadership / contribution flow ----
       case 'lideranca_area': {
         const areas: Record<string, string> = {
-          '1': 'Fazer uma doação',
-          '2': 'Organizar reuniões no meu bairro',
-          '3': 'Ajudar com minha experiência profissional',
-          '4': 'Participar de pesquisas e estratégias',
+          '1': 'Vaquinha',
+          '2': 'Liderança / organizar reuniões no meu bairro',
+          '3': 'Grupo de trabalho',
+          '4': 'Outros',
         };
         const area = areas[textoNorm] || texto.trim();
         const militante = await buscarMilitante(celular);
@@ -349,23 +322,7 @@ export class MilitanciaManager {
           celular,
           militante?.bairro || '',
           area,
-          '' // availability is no longer collected in the new flow
-        );
-        conversa.militanciaStage = undefined;
-        conversa.militanciaData = {};
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.LIDERANCA_REGISTRADA);
-        return true;
-      }
-
-      // Backward-compat: availability stage from old flow
-      case 'lideranca_disponibilidade': {
-        const militante = await buscarMilitante(celular);
-        await registrarInteresseLideranca(
-          militante?.nome || '',
-          celular,
-          militante?.bairro || '',
-          conversa.militanciaData.area || '',
-          texto.trim()
+          ''
         );
         conversa.militanciaStage = undefined;
         conversa.militanciaData = {};
@@ -388,14 +345,6 @@ export class MilitanciaManager {
         conversa.militanciaStage = undefined;
         conversa.militanciaData = {};
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.DENUNCIA_REGISTRADA(protocolo));
-        // Verificar conquistas de denúncias (registrarDenuncia já awaita o incremento do contador)
-        const novasConquistasDenuncia = await verificarERegistrarConquistas(celular);
-        for (const conquista of novasConquistasDenuncia) {
-          await this.client.sendMessage(
-            celular,
-            MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, 0)
-          );
-        }
         return true;
       }
 
@@ -409,17 +358,15 @@ export class MilitanciaManager {
   /**
    * Processa seleções do menu principal e comandos globais para militantes cadastrados.
    *
-   * Comandos globais (funcionam em qualquer momento):
-   *   menu / ajuda / voltar → exibe o menu principal personalizado
-   *
    * Opções do menu:
    *   1 → Missão do dia
-   *   2 → Próximos eventos
-   *   3 → Novo conteúdo
+   *   2 → Publicações recentes
+   *   3 → Próximos eventos
    *   4 → Fazer uma denúncia
-   *   5 → Quero contribuir mais (liderança)
+   *   5 → Quero contribuir mais
+   *   6 → Como recrutar
+   *   7 → Minha comunidade
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async processarMenuOuComando(
     celular: string,
     texto: string,
@@ -429,89 +376,55 @@ export class MilitanciaManager {
   ): Promise<boolean> {
     // Global commands
     if (['menu', 'ajuda', 'help', 'inicio', 'início', 'voltar'].includes(textoNorm)) {
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome, militante.posicao));
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
       return false;
     }
 
     // Option 1 - Mission
     if (['1', 'missao', 'missão', 'missao de hoje', 'missão de hoje'].includes(textoNorm)) {
-      const missaoSheet = await obterMissaoDia();
-      const missaoTexto = missaoSheet || config.militancia.missaoDia || '';
-      if (!missaoTexto) {
+      const missao = obterMissaoAtual();
+      if (!missao) {
         await this.client.sendMessage(celular, 'A missão de hoje ainda não foi configurada. Tente novamente mais tarde.\n\nDigite *menu* para ver outras opções.');
         return false;
       }
-      // Guard: don't let the user register the same mission twice
-      const jaConcluiu = await verificarMissaoJaConcluida(celular);
+      const jaConcluiu = await verificarMissaoConcluida(celular, missao.id);
       if (jaConcluiu) {
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MISSAO_JA_FEITA);
         return false;
       }
       conversa.militanciaStage = 'missao_resposta';
-      conversa.militanciaData = { missao: missaoTexto };
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MISSAO(missaoTexto));
+      conversa.militanciaData = { missao: { id: missao.id } };
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MISSAO(missao.texto));
       return true;
     }
 
-    // Option 2 - Events (up to 3 upcoming, nearest first)
+    // Option 2 - Publicações recentes
     if (
-      ['2', 'eventos', 'evento', 'proximos eventos'].includes(textoNorm)
+      ['2', 'publicacao', 'publicação', 'publicacoes', 'publicações', 'conteudo', 'conteúdo'].includes(textoNorm)
     ) {
-      const eventos = await obterProximosEventos(3);
-      if (!eventos.length) {
-        await this.client.sendMessage(celular, 'Não há eventos próximos cadastrados no momento.\n\nDigite *menu* para ver outras opções.');
-        return true;
-      }
-      // Guard: check if user already confirmed the first event
-      const jaConfirmou = await verificarEventoJaConfirmado(celular, eventos[0].nome);
-      if (jaConfirmou) {
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTO_JA_CONFIRMADO(eventos[0].nome));
-        // Show remaining events without the confirmation prompt
-        for (let i = 1; i < eventos.length; i++) {
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(eventos[i]));
-        }
+      const publicacoes = obterPublicacoesRecentes();
+      if (!publicacoes.length) {
+        await this.client.sendMessage(celular, 'Não há publicações cadastradas no momento.\n\nDigite *menu* para ver outras opções.');
         return false;
       }
-      // First event uses EVENTOS (includes confirmation prompt)
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.EVENTOS(eventos[0]));
-      // Subsequent events are shown without confirmation prompt
-      for (let i = 1; i < eventos.length; i++) {
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(eventos[i]));
+      for (const p of publicacoes) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PUBLICACAO(p));
       }
-      conversa.militanciaStage = 'evento_confirmacao';
-      conversa.militanciaData = { evento: eventos[0].nome };
-      return true;
+      return false;
     }
 
-    // Option 3 - Content (latest post per type from sheet)
+    // Option 3 - Próximos eventos
     if (
-      ['3', 'conteudo', 'conteúdo', 'conteudos', 'conteúdos', 'novo conteudo', 'novo conteúdo'].includes(textoNorm)
+      ['3', 'eventos', 'evento', 'proximos eventos'].includes(textoNorm)
     ) {
-      const conteudos = await obterUltimosConteudosPorTipo();
-      if (conteudos.length) {
-        for (const c of conteudos) {
-          const jaAcessou = await verificarConteudoJaAcessado(celular, c.titulo);
-          if (jaAcessou) {
-            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CONTEUDO_JA_ACESSADO(c.titulo));
-          } else {
-            await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO(c));
-            registrarAcessoConteudo(celular, c.titulo, c.tipo ?? '').catch(() => {});
-          }
-        }
-      } else {
-        // Fallback to env var
-        const conteudoTexto = config.militancia.novoConteudo;
-        const conteudoTipo = config.militancia.novoConteudoTipo;
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CONTEUDO(conteudoTexto));
-        registrarAcessoConteudo(celular, conteudoTexto, conteudoTipo).catch(() => {});
+      const eventos = obterProximosEventos(3);
+      if (!eventos.length) {
+        await this.client.sendMessage(celular, 'Não há eventos próximos cadastrados no momento.\n\nDigite *menu* para ver outras opções.');
+        return false;
       }
-      // Check achievements after content access (Porta-Voz title requires 20 shares)
-      // Fire-and-forget: doesn't block the response
-      verificarERegistrarConquistas(celular).then(async (novas) => {
-        for (const conquista of novas) {
-          await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CONQUISTA_DESBLOQUEADA(conquista, 0));
-        }
-      }).catch(() => {});
+      for (const ev of eventos) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(ev));
+      }
       return false;
     }
 
@@ -525,59 +438,62 @@ export class MilitanciaManager {
       return true;
     }
 
-    // Option 5 - Leadership / responsibility
+    // Option 5 - Quero contribuir mais
     if (
       [
         '5',
+        'contribuir',
         'lideranca',
         'liderança',
-        'responsabilidade',
-        'quero liderar',
+        'quero contribuir',
         'quero ajudar',
-        'assumir responsabilidade',
       ].includes(textoNorm)
     ) {
       conversa.militanciaStage = 'lideranca_area';
       conversa.militanciaData = {};
-      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.LIDERANCA_AGRADECIMENTO);
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CONTRIBUIR_INTRO);
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.LIDERANCA_OPCOES);
       return true;
     }
 
+    // Option 6 - Como recrutar
+    if (['6', 'recrutar', 'como recrutar'].includes(textoNorm)) {
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.COMO_RECRUTAR_1);
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.COMO_RECRUTAR_2(celular));
+      return false;
+    }
+
+    // Option 7 - Minha comunidade
+    if (['7', 'comunidade', 'minha comunidade'].includes(textoNorm)) {
+      await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MINHA_COMUNIDADE);
+      return false;
+    }
+
     // Unrecognized - show personalized menu
     this.log(`⚠️ Comando não reconhecido: "${texto.substring(0, 50)}"`);
-    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome, militante.posicao));
+    await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
     return false;
   }
 
   /**
-   * Fetch and send BOTH latest content AND nearest event to non-registered users (option 2)
+   * Fetch and send latest publication AND nearest event to non-registered users (option 2)
    */
   private async enviarConteudoEEvento(celular: string): Promise<void> {
     try {
-      const [conteudo, evento] = await Promise.all([
-        obterUltimoConteudo('instagram'),
-        obterProximoEvento(),
-      ]);
+      const publicacao = obterPublicacoesRecentes()[0] ?? null;
+      const evento = obterProximosEventos(1)[0] ?? null;
 
-      // Fallback values from env vars
-      const conteudoTexto = config.militancia.novoConteudo;
-      const eventosTexto = config.militancia.proximosEventos;
-
-      const conteudoFinal = conteudo || (conteudoTexto ? { titulo: conteudoTexto } : null);
-      const eventoFinal = evento || (eventosTexto ? { nome: eventosTexto } : null);
-
-      if (conteudoFinal) {
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_CONTEUDO(conteudoFinal));
+      if (publicacao) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.PUBLICACAO(publicacao));
       }
-      if (eventoFinal) {
-        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(eventoFinal));
+      if (evento) {
+        await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_EVENTO(evento));
       }
-      if (!conteudoFinal && !eventoFinal) {
+      if (!publicacao && !evento) {
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_NOVIDADES_FALLBACK);
       }
     } catch (err: any) {
-      this.log(`❌ Erro ao enviar conteúdo e evento: ${err?.message}`);
+      this.log(`❌ Erro ao enviar publicação e evento: ${err?.message}`);
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MOSTRAR_NOVIDADES_FALLBACK);
     }
   }
