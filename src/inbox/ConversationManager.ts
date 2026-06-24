@@ -7,7 +7,10 @@
  * Responsabilidades:
  *  1. Receber o payload bruto do webhook e extrair mensagens/status
  *  2. Manter um Map<telefone, Conversation> em memória (cache local)
- *  3. Persistir/carregar esse Map no Upstash Redis (ou /tmp como fallback)
+ *  3. Persistir/carregar cada conversa individualmente no Upstash Redis (ou
+ *     /tmp como fallback) — cada conversa tem sua própria chave, então a
+ *     escrita de um usuário nunca corre risco de sobrescrever o estado de
+ *     outro usuário
  *  4. Delegar cada mensagem recebida ao MilitanciaManager (lógica do bot)
  *  5. Registrar mensagens enviadas de volta ao Map e persistir
  *
@@ -16,7 +19,7 @@
  *     → adicionarMensagem(de, 'in', texto)
  *     → MilitanciaManager.processar(celular, texto, conversa)
  *       → WhatsApp.sendMessage(...)
- *     → persistirConversas()
+ *     → persistirConversa(id)
  */
 
 import { WhatsApp } from '../wabapi';
@@ -24,7 +27,14 @@ import type { WebhookPayload, WhatsAppMessage } from '../wabapi/types';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import { normalizarWaId } from '../utils/text-normalizer';
-import { lerConversas, salvarConversas, lerMeta, salvarMeta } from '../utils/conversation-storage';
+import {
+  lerConversa,
+  salvarConversa,
+  lerTodasConversas,
+  apagarTodasConversas,
+  lerMeta,
+  salvarMeta,
+} from '../utils/conversation-storage';
 import { MilitanciaManager } from './MilitanciaManager';
 
 /**
@@ -97,7 +107,8 @@ export class ConversationManager {
     }
   }
 
-  // Mescla duas versões do Map de conversas evitando perda de mensagens.
+  // Mescla a versão de uma conversa vinda do storage com a versão em memória
+  // desta instância, evitando perda de mensagens.
   //
   // Por quê isso é necessário?
   // A Vercel pode ter múltiplas instâncias do bot rodando ao mesmo tempo, cada
@@ -105,63 +116,54 @@ export class ConversationManager {
   // podemos simplesmente sobrescrever — precisamos unir as mensagens de ambas
   // as instâncias. Essa função faz isso usando o ID da mensagem como chave de
   // deduplicação.
-  private mergeConversas(
-    base: Record<string, Conversation>,
-    updates: Record<string, Conversation>
-  ): Record<string, Conversation> {
-    const merged: Record<string, Conversation> = { ...base };
+  //
+  // Importante: cada conversa tem sua PRÓPRIA chave no storage (ver
+  // conversation-storage.ts), então essa mescla nunca afeta outras conversas —
+  // diferente do esquema antigo, que guardava todas as conversas num único
+  // blob JSON e corria o risco de uma escrita concorrente de OUTRO usuário
+  // sobrescrever o `militanciaStage` desta conversa.
+  private mergeConversa(existing: Conversation, conv: Conversation): Conversation {
+    const msgMap = new Map<string, MessageRecord>();
+    existing.messages.forEach((m) => msgMap.set(m.id, m));
+    conv.messages.forEach((m) => msgMap.set(m.id, m));
+    const messages = Array.from(msgMap.values()).sort(
+      (a, b) => a.timestamp - b.timestamp
+    );
 
-    Object.entries(updates).forEach(([id, conv]) => {
-      const existing = merged[id];
-      if (!existing) {
-        merged[id] = conv;
-        return;
-      }
+    const lastMessage = messages.length ? messages[messages.length - 1].text : existing.lastMessage;
+    const lastTimestamp = messages.length
+      ? messages[messages.length - 1].timestamp
+      : existing.lastTimestamp;
 
-      const msgMap = new Map<string, MessageRecord>();
-      existing.messages.forEach((m) => msgMap.set(m.id, m));
-      conv.messages.forEach((m) => msgMap.set(m.id, m));
-      const messages = Array.from(msgMap.values()).sort(
-        (a, b) => a.timestamp - b.timestamp
-      );
+    // Preserve militanciaStage/militanciaData from storage when the current
+    // conversation was freshly created (property absent) to avoid race conditions
+    // on cold starts (e.g. Vercel serverless).
+    //
+    // The `in` operator distinguishes two cases:
+    //   - Property ABSENT on conv (freshly created conversation, stage not yet set):
+    //     use existing stage from storage to avoid losing saved state.
+    //   - Property PRESENT on conv (even if undefined, meaning processar cleared it):
+    //     use conv's value so intentional stage updates / clears are respected.
+    const militanciaStage = 'militanciaStage' in conv
+      ? conv.militanciaStage
+      : existing.militanciaStage;
+    const militanciaData = 'militanciaData' in conv
+      ? conv.militanciaData
+      : existing.militanciaData;
 
-      const lastMessage = messages.length ? messages[messages.length - 1].text : existing.lastMessage;
-      const lastTimestamp = messages.length
-        ? messages[messages.length - 1].timestamp
-        : existing.lastTimestamp;
-
-      // Preserve militanciaStage/militanciaData from storage when the current
-      // conversation was freshly created (property absent) to avoid race conditions
-      // on cold starts (e.g. Vercel serverless).
-      //
-      // The `in` operator distinguishes two cases:
-      //   - Property ABSENT on conv (freshly created conversation, stage not yet set):
-      //     use existing stage from storage to avoid losing saved state.
-      //   - Property PRESENT on conv (even if undefined, meaning processar cleared it):
-      //     use conv's value so intentional stage updates / clears are respected.
-      const militanciaStage = 'militanciaStage' in conv
-        ? conv.militanciaStage
-        : existing.militanciaStage;
-      const militanciaData = 'militanciaData' in conv
-        ? conv.militanciaData
-        : existing.militanciaData;
-
-      merged[id] = {
-        ...existing,
-        ...conv,
-        name: existing.name || conv.name,
-        phoneNumber: existing.phoneNumber || conv.phoneNumber,
-        isHuman: existing.isHuman || conv.isHuman,
-        unreadCount: Math.max(existing.unreadCount || 0, conv.unreadCount || 0),
-        messages,
-        lastMessage,
-        lastTimestamp,
-        militanciaStage,
-        militanciaData,
-      };
-    });
-
-    return merged;
+    return {
+      ...existing,
+      ...conv,
+      name: existing.name || conv.name,
+      phoneNumber: existing.phoneNumber || conv.phoneNumber,
+      isHuman: existing.isHuman || conv.isHuman,
+      unreadCount: Math.max(existing.unreadCount || 0, conv.unreadCount || 0),
+      messages,
+      lastMessage,
+      lastTimestamp,
+      militanciaStage,
+      militanciaData,
+    };
   }
 
   constructor() {
@@ -214,12 +216,8 @@ export class ConversationManager {
   private async carregarConversas(): Promise<void> {
     try {
       await this.garantirResetAtualizado();
-      const conversas = await lerConversas();
-      if (!conversas || typeof conversas !== 'object') {
-        this.log(`❌ Armazenamento inválido (${typeof conversas})`);
-        return;
-      }
-      Object.entries(conversas).forEach(([id, conv]: [string, any]) => {
+      const conversas = await lerTodasConversas();
+      Object.entries(conversas).forEach(([id, conv]) => {
         this.conversations.set(id, conv);
       });
       this.log(`✅ Carregadas ${this.conversations.size} conversas`);
@@ -238,25 +236,24 @@ export class ConversationManager {
   }
 
   /**
-   * Salvar conversas no armazenamento (Upstash ou /tmp)
+   * Salvar uma única conversa no armazenamento (Upstash ou /tmp).
+   *
+   * Faz merge apenas com a versão dessa MESMA conversa no storage — nunca
+   * lê/escreve as conversas de outros usuários, eliminando a race condition
+   * que existia quando todas as conversas viviam num único blob.
    */
-  private async persistirConversas(): Promise<void> {
+  private async persistirConversa(id: string): Promise<void> {
     try {
       await this.garantirResetAtualizado();
-      const data: Record<string, Conversation> = {};
-      this.conversations.forEach((conv, id) => {
-        data[id] = conv;
-      });
-      const base = (await lerConversas()) || {};
-      const merged = this.mergeConversas(base, data);
-      await salvarConversas(merged);
-      this.conversations.clear();
-      Object.entries(merged).forEach(([id, conv]) => {
-        this.conversations.set(id, conv);
-      });
-      this.log(`💾 Salvas ${Object.keys(merged).length} conversas`);
+      const conv = this.conversations.get(id);
+      if (!conv) return;
+      const existente = await lerConversa(id);
+      const mergedConv = existente ? this.mergeConversa(existente, conv) : conv;
+      await salvarConversa(id, mergedConv);
+      this.conversations.set(id, mergedConv);
+      this.log(`💾 Conversa salva: ${id}`);
     } catch (e: any) {
-      this.log(`❌ Erro ao salvar conversas: ${e?.message || e}`);
+      this.log(`❌ Erro ao salvar conversa ${id}: ${e?.message || e}`);
     }
   }
 
@@ -337,7 +334,7 @@ export class ConversationManager {
     }
 
     // Salvar após cada mensagem
-    await this.persistirConversas();
+    await this.persistirConversa(conversa.id);
   }
 
   /**
@@ -357,7 +354,7 @@ export class ConversationManager {
       if (timestamp) {
         conversa.lastTimestamp = timestamp;
       }
-      await this.persistirConversas();
+      await this.persistirConversa(conversa.id);
       this.log(`✅ Status atualizado: ${mensagemId} -> ${status}`);
     } else {
       this.log(`⚠️  Status recebido para mensagem desconhecida: ${mensagemId}`);
@@ -526,7 +523,7 @@ export class ConversationManager {
             try {
               const precisaPersistir = await this.militanciaManager.processar(de, texto, conversa);
               if (precisaPersistir) {
-                await this.persistirConversas();
+                await this.persistirConversa(conversa.id);
               }
             } catch (erro: any) {
               this.log(`❌ Erro ao processar mensagem: ${erro?.message}`);
@@ -691,7 +688,7 @@ export class ConversationManager {
       this.log('ℹ️  Conversa já existe, atualizando nome se fornecido');
       if (nome && !existente.name) {
         existente.name = nome;
-        await this.persistirConversas();
+        await this.persistirConversa(telefoneNormalizado);
       }
       return existente;
     }
@@ -704,15 +701,11 @@ export class ConversationManager {
       isHuman: false,
       messages: [],
     };
-    
+
     this.conversations.set(telefoneNormalizado, conversa);
-    await this.persistirConversas();
-    
-    // Recarregar do arquivo para garantir que está salvo
-    await this.recarregarConversas();
+    await this.persistirConversa(telefoneNormalizado);
     this.log('✅ Conversa criada e salva');
-    
-    // Retornar a conversa recarregada
+
     return this.conversations.get(telefoneNormalizado)!;
   }
 
@@ -724,7 +717,7 @@ export class ConversationManager {
     const resetAt = Date.now();
     this.resetAt = resetAt;
     await salvarMeta({ resetAt });
-    await salvarConversas({});
+    await apagarTodasConversas();
     this.log('🧹 Todas as conversas foram apagadas');
   }
 }
