@@ -44,6 +44,7 @@ import {
   verificarMissaoConcluida,
   registrarInteresseLideranca,
   registrarDenuncia,
+  listarMilitantesParaLembrete,
   type MilitanteInfo,
 } from '../utils/militanciaSheet';
 import {
@@ -55,6 +56,14 @@ import { MESSAGES_MILITANCIA } from './militanciaMessages';
 import type { Conversation } from './ConversationManager';
 
 const REGEX_VIM_PELO = /VimPelo_(\d+)/i;
+
+// Número autorizado a disparar o gatilho de retorno ("LEMBRAR").
+const ADMIN_PHONE = '558597223863';
+
+function isAdminPhone(celular: string): boolean {
+  const digits = celular.replace(/\D/g, '');
+  return digits === ADMIN_PHONE || `55${digits}` === ADMIN_PHONE || digits === ADMIN_PHONE.slice(2);
+}
 
 export class MilitanciaManager {
   private client: WhatsApp;
@@ -79,6 +88,14 @@ export class MilitanciaManager {
     if (conversa.isHuman) return false;
 
     const textoNorm = normalizarTexto(texto).trim();
+
+    // Gatilho de retorno: o número admin envia "LEMBRAR" para disparar a mensagem
+    // de retorno a militantes cuja última interação está há menos de 22h (dentro
+    // da janela de 24h de mensagens do WhatsApp, com margem de segurança).
+    if (textoNorm === 'lembrar' && isAdminPhone(celular)) {
+      await this.dispararLembreteRetorno(celular);
+      return false;
+    }
     const isOpcao1 = ['1', 'cadastro', 'cadastrar', 'quero me cadastrar'].includes(textoNorm);
     const isOpcao2 = ['2', 'novidades', 'acompanhar'].includes(textoNorm);
     conversa.militanciaData = conversa.militanciaData || {};
@@ -97,7 +114,6 @@ export class MilitanciaManager {
 
     // Case 1: fully registered
     if (militante && isCadastroCompleto(militante)) {
-      atualizarUltimaInteracao(celular).catch(() => {});
       return await this.processarMenuOuComando(celular, texto, textoNorm, conversa, militante);
     }
 
@@ -171,6 +187,7 @@ export class MilitanciaManager {
           conversa.militanciaData = {};
           registrarOrigem(celular, recrutadoPor).catch(() => {});
           await this.client.sendMessage(celular, MESSAGES_MILITANCIA.CADASTRO_SUCESSO(texto.trim()));
+          atualizarUltimaInteracao(celular).catch(() => {});
         } else {
           conversa.militanciaStage = 'cadastro_origem';
           conversa.militanciaData = {};
@@ -289,6 +306,7 @@ export class MilitanciaManager {
           celular,
           MESSAGES_MILITANCIA.CADASTRO_SUCESSO(militantePos?.nome || '')
         );
+        atualizarUltimaInteracao(celular).catch(() => {});
         return true;
       }
 
@@ -351,6 +369,7 @@ export class MilitanciaManager {
       default:
         conversa.militanciaStage = undefined;
         await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU);
+        atualizarUltimaInteracao(celular).catch(() => {});
         return true;
     }
   }
@@ -377,6 +396,7 @@ export class MilitanciaManager {
     // Global commands
     if (['menu', 'ajuda', 'help', 'inicio', 'início', 'voltar'].includes(textoNorm)) {
       await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
+      atualizarUltimaInteracao(celular).catch(() => {});
       return false;
     }
 
@@ -472,7 +492,29 @@ export class MilitanciaManager {
     // Unrecognized - show personalized menu
     this.log(`⚠️ Comando não reconhecido: "${texto.substring(0, 50)}"`);
     await this.client.sendMessage(celular, MESSAGES_MILITANCIA.MENU_PERSONALIZADO(militante.nome));
+    atualizarUltimaInteracao(celular).catch(() => {});
     return false;
+  }
+
+  /**
+   * Gatilho de retorno: envia MESSAGES_MILITANCIA.LEMBRETE_RETORNO a todo militante
+   * cuja última interação está há menos de 22h (dentro da janela de 24h de
+   * mensagens do WhatsApp, com margem de segurança). Disparado manualmente pelo
+   * número admin enviando "LEMBRAR".
+   */
+  private async dispararLembreteRetorno(celularAdmin: string): Promise<void> {
+    const militantes = await listarMilitantesParaLembrete(22);
+    let enviados = 0;
+    for (const militante of militantes) {
+      try {
+        await this.client.sendMessage(militante.celular, MESSAGES_MILITANCIA.LEMBRETE_RETORNO(militante.nome));
+        enviados++;
+      } catch (err: any) {
+        this.log(`❌ Erro ao enviar lembrete para ${militante.celular}: ${err?.message}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    await this.client.sendMessage(celularAdmin, `✅ Lembrete enviado para ${enviados}/${militantes.length} militante(s).`);
   }
 
   /**

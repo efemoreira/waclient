@@ -57,6 +57,45 @@ function dataAtual(): string {
   return new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 }
 
+/**
+ * Data + hora atual (dd/mm/yyyy HH:mm:ss, America/Sao_Paulo) — usada na coluna
+ * H (ultima_interacao) para permitir calcular quantas horas se passaram desde
+ * a última interação (ex: gatilho de retorno dentro da janela de 24h do WhatsApp).
+ */
+function dataHoraAtual(): string {
+  const agora = new Date();
+  const data = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const hora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour12: false });
+  return `${data} ${hora}`;
+}
+
+/**
+ * Parses a "dd/mm/yyyy HH:mm:ss" (or legacy "dd/mm/yyyy") string written to
+ * column H and returns how many hours have passed since then. Returns null
+ * if the string can't be parsed.
+ */
+function horasDesdeInteracao(dataHoraStr: string): number | null {
+  const match = dataHoraStr.trim().match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+  if (!match) return null;
+  const [, diaStr, mesStr, anoStr, horaStr, minStr, segStr] = match;
+  const dia = Number(diaStr);
+  const mes = Number(mesStr);
+  const ano = Number(anoStr);
+  const hora = Number(horaStr || 0);
+  const min = Number(minStr || 0);
+  const seg = Number(segStr || 0);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+
+  // Interpret the stored value as America/Sao_Paulo wall-clock time, then
+  // compare against the current instant.
+  const agoraSP = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const entao = new Date(ano, mes - 1, dia, hora, min, seg);
+  const diffMs = agoraSP.getTime() - entao.getTime();
+  return diffMs / (1000 * 60 * 60);
+}
+
 async function appendRow(sheetName: string, values: (string | number)[]): Promise<void> {
   const auth = getAuth();
   if (!auth) {
@@ -242,7 +281,7 @@ export async function registrarMilitante(
       bairro,      // E: bairro
       1,           // F: nivel
       0,           // G: pontos
-      dataAtual(), // H: ultima_interacao
+      dataHoraAtual(), // H: ultima_interacao
       0,           // I: missoes_concluidas
       0,           // J: streak_atual
       '',          // K: ultima_missao_data
@@ -288,7 +327,7 @@ export async function registrarContato(celular: string): Promise<boolean> {
       '',          // E: bairro (empty)
       1,           // F: nivel
       0,           // G: pontos
-      dataAtual(), // H: ultima_interacao
+      dataHoraAtual(), // H: ultima_interacao
       0,           // I: missoes_concluidas
       0,           // J: streak_atual
       '',          // K: ultima_missao_data
@@ -509,13 +548,37 @@ export async function atualizarUltimaInteracao(celular: string): Promise<void> {
           spreadsheetId: SHEET_ID,
           range: `${SHEET_MILITANTES}!H${targetRow}`,
           valueInputOption: 'USER_ENTERED',
-          requestBody: { values: [[dataAtual()]] },
+          requestBody: { values: [[dataHoraAtual()]] },
         });
         return;
       }
     }
   } catch (err: any) {
     logger.warn('MilitanciaSheet', `Erro ao atualizar última interação: ${err?.message}`);
+  }
+}
+
+/**
+ * Lista militantes com cadastro completo cuja última interação (coluna H)
+ * ocorreu há menos de `maxHoras` horas — usados para o gatilho de retorno
+ * dentro da janela de 24h de mensagens do WhatsApp (ver "LEMBRAR").
+ */
+export async function listarMilitantesParaLembrete(maxHoras = 22): Promise<MilitanteInfo[]> {
+  try {
+    const rows = await getRows(SHEET_MILITANTES, 'A:S');
+    const resultado: MilitanteInfo[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i] || [];
+      const militante = parseMilitanteRow(row);
+      if (!isCadastroCompleto(militante)) continue;
+      const horas = horasDesdeInteracao(militante.dataUltimaInteracao);
+      if (horas === null) continue;
+      if (horas >= 0 && horas < maxHoras) resultado.push(militante);
+    }
+    return resultado;
+  } catch (err: any) {
+    logger.warn('MilitanciaSheet', `Erro ao listar militantes para lembrete: ${err?.message}`);
+    return [];
   }
 }
 
@@ -1093,7 +1156,7 @@ async function atualizarMissoesStreakNivel(celular: string): Promise<{
           data: [
             { range: `${SHEET_MILITANTES}!F${targetRow}`, values: [[novoNivel]] },     // F = nivel
             { range: `${SHEET_MILITANTES}!G${targetRow}`, values: [[novosPontos]] },   // G = pontos
-            { range: `${SHEET_MILITANTES}!H${targetRow}`, values: [[hoje]] },          // H = ultima_interacao
+            { range: `${SHEET_MILITANTES}!H${targetRow}`, values: [[dataHoraAtual()]] }, // H = ultima_interacao
             { range: `${SHEET_MILITANTES}!I${targetRow}`, values: [[novasMissoes]] },  // I = missoes_concluidas
             { range: `${SHEET_MILITANTES}!J${targetRow}`, values: [[novoStreak]] },    // J = streak_atual
             { range: `${SHEET_MILITANTES}!K${targetRow}`, values: [[hoje]] },          // K = ultima_missao_data

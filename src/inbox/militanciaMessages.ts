@@ -117,6 +117,13 @@ O que você quer fazer hoje?
 6️⃣ Como recrutar
 7️⃣ Minha comunidade`,
 
+  // Gatilho de retorno — enviado a militantes inativos dentro da janela de 24h do WhatsApp
+  LEMBRETE_RETORNO: (nome: string) => `👋 Oi, *${nome}*! Faz um tempinho que você não aparece por aqui.
+
+A missão de hoje ainda te espera — vamos continuar juntos? 💪
+
+Digite *menu* para ver as opções.`,
+
   // Menu principal (sem nome, para compatibilidade e casos de uso genérico)
   MENU: `✊ *${CAMPANHA_NOME}*
 
